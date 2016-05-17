@@ -1,0 +1,7 @@
+flake8>=2.2.4,<=2.4.1
+os-testr>=0.4.1
+paramiko<2.0
+charm-tools>=2.0.0
+charms.reactive
+mock>=1.2
+coverage>=3.6
