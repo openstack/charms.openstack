@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
+from __future__ import print_function
+
+import sys
 from setuptools import setup, find_packages
-from setuptools.command.test import TestCommand
+from setuptools.command.test import test as TestCommand
 
 install_require = [
 ]
@@ -23,6 +26,9 @@ class Tox(TestCommand):
         import tox
         import shlex
         args = self.tox_args
+        # remove the 'test' arg from argv as tox passes it to ostestr which
+        # breaks it.
+        sys.argv.pop()
         if args:
             args = shlex.split(self.tox_args)
         errno = tox.cmdline(args=args)

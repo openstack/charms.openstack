@@ -1,3 +1,5 @@
 .tox
 .testrepository
 *.pyc
+charm.openstack.egg-info
+.eggs
