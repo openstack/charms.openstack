@@ -5,6 +5,7 @@ import sys
 from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
 
+version = "0.0.1.dev1"
 install_require = [
 ]
 
@@ -34,9 +35,22 @@ class Tox(TestCommand):
         errno = tox.cmdline(args=args)
         sys.exit(errno)
 
+
+if sys.argv[-1] == 'publish':
+    os.system("python setup.py sdist upload")
+    os.system("python setup.py bdist_wheel upload")
+    sys.exit()
+
+
+if sys.argv[-1] == 'tag':
+    os.system("git tag -a %s -m 'version %s'" % (version, version))
+    os.system("git push --tags")
+    sys.exit()
+
+
 setup(
     name='charm.openstack',
-    version='0.0.1.dev1',
+    version=version,
     description='Provide base module for layer-openstack.',
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
@@ -56,7 +70,6 @@ setup(
     license='Apache-2.0: http://www.apache.org/licenses/LICENSE-2.0',
     packages=find_packages(exclude=["unit_tests"]),
     zip_safe=False,
-    # test_suite='nose.collector',
     cmdclass = {'test': Tox},
     install_requires=install_require,
     extras_require={

@@ -11,3 +11,9 @@ lint:
 test:
 	@echo Starting unit tests...
 	@tox -e py27
+
+publish:
+	python setup.py publish
+
+tag:
+	python setup.py tag
