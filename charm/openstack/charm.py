@@ -44,10 +44,10 @@ class OpenStackCharmMeta(type):
     """
 
     @property
-    def charm(cls):
-        if cls._charm is None:
-            cls._charm = cls.get_charm_instance()
-        return cls._charm
+    def singleton(cls):
+        if cls._singleton is None:
+            cls._singleton = cls.get_charm_instance()
+        return cls._singleton
 
 
 class OpenStackCharm():
@@ -64,7 +64,7 @@ class OpenStackCharm():
     """
 
     # The singleton for the charm for this class
-    _charm = None
+    _singleton = None
 
     # releases - dictionary mapping OpenStack releases to their associated
     # specialised charm class that models this charm.
@@ -106,10 +106,10 @@ class OpenStackCharm():
     adapters_class = None
 
     @property
-    def charm(self):
+    def singleton(self):
         """Return the only instance of the charm class in this run"""
         # Note refers back to the Metaclass property for this charm.
-        return self.__class__.charm
+        return self.__class__.singleton
 
     @classmethod
     def get_charm_instance(cls,
@@ -143,9 +143,9 @@ class OpenStackCharm():
         """
         self.config = config or hookenv.config()
         self.release = release
-        self.adapter_instance = None
+        self.adapters_instance = None
         if interfaces and self.adapters_class:
-            self.adapter_instance = self.adapters_class(interfaces)
+            self.adapters_instance = self.adapters_class(interfaces)
 
     def install(self):
         """Install packages related to this charm based on
@@ -239,22 +239,34 @@ class OpenStackCharm():
         for service_name in services_list:
             ch_host.service_restart(service_name)
 
-    def render_all_configs(self):
+    def render_all_configs(self, adapters_instance=None):
         """Render (write) all of the config files identified as the keys in the
         self.restart_map{}
 
         Note: If the config file changes on storage as a result of the config
         file being written, then the services are restarted as per
         the restart_the_services() method.
-        """
-        self.render_configs(self.restart_map.keys())
 
-    def render_configs(self, configs):
+        If adapters_instance is None then the self.adapters_instance is used
+        that was setup in the __init__() method.
+
+        :param adapters_instance: [optional] the adapters_instance to use.
+        """
+        self.render_configs(self.restart_map.keys(),
+                            adapters_instance=adapters_instance)
+
+    def render_configs(self, configs, adapters_instance=None):
         """Render the configuration files identified in the list passed as
         configs.
 
+        If adapters_instance is None then the self.adapters_instance is used
+        that was setup in the __init__() method.
+
         :param configs: list of strings, the names of the configuration files.
+        :param adapters_instance: [optional] the adapters_instance to use.
         """
+        if adapters_instance is None:
+            adapters_instance = self.adapters_instance
         with self.restart_on_change():
             for conf in configs:
                 charmhelpers.core.templating.render(
@@ -262,7 +274,17 @@ class OpenStackCharm():
                     template_loader=os_templating.get_loader(
                         'templates/', self.release),
                     target=conf,
-                    context=self.adapter_instance)
+                    context=self.adapters_instance)
+
+    def render_with_interfaces(self, interfaces):
+        """Render the configs using the interfaces passed; overrides any
+        interfaces passed in the instance creation.
+
+        :param interfaces: list of interface objects to render against
+        """
+        self.render_all_configs(
+            adapters_instance=self.adapters_class(interface))
+
 
     def restart_all(self):
         """Restart all the services configured in the self.services[]
