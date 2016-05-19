@@ -8,7 +8,7 @@
 
 import utils
 
-import charm.openstack.ip as ip
+import charmers.openstack.ip as ip
 
 
 class TestCharmOpenStackIp(utils.BaseTestCase):

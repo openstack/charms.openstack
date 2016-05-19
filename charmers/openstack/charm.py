@@ -17,7 +17,7 @@ import charmhelpers.core.templating
 import charmhelpers.fetch
 import charms.reactive.bus
 
-import charm.openstack.ip as os_ip
+import charmers.openstack.ip as os_ip
 
 
 class OpenStackCharmMeta(type):
@@ -283,8 +283,7 @@ class OpenStackCharm():
         :param interfaces: list of interface objects to render against
         """
         self.render_all_configs(
-            adapters_instance=self.adapters_class(interface))
-
+            adapters_instance=self.adapters_class(interfaces))
 
     def restart_all(self):
         """Restart all the services configured in the self.services[]

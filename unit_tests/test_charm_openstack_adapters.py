@@ -9,7 +9,7 @@
 import unittest
 import mock
 
-import charm.openstack.adapters as adapters
+import charmers.openstack.adapters as adapters
 
 
 class MyRelation(object):
