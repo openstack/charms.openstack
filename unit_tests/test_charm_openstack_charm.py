@@ -9,7 +9,7 @@ import mock
 
 import utils
 
-import charmers.openstack.charm as chm
+import charms_openstack.charm as chm
 
 TEST_CONFIG = {'config': True}
 

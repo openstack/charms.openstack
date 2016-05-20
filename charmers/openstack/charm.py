@@ -17,7 +17,7 @@ import charmhelpers.core.templating
 import charmhelpers.fetch
 import charms.reactive.bus
 
-import charmers.openstack.ip as os_ip
+import charms_openstack.ip as os_ip
 
 
 class OpenStackCharmMeta(type):
