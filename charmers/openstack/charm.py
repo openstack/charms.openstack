@@ -50,7 +50,7 @@ class OpenStackCharmMeta(type):
         return cls._singleton
 
 
-class OpenStackCharm():
+class OpenStackCharm(object):
     """
     Base class for all OpenStack Charm classes;
     encapulates general OpenStack charm payload operations
