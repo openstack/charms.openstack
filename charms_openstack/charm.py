@@ -9,6 +9,8 @@ import subprocess
 import contextlib
 import collections
 
+import six
+
 import charmhelpers.contrib.openstack.templating as os_templating
 import charmhelpers.contrib.openstack.utils as os_utils
 import charmhelpers.core.hookenv as hookenv
@@ -50,6 +52,7 @@ class OpenStackCharmMeta(type):
         return cls._singleton
 
 
+@six.add_metaclass(OpenStackCharmMeta)
 class OpenStackCharm(object):
     """
     Base class for all OpenStack Charm classes;
