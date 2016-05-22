@@ -158,6 +158,10 @@ class OpenStackCharm(object):
         if packages:
             hookenv.status_set('maintenance', 'Installing packages')
             charmhelpers.fetch.apt_install(packages, fatal=True)
+            # TODO need a call to assess_status(...) or equivalent so that we
+            # can determine the workload status at the end of the handler.  At
+            # the end of install the 'status' is stuck in maintenance until the
+            # next hook is run.
         self.set_state('{}-installed'.format(self.name))
 
     def set_state(self, state, value=None):
