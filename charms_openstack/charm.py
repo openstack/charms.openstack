@@ -86,25 +86,23 @@ def get_charm_instance(release=None, *args, **kwargs):
 
 
 class OpenStackCharmMeta(type):
-    """Metaclass to provide a classproperty of 'charm' so that class methods in
-    the derived OpenStackCharm() class can simply use cls.charm to get the
-    instance of the charm.
+    """Metaclass to provide a classproperty of 'singleton' so that class
+    methods in the derived OpenStackCharm() class can simply use cls.singleton
+    to get the instance of the charm.
 
-    Thus cls.charm is a singleton for accessing and creating the default
+    Thus cls.singleton is a singleton for accessing and creating the default
     OpenStackCharm() derived class.  This is to avoid a lot of boilerplate in
     the classmethods for the charm code.  This is because, usually, a
     classmethod is only called once per invocation of the script.
 
     Thus in the derived charm code we can do this:
 
-    @classmethod
-    def some_method(cls, ...):
-        cls.charm.instance_method(...)
+        cls.singleton.instance_method(...)
 
     and this will instatiate the charm and call instance_method() on it.
 
-    Note that self.charm is also defined as a property for completeness so that
-    cls.charm and self.charm give consistent results.
+    Note that self.singleton is also defined as a property for completeness so
+    that cls.singleton and self.singleton give consistent results.
     """
 
     def __init__(cls, name, mro, members):
@@ -156,7 +154,7 @@ class OpenStackCharm(object):
     encapulates general OpenStack charm payload operations
 
     Theory:
-    Derive frm this class, set the name, first_release and releases class
+    Derive form this class, set the name, first_release and releases class
     variables so that get_charm_instance() will create an instance of this
     charm.
 
@@ -189,7 +187,7 @@ class OpenStackCharm(object):
     # }
     restart_map = {}
 
-    # The command used to sync "something" TODO
+    # The command used to sync the database
     sync_cmd = []
 
     # The list of services that this charm manages
