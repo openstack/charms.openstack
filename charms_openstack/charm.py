@@ -22,6 +22,55 @@ import charms.reactive.bus
 import charms_openstack.ip as os_ip
 
 
+# _releases{} is a dictionary of release -> class that is instantiated
+# according to the the release that is being requested.  i.e. a charm can
+# handle more than one release.  The OpenStackCharm() derived class sets the
+# `release` variable to indicate which release that the charm supports.
+# Any subsequent releases that need a different/specialised charm uses the
+# `release` class property to indicate that it handles that release onwards.
+_releases = {}
+
+# `_singleton` stores the instance of the class that is being used during a
+# hook invocation.
+_singleton = None
+
+
+def get_charm_instance(release=None, *args, **kwargs):
+    """Get an instance of the charm based on the release (or use the
+    default if release is None).
+
+    OS releases are in alphabetical order, so it looks for the first release
+    that is provided if release is None, otherwise it finds the release that is
+    before or equal to the release passed.
+
+    Note that it passes args and kwargs to the class __init__() method.
+
+    :param release: lc string representing release wanted.
+    :returns: OpenStackCharm() derived class according to cls.releases
+    """
+    if len(_releases.keys()) == 0:
+        raise RuntimeError("No derived OpenStackCharm() classes registered")
+    # Note that this relies on OS releases being in alphabetica order
+    known_releases = sorted(_releases.keys())
+    cls = None
+    if release is None:
+        # take the latest version of the charm if no release is passed.
+        cls = _releases[known_releases[-1]]
+    elif release < known_releases[0]:
+        raise RuntimeError(
+            "Release {} is not supported by this charm. Earliest support is "
+            "{} release".format(release, known_releases[0]))
+    else:
+        # try to find the release that is supported.
+        for known_release in reversed(known_releases):
+            if release >= known_release:
+                cls = _releases[known_release]
+                break
+    if cls is None:
+        raise RuntimeError("Release {} is not supported".format(release))
+    return cls(release=release, *args, **kwargs)
+
+
 class OpenStackCharmMeta(type):
     """Metaclass to provide a classproperty of 'charm' so that class methods in
     the derived OpenStackCharm() class can simply use cls.charm to get the
@@ -42,14 +91,48 @@ class OpenStackCharmMeta(type):
 
     Note that self.charm is also defined as a property for completeness so that
     cls.charm and self.charm give consistent results.
-
     """
+
+    def __init__(cls, name, mro, members):
+        """Receive the OpenStackCharm() (derived) class and store the release
+        that it works against.  Each class defines a 'release' that it handles
+        and the order of releases (as given in charmhelpers) determines (for
+        any release) which OpenStackCharm() derived class is the handler for
+        that class.  Note, that if the `name` is 'OpenStackCharm' then the
+        function ignores the release, etc.
+
+        :param name: string for class name.
+        :param mro: tuple of base classes.
+        :param members: dictionary of name to class attribute (f, p, a, etc.)
+        """
+        global _releases
+        if name == 'OpenStackCharm':
+            return
+        if 'release' in members.keys():
+            release = members['release']
+            if release not in os_utils.OPENSTACK_CODENAMES.values():
+                raise RuntimeError(
+                    "Release {} is not a known OpenStack release"
+                    .format(release))
+            if release in _releases.keys():
+                raise RuntimeError(
+                    "Release {} defined more than once in classes {} and {} "
+                    " (at least)"
+                    .format(release, _releases[release].__name__, name))
+            # store the class against the release.
+            _releases[release] = cls
+        else:
+            raise RuntimeError(
+                "class '{}' does not define a release that it supports. "
+                "Please use the 'release' class property to define the "
+                "release.".format(name))
 
     @property
     def singleton(cls):
-        if cls._singleton is None:
-            cls._singleton = cls.get_charm_instance()
-        return cls._singleton
+        global _singleton
+        if _singleton is None:
+            _singleton = get_charm_instance()
+        return _singleton
 
 
 @six.add_metaclass(OpenStackCharmMeta)
@@ -66,15 +149,8 @@ class OpenStackCharm(object):
     See the other class variables for details on what they are for and do.
     """
 
-    # The singleton for the charm for this class
-    _singleton = None
-
-    # releases - dictionary mapping OpenStack releases to their associated
-    # specialised charm class that models this charm.
-    releases = {}
-
     # first_release = this is the first release in which this charm works
-    first_release = 'icehouse'
+    release = 'icehouse'
 
     # The name of the charm (for printing, etc.)
     name = 'charmname'
@@ -113,26 +189,6 @@ class OpenStackCharm(object):
         """Return the only instance of the charm class in this run"""
         # Note refers back to the Metaclass property for this charm.
         return self.__class__.singleton
-
-    @classmethod
-    def get_charm_instance(cls,
-                           release=None,
-                           *args,
-                           **kwargs):
-        """Get an instance of the charm based on the release (or use the
-        default if release is None).
-
-        Note that it passes args and kwargs to the class __init__() method.
-
-        :param release: lc string representing release wanted.
-        :returns: OpenStackCharm() derived class according to cls.releases
-        """
-        if release and release in cls.releases:
-            return cls.releases[release](release=release)
-        elif cls.first_release in cls.releases:
-            return cls.releases[cls.first_release](release=cls.first_release)
-        raise RuntimeError("Release '{}' is not supported for this charm"
-                           .format(release or cls.first_release))
 
     def __init__(self, interfaces=None, config=None, release=None):
         """Instantiate an instance of the class.

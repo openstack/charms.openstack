@@ -5,6 +5,8 @@
 # sys.modules['charmhelpers.contrib.openstack.utils'] = mock.MagicMock()
 # sys.modules['charmhelpers.contrib.network.ip'] = mock.MagicMock()
 
+import collections
+
 import mock
 
 import utils
@@ -41,6 +43,110 @@ class BaseOpenStackCharmTest(utils.BaseTestCase):
     def patch_target(self, attr, return_value=None, name=None, new=None):
         # uses BaseTestCase.patch_object() to patch targer.
         self.patch_object(self.target, attr, return_value, name, new)
+
+
+class TestOpenStackCharmMeta(BaseOpenStackCharmTest):
+
+    def setUp(self):
+        super(TestOpenStackCharmMeta, self).setUp(
+            chm.OpenStackCharm, TEST_CONFIG)
+        self.patch_object(
+            chm.os_utils,
+            'OPENSTACK_CODENAMES',
+            new=collections.OrderedDict([
+                ('2011.2', 'diablo'),
+                ('2012.1', 'essex'),
+                ('2012.2', 'folsom'),
+                ('2013.1', 'grizzly'),
+                ('2013.2', 'havana'),
+                ('2014.1', 'icehouse'),
+                ('2014.2', 'juno'),
+                ('2015.1', 'kilo'),
+                ('2015.2', 'liberty'),
+                ('2016.1', 'mitaka'),
+            ]))
+
+    def test_register_classes(self):
+        self.patch_object(chm, '_releases', new={})
+
+        class TestC1(chm.OpenStackCharm):
+            release = 'liberty'
+
+        class TestC2(chm.OpenStackCharm):
+            release = 'mitaka'
+
+        self.assertTrue('liberty' in chm._releases.keys())
+        self.assertTrue('mitaka' in chm._releases.keys())
+        self.assertEqual(chm._releases['liberty'], TestC1)
+        self.assertEqual(chm._releases['mitaka'], TestC2)
+
+    def test_register_unknown_series(self):
+        self.patch_object(chm, '_releases', new={})
+        with self.assertRaises(RuntimeError):
+            class TestC1(chm.OpenStackCharm):
+                release = 'unknown'
+
+    def test_register_repeated_series(self):
+        self.patch_object(chm, '_releases', new={})
+        with self.assertRaises(RuntimeError):
+            class TestC1(chm.OpenStackCharm):
+                release = 'liberty'
+
+            class TestC2(chm.OpenStackCharm):
+                release = 'liberty'
+
+
+class TestFunctions(BaseOpenStackCharmTest):
+
+    def setUp(self):
+        super(TestFunctions, self).setUp(
+            chm.OpenStackCharm, TEST_CONFIG)
+        self.patch_object(chm, '_releases', new={})
+        self.patch_object(
+            chm.os_utils,
+            'OPENSTACK_CODENAMES',
+            new=collections.OrderedDict([
+                ('2011.2', 'diablo'),
+                ('2012.1', 'essex'),
+                ('2012.2', 'folsom'),
+                ('2013.1', 'grizzly'),
+                ('2013.2', 'havana'),
+                ('2014.1', 'icehouse'),
+                ('2014.2', 'juno'),
+                ('2015.1', 'kilo'),
+                ('2015.2', 'liberty'),
+                ('2016.1', 'mitaka'),
+            ]))
+
+        class TestC1(chm.OpenStackCharm):
+            release = 'icehouse'
+
+        class TestC2(chm.OpenStackCharm):
+            release = 'kilo'
+
+        class TestC3(chm.OpenStackCharm):
+            release = 'mitaka'
+
+        self.C1, self.C2, self.C3 = TestC1, TestC2, TestC3
+
+    def test_get_exact(self):
+        self.assertTrue(
+            isinstance(chm.get_charm_instance(release='icehouse'), self.C1))
+        self.assertTrue(
+            isinstance(chm.get_charm_instance(release='mitaka'), self.C3))
+
+    def test_get_inbetween(self):
+        self.assertTrue(
+            isinstance(chm.get_charm_instance(release='juno'), self.C1))
+
+    def test_fail_too_early_series(self):
+        with self.assertRaises(RuntimeError):
+            chm.get_charm_instance(release='havana')
+
+    def test_get_default_release(self):
+        # TODO this may be the wrong logic.  Assume latest release if no
+        # release is passed?
+        self.assertTrue(isinstance(chm.get_charm_instance(), self.C3))
 
 
 class TestOpenStackCharm(BaseOpenStackCharmTest):
@@ -174,8 +280,16 @@ class MyAdapter(object):
         self.interfaces = interfaces
 
 
+# force the series to just contain my-series.
+# NOTE that this is mocked out in the __init__.py for the unit_tests package
+chm.os_utils.OPENSTACK_CODENAMES = collections.OrderedDict([
+    ('2011.2', 'my-series'),
+])
+
+
 class MyOpenStackCharm(chm.OpenStackCharm):
 
+    release = 'my-series'
     name = 'my-charm'
     packages = ['p1', 'p2', 'p3', 'package-to-filter']
     api_ports = {
@@ -213,6 +327,17 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
         super(TestMyOpenStackCharm, self).setUp(make_open_stack_charm,
                                                 TEST_CONFIG)
+
+    def test_singleton(self):
+        s = self.target.singleton
+        self.assertTrue(isinstance(s, MyOpenStackCharm))
+        self.assertTrue(isinstance(MyOpenStackCharm.singleton,
+                                   MyOpenStackCharm))
+        self.assertTrue(isinstance(chm.OpenStackCharm.singleton,
+                                   MyOpenStackCharm))
+        self.assertEqual(s, chm.OpenStackCharm.singleton)
+        # Note that get_charm_instance() returns NEW instance each time.
+        self.assertNotEqual(s, chm.get_charm_instance())
 
     def test_install(self):
         # tests that the packages are filtered before installation
