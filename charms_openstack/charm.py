@@ -34,6 +34,20 @@ _releases = {}
 # hook invocation.
 _singleton = None
 
+# List of releases that OpenStackCharm based charms know about
+KNOWN_RELEASES = [
+    'diablo',
+    'essex',
+    'folsom',
+    'grizzly',
+    'havana',
+    'icehouse',
+    'juno',
+    'kilo',
+    'liberty',
+    'mitaka',
+]
+
 
 def get_charm_instance(release=None, *args, **kwargs):
     """Get an instance of the charm based on the release (or use the
@@ -110,7 +124,7 @@ class OpenStackCharmMeta(type):
             return
         if 'release' in members.keys():
             release = members['release']
-            if release not in os_utils.OPENSTACK_CODENAMES.values():
+            if release not in KNOWN_RELEASES:
                 raise RuntimeError(
                     "Release {} is not a known OpenStack release"
                     .format(release))

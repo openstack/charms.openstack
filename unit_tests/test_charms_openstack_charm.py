@@ -50,21 +50,6 @@ class TestOpenStackCharmMeta(BaseOpenStackCharmTest):
     def setUp(self):
         super(TestOpenStackCharmMeta, self).setUp(
             chm.OpenStackCharm, TEST_CONFIG)
-        self.patch_object(
-            chm.os_utils,
-            'OPENSTACK_CODENAMES',
-            new=collections.OrderedDict([
-                ('2011.2', 'diablo'),
-                ('2012.1', 'essex'),
-                ('2012.2', 'folsom'),
-                ('2013.1', 'grizzly'),
-                ('2013.2', 'havana'),
-                ('2014.1', 'icehouse'),
-                ('2014.2', 'juno'),
-                ('2015.1', 'kilo'),
-                ('2015.2', 'liberty'),
-                ('2016.1', 'mitaka'),
-            ]))
 
     def test_register_classes(self):
         self.patch_object(chm, '_releases', new={})
@@ -102,21 +87,6 @@ class TestFunctions(BaseOpenStackCharmTest):
         super(TestFunctions, self).setUp(
             chm.OpenStackCharm, TEST_CONFIG)
         self.patch_object(chm, '_releases', new={})
-        self.patch_object(
-            chm.os_utils,
-            'OPENSTACK_CODENAMES',
-            new=collections.OrderedDict([
-                ('2011.2', 'diablo'),
-                ('2012.1', 'essex'),
-                ('2012.2', 'folsom'),
-                ('2013.1', 'grizzly'),
-                ('2013.2', 'havana'),
-                ('2014.1', 'icehouse'),
-                ('2014.2', 'juno'),
-                ('2015.1', 'kilo'),
-                ('2015.2', 'liberty'),
-                ('2016.1', 'mitaka'),
-            ]))
 
         class TestC1(chm.OpenStackCharm):
             release = 'icehouse'
@@ -289,7 +259,7 @@ chm.os_utils.OPENSTACK_CODENAMES = collections.OrderedDict([
 
 class MyOpenStackCharm(chm.OpenStackCharm):
 
-    release = 'my-series'
+    release = 'icehouse'
     name = 'my-charm'
     packages = ['p1', 'p2', 'p3', 'package-to-filter']
     api_ports = {
