@@ -49,7 +49,7 @@ if sys.argv[-1] == 'tag':
 
 
 setup(
-    name='charms_openstack',
+    name='charms.openstack',
     version=version,
     description='Provide base module for layer-openstack.',
     classifiers=[
