@@ -64,7 +64,7 @@ setup(
         "Programming Language :: Python :: 3.5",
         "License :: OSI Approved :: Apache Software License",
     ],
-    url='https://github.com/WebsandHQ/websand3-config',
+    url='https://github.com/openstack-charmers/charms.openstack',
     author='Alex Kavanagh',
     author_email='alex.kavanagh@canonical.com',
     license='Apache-2.0: http://www.apache.org/licenses/LICENSE-2.0',
