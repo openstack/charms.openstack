@@ -349,7 +349,7 @@ class OpenStackCharm(object):
                     template_loader=os_templating.get_loader(
                         'templates/', self.release),
                     target=conf,
-                    context=self.adapters_instance)
+                    context=adapters_instance)
 
     def render_with_interfaces(self, interfaces):
         """Render the configs using the interfaces passed; overrides any

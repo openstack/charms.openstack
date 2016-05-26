@@ -391,3 +391,38 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         context = self.render.call_args_list[0][1]['context']
         assert isinstance(context, MyAdapter)
         self.assertEqual(context.interfaces, ['interface1', 'interface2'])
+
+    def test_render_configs_mybug(self):
+        self.patch_object(chm.charmhelpers.core.templating, 'render')
+        self.patch_object(chm.os_templating,
+                          'get_loader',
+                          return_value='my-loader')
+
+        self.target.singleton.render_with_interfaces(
+            ['interface1', 'interface2'])
+        calls = [
+            mock.call(
+                source='path1',
+                template_loader='my-loader',
+                target='path1',
+                context=mock.ANY),
+            mock.call(
+                source='path2',
+                template_loader='my-loader',
+                target='path2',
+                context=mock.ANY),
+            mock.call(
+                source='path3',
+                template_loader='my-loader',
+                target='path3',
+                context=mock.ANY),
+            mock.call(
+                source='path4',
+                template_loader='my-loader',
+                target='path4',
+                context=mock.ANY),
+        ]
+        self.render.assert_has_calls(calls, any_order=True)
+        # Assert that None was not passed to render via the context kwarg
+        for call in self.render.call_args_list:
+            self.assertTrue(call[1]['context'])
