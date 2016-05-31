@@ -39,6 +39,8 @@ class BaseOpenStackCharmTest(utils.BaseTestCase):
 
     def tearDown(self):
         self.target = None
+        # if we've created a singleton on the module, also destroy that.
+        chm._singleton = None
         super(BaseOpenStackCharmTest, self).tearDown()
 
     def patch_target(self, attr, return_value=None, name=None, new=None):
