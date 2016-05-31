@@ -396,6 +396,12 @@ class MyOpenStackRelationAdapters(adapters.OpenStackRelationAdapters):
     }
 
 
+class MyConfigAdapter(adapters.ConfigurationAdapter):
+
+    def __init__(self, key1):
+        self.specialarg = key1
+
+
 class TestCustomOpenStackRelationAdapters(unittest.TestCase):
 
     def test_class(self):
@@ -411,5 +417,8 @@ class TestCustomOpenStackRelationAdapters(unittest.TestCase):
             amqp = FakeRabbitMQRelation()
             shared_db = FakeDatabaseRelation()
             mine = MyRelation()
-            a = MyOpenStackRelationAdapters([amqp, shared_db, mine])
+            a = MyOpenStackRelationAdapters([amqp, shared_db, mine],
+                                            options=MyConfigAdapter,
+                                            **{'key1': 'bob'})
             self.assertEqual(a.my_name.us, 'this-us')
+            self.assertEqual(a.options.specialarg, 'bob')
