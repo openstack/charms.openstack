@@ -105,17 +105,41 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         self.add_network_split_addresses()
         self.add_default_addresses()
 
+    @staticmethod
+    def local_network_split_addresses():
+        config = charmhelpers.core.hookenv.config()
+        local_unit_name = APIConfigurationAdapter().local_unit_name
+        _cluster_hosts = {}
+        for addr_type in ADDRESS_TYPES:
+            cfg_opt = 'os-{}-network'.format(addr_type)
+            laddr = ch_ip.get_address_in_network(config.get(cfg_opt))
+            if laddr:
+                netmask = ch_ip.get_netmask_for_address(laddr)
+                _cluster_hosts[laddr] = {
+                    'network': "{}/{}".format(laddr, netmask),
+                    'backends': {local_unit_name: laddr}}
+        return _cluster_hosts
+
+    @staticmethod
+    def local_default_addresses():
+        local_unit_name = APIConfigurationAdapter().local_unit_name
+        local_address = APIConfigurationAdapter().local_address
+        netmask = ch_ip.get_netmask_for_address(local_address)
+        _local_map = {
+            local_address: {
+                'network': "{}/{}".format(local_address, netmask),
+                'backends': {local_unit_name: local_address}}}
+        return _local_map
+
     def add_network_split_addresses(self):
         """Populate cluster_hosts with addresses of peers on a given network if
         this node is also on that network"""
+        local_addresses = PeerHARelationAdapter.local_network_split_addresses()
         for addr_type in ADDRESS_TYPES:
             cfg_opt = 'os-{}-network'.format(addr_type)
             laddr = ch_ip.get_address_in_network(self.config.get(cfg_opt))
             if laddr:
-                netmask = ch_ip.get_netmask_for_address(laddr)
-                self.cluster_hosts[laddr] = {
-                    'network': "{}/{}".format(laddr, netmask),
-                    'backends': {self.local_unit_name: laddr}}
+                self.cluster_hosts[laddr] = local_addresses[laddr]
                 key = '{}-address'.format(addr_type)
                 for _unit, _laddr in self.relation.ip_map(address_key=key):
                     self.cluster_hosts[laddr]['backends'][_unit] = _laddr
@@ -123,11 +147,8 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
     def add_default_addresses(self):
         """Populate cluster_hosts with addresses supplied by private-address
         """
-        self.cluster_hosts[self.local_address] = {}
-        netmask = ch_ip.get_netmask_for_address(self.local_address)
-        self.cluster_hosts[self.local_address] = {
-            'network': "{}/{}".format(self.local_address, netmask),
-            'backends': {self.local_unit_name: self.local_address}}
+        self.cluster_hosts[self.local_address] = \
+            PeerHARelationAdapter.local_default_addresses()[self.local_address]
         for _unit, _laddr in self.relation.ip_map():
             self.cluster_hosts[self.local_address]['backends'][_unit] = _laddr
 
