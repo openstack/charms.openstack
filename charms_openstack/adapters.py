@@ -402,11 +402,13 @@ class OpenStackRelationAdapters(object):
     def __init__(self, relations, options=ConfigurationAdapter, **kwargs):
         self._adapters.update(self.relation_adapters)
         self._relations = []
-#        if not charmhelpers.core.hookenv.relation_ids('cluster'):
-#            relation_value = {
-#            }
-#            setattr(self, 'cluster', relation_value)
-#            self._relations.append('cluster')
+        cluster_relid = charmhelpers.core.hookenv.relation_ids('cluster')[0]
+        if not charmhelpers.core.hookenv.related_units(relid=cluster_relid):
+            relation_value = {
+                'cluster_hosts': PeerHARelationAdapter.local_default_addresses(),
+            }
+            setattr(self, 'cluster', relation_value)
+            self._relations.append('cluster')
         for relation in relations:
             relation_name = relation.relation_name.replace('-', '_')
             try:
