@@ -5,6 +5,8 @@
 from __future__ import absolute_import
 
 import os
+import random
+import string
 import subprocess
 import contextlib
 import collections
@@ -48,6 +50,9 @@ KNOWN_RELEASES = [
     'mitaka',
 ]
 
+VIP_KEY = "vip"
+CIDR_KEY = "vip_cidr"
+IFACE_KEY = "vip_iface"
 
 def get_charm_instance(release=None, *args, **kwargs):
     """Get an instance of the charm based on the release (or use the
@@ -428,42 +433,32 @@ class OpenStackCharm(object):
             'vips': self._add_ha_vips_config,
             'haproxy': self._add_ha_haproxy_config,
         }
-        self.resources = CRM()
+#        self.resources = CRM()
         if not self.ha_resources:
             return
         for res_type in self.ha_resources:
-            RESOURCE_TYPES[res_type]()
-        # TODO Remove hardcoded multicast port
-        hacluster.bind_on(iface=self.config[IFACE_KEY], mcastport=4440)
-        hacluster.manage_resources(self.resources)
+           RESOURCE_TYPES[res_type](hacluster)
+        hacluster.bind_resources(iface=self.config[IFACE_KEY])
 
-    def _add_ha_vips_config(self):
+    def _add_ha_vips_config(self, hacluster):
         """Add a VirtualIP object for each user specified vip to self.resources
         """
-        for vip in self.config.get(VIP_KEY, []).split():
+        for vip in self.config.get(VIP_KEY, '').split():
             iface = (ip.get_iface_for_address(vip) or
                      self.config(IFACE_KEY))
             netmask = (ip.get_netmask_for_address(vip) or
                        self.config(CIDR_KEY))
             if iface is not None:
-                self.resources.add(
-                    ha.VirtualIP(
-                        self.name,
-                        vip,
-                        nic=iface,
-                        cidr=netmask,))
+                hacluster.add_vip(self.name, vip, iface, netmask)
 
-    def _add_ha_haproxy_config(self):
+    def _add_ha_haproxy_config(self, hacluster):
         """Add a InitService object for haproxy to self.resources
         """
-        self.resources.add(
-            ha.InitService(
-                self.name,
-                'haproxy',))
+        hacluster.add_init_service(self.name, 'haproxy')
 
     def set_haproxy_stat_password(self):
         """Set a stats password for accessing haproxy statistics"""
-        if not get_state('haproxy.stat.password'):
-            set_state('haproxy.stat.password', pwgen(32))
-
+        if not charms.reactive.bus.get_state('haproxy.stat.password'):
+            password = ''.join([random.choice(string.ascii_letters + string.digits) for n in range(32)])
+            charms.reactive.bus.set_state('haproxy.stat.password', password)
 
