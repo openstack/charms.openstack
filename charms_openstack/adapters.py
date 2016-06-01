@@ -110,9 +110,7 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         this node is also on that network"""
         for addr_type in ADDRESS_TYPES:
             cfg_opt = 'os-{}-network'.format(addr_type)
-            print(self.config.get(cfg_opt))
             laddr = ch_ip.get_address_in_network(self.config.get(cfg_opt))
-            print(laddr)
             if laddr:
                 netmask = ch_ip.get_netmask_for_address(laddr)
                 self.cluster_hosts[laddr] = {
@@ -383,6 +381,11 @@ class OpenStackRelationAdapters(object):
     def __init__(self, relations, options=ConfigurationAdapter, **kwargs):
         self._adapters.update(self.relation_adapters)
         self._relations = []
+#        if not charmhelpers.core.hookenv.relation_ids('cluster'):
+#            relation_value = {
+#            }
+#            setattr(self, 'cluster', relation_value)
+#            self._relations.append('cluster')
         for relation in relations:
             relation_name = relation.relation_name.replace('-', '_')
             try:

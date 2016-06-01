@@ -389,14 +389,15 @@ class OpenStackCharm(object):
                     target=conf,
                     context=adapters_instance)
 
-    def render_with_interfaces(self, interfaces):
+    def render_with_interfaces(self, interfaces, configs=None):
         """Render the configs using the interfaces passed; overrides any
         interfaces passed in the instance creation.
 
         :param interfaces: list of interface objects to render against
         """
-        self.render_all_configs(
-            adapters_instance=self.adapters_class(interfaces))
+        if not configs:
+            configs=self.full_restart_map().keys()
+        self.render_configs(configs, adapters_instance=self.adapters_class(interfaces))
 
     def restart_all(self):
         """Restart all the services configured in the self.services[]
