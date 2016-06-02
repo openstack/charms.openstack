@@ -55,6 +55,7 @@ VIP_KEY = "vip"
 CIDR_KEY = "vip_cidr"
 IFACE_KEY = "vip_iface"
 
+
 def get_charm_instance(release=None, *args, **kwargs):
     """Get an instance of the charm based on the release (or use the
     default if release is None).
@@ -229,7 +230,6 @@ class OpenStackCharm(object):
             self.adapters_instance = self.adapters_class(interfaces)
         self.set_haproxy_stat_password()
 
-
     def all_packages(self):
         """List of packages to be installed
 
@@ -396,8 +396,10 @@ class OpenStackCharm(object):
         :param interfaces: list of interface objects to render against
         """
         if not configs:
-            configs=self.full_restart_map().keys()
-        self.render_configs(configs, adapters_instance=self.adapters_class(interfaces))
+            configs = self.full_restart_map().keys()
+        self.render_configs(
+            configs,
+            adapters_instance=self.adapters_class(interfaces))
 
     def restart_all(self):
         """Restart all the services configured in the self.services[]
@@ -437,7 +439,7 @@ class OpenStackCharm(object):
         if not self.ha_resources:
             return
         for res_type in self.ha_resources:
-           RESOURCE_TYPES[res_type](hacluster)
+            RESOURCE_TYPES[res_type](hacluster)
         hacluster.bind_resources(iface=self.config[IFACE_KEY])
 
     def _add_ha_vips_config(self, hacluster):
@@ -463,4 +465,3 @@ class OpenStackCharm(object):
                 random.choice(string.ascii_letters + string.digits)
                 for n in range(32)])
             charms.reactive.bus.set_state('haproxy.stat.password', password)
-

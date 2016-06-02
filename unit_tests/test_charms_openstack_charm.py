@@ -242,7 +242,6 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.leader_get.assert_called_once_with(attribute='db-sync-done')
         self.subprocess.check_call.assert_called_once_with(['a', 'cmd'])
         self.leader_set.assert_called_once_with({'db-sync-done': True})
-        self.restart_all.assert_called_once_with()
 
 
 class MyAdapter(object):

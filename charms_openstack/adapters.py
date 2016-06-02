@@ -405,7 +405,8 @@ class OpenStackRelationAdapters(object):
         cluster_relid = charmhelpers.core.hookenv.relation_ids('cluster')[0]
         if not charmhelpers.core.hookenv.related_units(relid=cluster_relid):
             relation_value = {
-                'cluster_hosts': PeerHARelationAdapter.local_default_addresses(),
+                'cluster_hosts':
+                    PeerHARelationAdapter.local_default_addresses(),
             }
             setattr(self, 'cluster', relation_value)
             self._relations.append('cluster')
