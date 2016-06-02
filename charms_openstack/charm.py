@@ -412,18 +412,17 @@ class OpenStackCharm(object):
         @return True if haproxy is fronting the service"""
         return 'haproxy' in self.ha_resources
 
+    def db_sync_done(self):
+        return hookenv.leader_get(attribute='db-sync-done')
+
     def db_sync(self):
         """Perform a database sync using the command defined in the
         self.sync_cmd attribute. The services defined in self.services are
         restarted after the database sync.
         """
-        sync_done = hookenv.leader_get(attribute='db-sync-done')
-        if not sync_done:
+        if not self.db_sync_done() and hookenv.is_leader():
             subprocess.check_call(self.sync_cmd)
             hookenv.leader_set({'db-sync-done': True})
-            # Restart services immediatly after db sync as
-            # render_domain_config needs a working system
-            self.restart_all()
 
     def configure_ha_resources(self, hacluster):
         """Inform the ha subordinate about each service it should manage. The
