@@ -434,6 +434,10 @@ class OpenStackRelationAdapters(object):
     def __init__(self, relations, options=ConfigurationAdapter, **kwargs):
         self._adapters.update(self.relation_adapters)
         self._relations = []
+        # LY: The cluster interface only gets initialised if there are more
+        # than one units of a cluster, however, a cluster of one unit is valid
+        # for the Openstack API charms. So, create and populate the 'cluster'
+        # namespace with data for a single unit if there are no peers.
         cluster_relid = charmhelpers.core.hookenv.relation_ids('cluster')[0]
         if not charmhelpers.core.hookenv.related_units(relid=cluster_relid):
             relation_value = {
