@@ -146,6 +146,18 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.target.set_state.assert_called_once_with('charmname-installed')
         self.fip.assert_called_once_with([])
 
+    def test_all_packages(self):
+        self.patch_target('haproxy_enabled', return_value=True)
+        self.assertTrue('haproxy' in self.target.all_packages())
+        self.patch_target('haproxy_enabled', return_value=False)
+        self.assertFalse('haproxy' in self.target.all_packages())
+
+    def test_full_restart_map(self):
+        self.patch_target('haproxy_enabled', return_value=True)
+        self.assertTrue(
+            self.target.full_restart_map().get(
+                '/etc/haproxy/haproxy.cfg', False))
+
     def test_set_state(self):
         # tests that OpenStackCharm.set_state() calls set_state() global
         self.patch_object(chm.charms.reactive.bus, 'set_state')
@@ -222,18 +234,30 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.assertEqual(self.service_restart.call_args_list,
                          [mock.call('s1'), mock.call('s2')])
 
+    def test_haproxy_enabled(self):
+        self.patch_target('ha_resources', new=['haproxy'])
+        self.assertTrue(self.target.haproxy_enabled())
+
+    def test_db_sync_done(self):
+        self.patch_object(chm.hookenv, 'leader_get')
+        self.leader_get.return_value = True
+        self.assertTrue(self.target.db_sync_done())
+        self.leader_get.return_value = False
+        self.assertFalse(self.target.db_sync_done())
+
     def test_db_sync(self):
+        self.patch_object(chm.hookenv, 'is_leader')
         self.patch_object(chm.hookenv, 'leader_get')
         self.patch_object(chm.hookenv, 'leader_set')
         self.patch_object(chm, 'subprocess', name='subprocess')
         self.patch_target('restart_all')
         # first check with leader_get returning True
         self.leader_get.return_value = True
+        self.is_leader.return_value = True
         self.target.db_sync()
         self.leader_get.assert_called_once_with(attribute='db-sync-done')
         self.subprocess.check_call.assert_not_called()
         self.leader_set.assert_not_called()
-        self.restart_all.assert_not_called()
         # Now check with leader_get returning False
         self.leader_get.reset_mock()
         self.leader_get.return_value = False
@@ -242,6 +266,79 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.leader_get.assert_called_once_with(attribute='db-sync-done')
         self.subprocess.check_call.assert_called_once_with(['a', 'cmd'])
         self.leader_set.assert_called_once_with({'db-sync-done': True})
+        # Now check with is_leader returning False
+        self.leader_set.reset_mock()
+        self.subprocess.check_call.reset_mock()
+        self.leader_get.return_value = True
+        self.is_leader.return_value = False
+        self.target.db_sync()
+        self.subprocess.check_call.assert_not_called()
+        self.leader_set.assert_not_called()
+
+    def test_configure_ha_resources(self):
+        interface_mock = mock.Mock()
+        self.patch_target('config', new={'vip_iface': 'ens12'})
+        self.patch_target('ha_resources', new=['haproxy', 'vips'])
+        self.patch_target('_add_ha_vips_config')
+        self.patch_target('_add_ha_haproxy_config')
+        self.target.configure_ha_resources(interface_mock)
+        self._add_ha_vips_config.assert_called_once_with(interface_mock)
+        self._add_ha_haproxy_config.assert_called_once_with(interface_mock)
+        interface_mock.bind_resources.assert_called_once_with(iface='ens12')
+
+    def test__add_ha_vips_config(self):
+        ifaces = {
+            'vip1': 'eth1',
+            'vip2': 'eth2'}
+        masks = {
+            'vip1': 'netmask1',
+            'vip2': 'netmask2'}
+        interface_mock = mock.Mock()
+        self.patch_target('name', new='myservice')
+        self.patch_target('config', new={'vip': 'vip1 vip2'})
+        self.patch_object(chm.ch_ip, 'get_iface_for_address')
+        self.get_iface_for_address.side_effect = lambda x: ifaces[x]
+        self.patch_object(chm.ch_ip, 'get_netmask_for_address')
+        self.get_netmask_for_address.side_effect = lambda x: masks[x]
+        self.target._add_ha_vips_config(interface_mock)
+        calls = [
+            mock.call('myservice', 'vip1', 'eth1', 'netmask1'),
+            mock.call('myservice', 'vip2', 'eth2', 'netmask2')]
+        interface_mock.add_vip.assert_has_calls(calls)
+
+    def test__add_ha_vips_config_fallback(self):
+        config = {
+            'vip_cidr': 'user_cidr',
+            'vip_iface': 'user_iface',
+            'vip': 'vip1 vip2'}
+        interface_mock = mock.Mock()
+        self.patch_target('name', new='myservice')
+        self.patch_target('config', new=config)
+        self.patch_object(chm.ch_ip, 'get_iface_for_address')
+        self.patch_object(chm.ch_ip, 'get_netmask_for_address')
+        self.get_iface_for_address.return_value = None
+        self.get_netmask_for_address.return_value = None
+        self.target._add_ha_vips_config(interface_mock)
+        calls = [
+            mock.call('myservice', 'vip1', 'user_iface', 'user_cidr'),
+            mock.call('myservice', 'vip2', 'user_iface', 'user_cidr')]
+        interface_mock.add_vip.assert_has_calls(calls)
+
+    def test__add_ha_haproxy_config(self):
+        self.patch_target('name', new='myservice')
+        interface_mock = mock.Mock()
+        self.target._add_ha_haproxy_config(interface_mock)
+        interface_mock.add_init_service.assert_called_once_with(
+            'myservice',
+            'haproxy')
+
+    def test_set_haproxy_stat_password(self):
+        self.patch_object(chm.charms.reactive.bus, 'get_state')
+        self.patch_object(chm.charms.reactive.bus, 'set_state')
+        self.get_state.return_value = None
+        self.target.set_haproxy_stat_password()
+        self.set_state.assert_called_once_with('haproxy.stat.password',
+                                               mock.ANY)
 
 
 class MyAdapter(object):
@@ -391,7 +488,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         assert isinstance(context, MyAdapter)
         self.assertEqual(context.interfaces, ['interface1', 'interface2'])
 
-    def test_render_configs_mybug(self):
+    def test_render_configs_singleton_render_with_interfaces(self):
         self.patch_object(chm.charmhelpers.core.templating, 'render')
         self.patch_object(chm.os_templating,
                           'get_loader',

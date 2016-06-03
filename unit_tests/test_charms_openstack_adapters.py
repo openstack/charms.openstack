@@ -6,6 +6,7 @@
 # sys.modules['charmhelpers.contrib.openstack.utils'] = mock.MagicMock()
 # sys.modules['charmhelpers.contrib.network.ip'] = mock.MagicMock()
 
+import copy
 import unittest
 import mock
 
@@ -133,7 +134,7 @@ class TestPeerHARelationAdapter(unittest.TestCase):
             'this_unit_internal_addr': 'internal_netmask',
             'this_unit_private_addr': 'private_netmask',
         }
-        expect = {
+        expect_full = {
             'this_unit_admin_addr': {
                 'backends': {
                     'peer_unit-1': 'peer_unit1_admin_addr',
@@ -158,6 +159,16 @@ class TestPeerHARelationAdapter(unittest.TestCase):
                     'peer_unit-2': 'peer_unit2_private_addr',
                     'this_unit-1': 'this_unit_private_addr'},
                 'network': 'this_unit_private_addr/private_netmask'}}
+        expect_local_ns = copy.deepcopy(expect_full)
+        # Remove remote units from map of local unit and networks
+        for net in expect_full.keys():
+            for unit in expect_full[net]['backends'].keys():
+                if 'peer' in unit:
+                    del expect_local_ns[net]['backends'][unit]
+        expect_local_default = {
+            'this_unit_private_addr': expect_local_ns['this_unit_private_addr']
+        }
+        del expect_local_ns['this_unit_private_addr']
         with mock.patch.object(adapters.charmhelpers.contrib.network.ip,
                                'get_address_in_network',
                                new=lambda x: test_addresses.get(x)):
@@ -170,9 +181,14 @@ class TestPeerHARelationAdapter(unittest.TestCase):
                                            'config',
                                            new=lambda: test_config):
                         fake = FakePeerRelation()
-                        peer_ra = adapters.PeerHARelationAdapter(fake)
+                        padapt = adapters.PeerHARelationAdapter
+                        peer_ra = padapt(fake)
 
-                        self.assertEqual(peer_ra.cluster_hosts, expect)
+                        self.assertEqual(peer_ra.cluster_hosts, expect_full)
+                        lnetsplit = padapt.local_network_split_addresses()
+                        self.assertEqual(lnetsplit, expect_local_ns)
+                        ldefault = padapt.local_default_addresses()
+                        self.assertEqual(ldefault, expect_local_default)
 
 
 class FakeDatabaseRelation():
@@ -411,14 +427,20 @@ class TestCustomOpenStackRelationAdapters(unittest.TestCase):
             'three': 3,
             'that-one': 4
         }
-        with mock.patch.object(adapters.charmhelpers.core.adapters.hookenv,
-                               'config',
-                               new=lambda: test_config):
-            amqp = FakeRabbitMQRelation()
-            shared_db = FakeDatabaseRelation()
-            mine = MyRelation()
-            a = MyOpenStackRelationAdapters([amqp, shared_db, mine],
-                                            options=MyConfigAdapter,
-                                            **{'key1': 'bob'})
-            self.assertEqual(a.my_name.us, 'this-us')
-            self.assertEqual(a.options.specialarg, 'bob')
+        with mock.patch.object(adapters.charmhelpers.core.hookenv,
+                               'related_units', return_value=[]):
+            with mock.patch.object(adapters.charmhelpers.core.hookenv,
+                                   'config',
+                                   new=lambda: test_config):
+                with mock.patch.object(adapters.PeerHARelationAdapter,
+                                       'local_default_addresses',
+                                       return_value={'my': 'map'}):
+                    amqp = FakeRabbitMQRelation()
+                    shared_db = FakeDatabaseRelation()
+                    mine = MyRelation()
+                    a = MyOpenStackRelationAdapters([amqp, shared_db, mine],
+                                                    options=MyConfigAdapter,
+                                                    **{'key1': 'bob'})
+                    self.assertEqual(a.my_name.us, 'this-us')
+                    self.assertEqual(a.options.specialarg, 'bob')
+                    self.assertEqual(a.cluster['cluster_hosts'], {'my': 'map'})

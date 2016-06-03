@@ -237,7 +237,7 @@ class OpenStackCharm(object):
         """
         _packages = []
         _packages.extend(self.packages)
-        if self.enable_haproxy():
+        if self.haproxy_enabled():
             _packages.append('haproxy')
         return _packages
 
@@ -251,7 +251,7 @@ class OpenStackCharm(object):
                 }
         """
         _restart_map = self.restart_map.copy()
-        if self.enable_haproxy():
+        if self.haproxy_enabled():
             _restart_map[self.HAPROXY_CONF] = ['haproxy']
         return _restart_map
 
@@ -408,14 +408,17 @@ class OpenStackCharm(object):
         for svc in self.services:
             ch_host.service_restart(svc)
 
-    def enable_haproxy(self):
+    def haproxy_enabled(self):
         """Determine if haproxy is fronting the services
 
         @return True if haproxy is fronting the service"""
         return 'haproxy' in self.ha_resources
 
     def db_sync_done(self):
-        return hookenv.leader_get(attribute='db-sync-done')
+        """Query leader database to determine if db sync has been run
+
+        @return True if db sync has been run"""
+        return hookenv.leader_get(attribute='db-sync-done') or False
 
     def db_sync(self):
         """Perform a database sync using the command defined in the
@@ -447,9 +450,9 @@ class OpenStackCharm(object):
         """
         for vip in self.config.get(VIP_KEY, '').split():
             iface = (ch_ip.get_iface_for_address(vip) or
-                     self.config(IFACE_KEY))
+                     self.config.get(IFACE_KEY))
             netmask = (ch_ip.get_netmask_for_address(vip) or
-                       self.config(CIDR_KEY))
+                       self.config.get(CIDR_KEY))
             if iface is not None:
                 hacluster.add_vip(self.name, vip, iface, netmask)
 
