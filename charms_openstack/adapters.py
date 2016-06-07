@@ -5,7 +5,7 @@ import charms.reactive.bus
 import charmhelpers.contrib.hahelpers.cluster as ch_cluster
 import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.utils as ch_utils
-import charmhelpers.core.hookenv
+import charmhelpers.core.hookenv as hookenv
 
 ADDRESS_TYPES = ['admin', 'internal', 'public']
 
@@ -20,17 +20,33 @@ class OpenStackRelationAdapter(object):
     The generic type of the interface the adapter is wrapping.
     """
 
-    def __init__(self, relation, accessors=None):
-        self.relation = relation
-        self.accessors = accessors or []
-        self._setup_properties()
+    def __init__(self, relation=None, accessors=None, relation_name=None):
+        """Class will usually be initialised using the 'relation' option to
+           pass in an instance of a interface class. If there is no relation
+           class yet available then 'relation_name' can be used instead.
+
+           :param relation: Instance of an interface class
+           :param accessors: List of accessible interfaces properties
+           :param relation_name: String name of relation
+        """
+        if relation and relation_name:
+            raise ValueError('Cannot speciiy relation and relation_name')
+        if relation:
+            self.relation = relation
+            self.accessors = accessors or []
+            self._setup_properties()
+        else:
+            self._relation_name = relation_name
 
     @property
     def relation_name(self):
         """
         Name of the relation this adapter is handling.
         """
-        return self.relation.relation_name
+        if self.relation:
+            return self.relation.relation_name
+        else:
+            return self._relation_name
 
     def _setup_properties(self):
         """
@@ -96,17 +112,60 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
 
     interface_type = "cluster"
 
-    def __init__(self, relation):
-        super(PeerHARelationAdapter, self).__init__(relation)
-        self.config = charmhelpers.core.hookenv.config()
-        self.local_address = APIConfigurationAdapter().local_address
-        self.local_unit_name = APIConfigurationAdapter().local_unit_name
-        self.cluster_hosts = {}
-        self.add_network_split_addresses()
-        self.add_default_addresses()
+    def __init__(self, relation=None, relation_name=None):
+        """Map of local units addresses for each address type
 
-    @staticmethod
-    def local_network_split_addresses():
+           :param relation: Instance of openstack-ha relation
+           :param relation_name: Name of relation if openstack-ha relation is
+                                 not available e.g. 'cluster'
+
+           NOTE: This excludes private-address
+           @return dict of backends and networks for local unit e.g.
+               {'this_unit_admin_addr': {
+                    'backends': {
+                        'this_unit-1': 'this_unit_admin_addr'},
+                    'network': 'this_unit_admin_addr/admin_netmask'},
+                'this_unit_internal_addr': {
+                    'backends': {
+                        'this_unit-1': 'this_unit_internal_addr'},
+                    'network': 'this_unit_internal_addr/internal_netmask'},
+                'this_unit_public_addr': {
+                    'backends': {
+                        'this_unit-1': 'this_unit_public_addr'},
+                    'network': 'this_unit_public_addr/public_netmask'}}
+        """
+        super(PeerHARelationAdapter, self).__init__(
+            relation=relation,
+            relation_name=relation_name)
+        self.config = hookenv.config()
+        self.api_config_adapter = APIConfigurationAdapter()
+        self.local_address = self.api_config_adapter.local_address
+        self.local_unit_name = self.api_config_adapter.local_unit_name
+        self.cluster_hosts = {}
+        if relation:
+            self.add_network_split_addresses()
+            self.add_default_addresses()
+
+    @property
+    def single_mode_map(self):
+        """Return map of local addresses only if this is a single node cluster
+
+           @return dict of private address info local unit e.g.
+               {'cluster_hosts':
+                   {'this_unit_private_addr': {
+                        'backends': {
+                            'this_unit-1': 'this_unit_private_addr'},
+                        'network': 'this_unit_private_addr/private_netmask'}}
+        """
+        relation_info = {}
+        cluster_relid = hookenv.relation_ids('cluster')[0]
+        if not hookenv.related_units(relid=cluster_relid):
+            relation_info = {
+                'cluster_hosts': self.local_default_addresses(),
+            }
+        return relation_info
+
+    def local_network_split_addresses(self):
         """Map of local units addresses for each address type
 
            NOTE: This excludes private-address
@@ -124,8 +183,7 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
                         'this_unit-1': 'this_unit_public_addr'},
                     'network': 'this_unit_public_addr/public_netmask'}}
         """
-        config = charmhelpers.core.hookenv.config()
-        local_unit_name = APIConfigurationAdapter().local_unit_name
+        config = hookenv.config()
         _cluster_hosts = {}
         for addr_type in ADDRESS_TYPES:
             cfg_opt = 'os-{}-network'.format(addr_type)
@@ -134,11 +192,10 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
                 netmask = ch_ip.get_netmask_for_address(laddr)
                 _cluster_hosts[laddr] = {
                     'network': "{}/{}".format(laddr, netmask),
-                    'backends': {local_unit_name: laddr}}
+                    'backends': {self.local_unit_name: laddr}}
         return _cluster_hosts
 
-    @staticmethod
-    def local_default_addresses():
+    def local_default_addresses(self):
         """Map of local units private address
 
            @return dict of private address info local unit e.g.
@@ -148,13 +205,11 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
                     'network': 'this_unit_private_addr/private_netmask'}}
 
         """
-        local_unit_name = APIConfigurationAdapter().local_unit_name
-        local_address = APIConfigurationAdapter().local_address
-        netmask = ch_ip.get_netmask_for_address(local_address)
+        netmask = ch_ip.get_netmask_for_address(self.local_address)
         _local_map = {
-            local_address: {
-                'network': "{}/{}".format(local_address, netmask),
-                'backends': {local_unit_name: local_address}}}
+            self.local_address: {
+                'network': "{}/{}".format(self.local_address, netmask),
+                'backends': {self.local_unit_name: self.local_address}}}
         return _local_map
 
     def add_network_split_addresses(self):
@@ -163,12 +218,12 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
 
            @return None
         """
-        local_addresses = PeerHARelationAdapter.local_network_split_addresses()
         for addr_type in ADDRESS_TYPES:
             cfg_opt = 'os-{}-network'.format(addr_type)
             laddr = ch_ip.get_address_in_network(self.config.get(cfg_opt))
             if laddr:
-                self.cluster_hosts[laddr] = local_addresses[laddr]
+                self.cluster_hosts[laddr] = \
+                    self.local_network_split_addresses()[laddr]
                 key = '{}-address'.format(addr_type)
                 for _unit, _laddr in self.relation.ip_map(address_key=key):
                     self.cluster_hosts[laddr]['backends'][_unit] = _laddr
@@ -180,7 +235,7 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
            @return None
         """
         self.cluster_hosts[self.local_address] = \
-            PeerHARelationAdapter.local_default_addresses()[self.local_address]
+            self.local_default_addresses()[self.local_address]
         for _unit, _laddr in self.relation.ip_map():
             self.cluster_hosts[self.local_address]['backends'][_unit] = _laddr
 
@@ -245,7 +300,7 @@ class ConfigurationAdapter(object):
     """
 
     def __init__(self):
-        _config = charmhelpers.core.hookenv.config()
+        _config = hookenv.config()
         for k, v in _config.items():
             k = k.replace('-', '_')
             setattr(self, k, v)
@@ -256,9 +311,23 @@ class APIConfigurationAdapter(ConfigurationAdapter):
     common accross most OpenstackAPI services"""
 
     def __init__(self, port_map=None):
+        """
+        :param  port_map: Map containing service names and the ports used e.g.
+                port_map = {
+                        'svc1': {
+                        'admin': 9001,
+                        'public': 9001,
+                        'internal': 9001,
+                    },
+                        'svc2': {
+                        'admin': 9002,
+                        'public': 9002,
+                        'internal': 9002,
+                    },
+                }
+        """
         super(APIConfigurationAdapter, self).__init__()
         self.port_map = port_map
-        self.config = charmhelpers.core.hookenv.config()
 
     @property
     def ipv6_mode(self):
@@ -266,7 +335,7 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
         @return True if user has requested ipv6 support otherwise False
         """
-        return self.config.get('prefer-ipv6', False)
+        return getattr(self, 'prefer_ipv6', False)
 
     @property
     def local_address(self):
@@ -275,10 +344,10 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         @return True if user has requested ipv6 support otherwise False
         """
         if self.ipv6_mode:
-            addr = ch_ip.get_ipv6_addr(exc_list=[self.config.get('vip')])[0]
+            addr = ch_ip.get_ipv6_addr(exc_list=[getattr(self, 'vip')])[0]
         else:
             addr = ch_utils.get_host_ip(
-                charmhelpers.core.hookenv.unit_get('private-address'))
+                hookenv.unit_get('private-address'))
         return addr
 
     @property
@@ -286,7 +355,7 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         """
         @return local unit name
         """
-        return charmhelpers.core.hookenv.local_unit().replace('/', '-')
+        return hookenv.local_unit().replace('/', '-')
 
     @property
     def local_host(self):
@@ -386,7 +455,7 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
         """
         info = {}
-        ip = self.config.get('vip', self.local_address)
+        ip = getattr(self, 'vip', self.local_address)
         if self.port_map:
             for service in self.port_map.keys():
                 key = service.replace('-', '_')
@@ -426,25 +495,30 @@ class OpenStackRelationAdapters(object):
     """
     Default adapter mappings; may be overridden by relation adapters
     in subclasses.
-
-    Additional kwargs can be passed to the configuration adapterwhich has been
-    specified via the options parameter
     """
 
-    def __init__(self, relations, options=ConfigurationAdapter, **kwargs):
-        self._adapters.update(self.relation_adapters)
+    def __init__(self, relations, options=None, options_instance=None):
+        """
+        :param relations: List of instances of relation classes
+        :param options: Configuration class to use (DEPRECATED)
+        :param options_instance: Instance of Configuration class to use
+        """
         self._relations = []
+        if options:
+            hookenv.log("The 'options' argument is deprecated please use "
+                        "options_instance instead.", level=hookenv.WARNING)
+            self.options = options()
+        else:
+            self.options = options_instance or ConfigurationAdapter()
+        self._relations.append('options')
+        self._adapters.update(self.relation_adapters)
         # LY: The cluster interface only gets initialised if there are more
-        # than one units of a cluster, however, a cluster of one unit is valid
+        # than one unit in a cluster, however, a cluster of one unit is valid
         # for the Openstack API charms. So, create and populate the 'cluster'
         # namespace with data for a single unit if there are no peers.
-        cluster_relid = charmhelpers.core.hookenv.relation_ids('cluster')[0]
-        if not charmhelpers.core.hookenv.related_units(relid=cluster_relid):
-            relation_value = {
-                'cluster_hosts':
-                    PeerHARelationAdapter.local_default_addresses(),
-            }
-            setattr(self, 'cluster', relation_value)
+        smm = PeerHARelationAdapter(relation_name='cluster').single_mode_map
+        if smm:
+            setattr(self, 'cluster', smm)
             self._relations.append('cluster')
         for relation in relations:
             relation_name = relation.relation_name.replace('-', '_')
@@ -454,8 +528,6 @@ class OpenStackRelationAdapters(object):
                 relation_value = OpenStackRelationAdapter(relation)
             setattr(self, relation_name, relation_value)
             self._relations.append(relation_name)
-        self.options = options(**kwargs)
-        self._relations.append('options')
 
     def __iter__(self):
         """

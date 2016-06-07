@@ -147,16 +147,10 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.fip.assert_called_once_with([])
 
     def test_all_packages(self):
-        self.patch_target('haproxy_enabled', return_value=True)
-        self.assertTrue('haproxy' in self.target.all_packages())
-        self.patch_target('haproxy_enabled', return_value=False)
-        self.assertFalse('haproxy' in self.target.all_packages())
+        self.assertEqual(self.target.packages, self.target.all_packages)
 
     def test_full_restart_map(self):
-        self.patch_target('haproxy_enabled', return_value=True)
-        self.assertTrue(
-            self.target.full_restart_map().get(
-                '/etc/haproxy/haproxy.cfg', False))
+        self.assertEqual(self.target.full_restart_map, self.target.restart_map)
 
     def test_set_state(self):
         # tests that OpenStackCharm.set_state() calls set_state() global
@@ -234,10 +228,6 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.assertEqual(self.service_restart.call_args_list,
                          [mock.call('s1'), mock.call('s2')])
 
-    def test_haproxy_enabled(self):
-        self.patch_target('ha_resources', new=['haproxy'])
-        self.assertTrue(self.target.haproxy_enabled())
-
     def test_db_sync_done(self):
         self.patch_object(chm.hookenv, 'leader_get')
         self.leader_get.return_value = True
@@ -274,6 +264,27 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.target.db_sync()
         self.subprocess.check_call.assert_not_called()
         self.leader_set.assert_not_called()
+
+
+class TestHAOpenStackCharm(BaseOpenStackCharmTest):
+    # Note that this only tests the OpenStackCharm() class, which has not very
+    # useful defaults for testing.  In order to test all the code without too
+    # many mocks, a separate test dervied charm class is used below.
+
+    def setUp(self):
+        super(TestHAOpenStackCharm, self).setUp(chm.HAOpenStackCharm,
+                                                TEST_CONFIG)
+
+    def test_enable_haproxy(self):
+        self.patch_target('ha_resources', new=['haproxy'])
+        self.assertTrue(self.target.enable_haproxy())
+
+    def test__init__(self):
+        # Note cls.setUpClass() creates an OpenStackCharm() instance
+        self.assertEqual(chm.hookenv.config(), TEST_CONFIG)
+        self.assertEqual(self.target.config, TEST_CONFIG)
+        # Note that we assume NO release unless given one.
+        self.assertEqual(self.target.release, None)
 
     def test_configure_ha_resources(self):
         interface_mock = mock.Mock()
@@ -339,6 +350,18 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.target.set_haproxy_stat_password()
         self.set_state.assert_called_once_with('haproxy.stat.password',
                                                mock.ANY)
+
+    def test_hacharm_all_packages(self):
+        self.patch_target('enable_haproxy', return_value=True)
+        self.assertTrue('haproxy' in self.target.all_packages)
+        self.patch_target('enable_haproxy', return_value=False)
+        self.assertFalse('haproxy' in self.target.all_packages)
+
+    def test_hacharm_full_restart_map(self):
+        self.patch_target('enable_haproxy', return_value=True)
+        self.assertTrue(
+            self.target.full_restart_map.get(
+                '/etc/haproxy/haproxy.cfg', False))
 
 
 class MyAdapter(object):
