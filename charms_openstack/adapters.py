@@ -344,7 +344,7 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         @return True if user has requested ipv6 support otherwise False
         """
         if self.ipv6_mode:
-            addr = ch_ip.get_ipv6_addr(exc_list=[getattr(self, 'vip')])[0]
+            addr = ch_ip.get_ipv6_addr(exc_list=[self.vip])[0]
         else:
             addr = ch_utils.get_host_ip(
                 hookenv.unit_get('private-address'))
