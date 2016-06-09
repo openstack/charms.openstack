@@ -158,8 +158,9 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
                         'network': 'this_unit_private_addr/private_netmask'}}
         """
         relation_info = {}
-        cluster_relid = hookenv.relation_ids('cluster')[0]
-        if not hookenv.related_units(relid=cluster_relid):
+        cluster_relids = hookenv.relation_ids('cluster')
+        if (cluster_relids and not
+                hookenv.related_units(relid=cluster_relids[0])):
             relation_info = {
                 'cluster_hosts': self.local_default_addresses(),
             }

@@ -117,7 +117,6 @@ class FakePeerRelation():
 class TestPeerHARelationAdapter(unittest.TestCase):
 
     def test_class(self):
-        self.maxDiff = None
         test_config = {
             'os-public-network': 'public_network',
             'os-admin-network': 'admin_network',
@@ -179,6 +178,7 @@ class TestPeerHARelationAdapter(unittest.TestCase):
                                   new=lambda: test_config):
             fake = FakePeerRelation()
             padapt = adapters.PeerHARelationAdapter
+
             peer_ra = padapt(fake)
 
             self.assertEqual(peer_ra.cluster_hosts, expect_full)
@@ -186,6 +186,21 @@ class TestPeerHARelationAdapter(unittest.TestCase):
             self.assertEqual(lnetsplit, expect_local_ns)
             ldefault = padapt().local_default_addresses()
             self.assertEqual(ldefault, expect_local_default)
+            # Test single_mode_map when a cluster relation is present
+            with mock.patch.object(adapters.hookenv, 'relation_ids',
+                                   new=lambda x: ['rid1']), \
+                    mock.patch.object(adapters.hookenv, 'related_units',
+                                      new=lambda relid: []):
+                expect = {
+                    'cluster_hosts': expect_local_default
+                }
+                peer_ra = adapters.PeerHARelationAdapter(FakePeerRelation())
+                self.assertEqual(peer_ra.single_mode_map, expect)
+            # Test single_mode_map when a cluster relation is not present
+            with mock.patch.object(adapters.hookenv, 'relation_ids',
+                                   new=lambda x: []):
+                peer_ra = adapters.PeerHARelationAdapter(FakePeerRelation())
+                self.assertEqual(peer_ra.single_mode_map, {})
 
 
 class FakeDatabaseRelation():
