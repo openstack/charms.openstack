@@ -444,8 +444,10 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.target.install()
         self.target.set_state.assert_called_once_with('my-charm-installed')
         self.fip.assert_called_once_with(self.target.packages)
-        self.status_set.assert_called_once_with('maintenance',
-                                                'Installing packages')
+        self.status_set.assert_has_calls([
+            mock.call('maintenance', 'Installing packages'),
+            mock.call('maintenance',
+                      'Installation complete - awaiting next status')])
 
     def test_api_port(self):
         self.assertEqual(self.target.api_port('service1'), 1)
