@@ -194,7 +194,7 @@ class OpenStackCharmMeta(type):
             # see if a _release_selector_function has been registered.
             if _release_selector_function is not None:
                 release = _release_selector_function()
-            _singleton = get_charm_instance()
+            _singleton = get_charm_instance(release=release)
         return _singleton
 
 
