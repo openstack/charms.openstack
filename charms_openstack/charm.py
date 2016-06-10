@@ -5,6 +5,8 @@
 from __future__ import absolute_import
 
 import os
+import random
+import string
 import subprocess
 import contextlib
 import collections
@@ -12,6 +14,7 @@ import itertools
 
 import six
 
+import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.templating as os_templating
 import charmhelpers.contrib.openstack.utils as os_utils
 import charmhelpers.core.hookenv as hookenv
@@ -53,6 +56,10 @@ KNOWN_RELEASES = [
     'liberty',
     'mitaka',
 ]
+
+VIP_KEY = "vip"
+CIDR_KEY = "vip_cidr"
+IFACE_KEY = "vip_iface"
 
 
 def get_charm_instance(release=None, *args, **kwargs):
@@ -152,7 +159,8 @@ class OpenStackCharmMeta(type):
         :param members: dictionary of name to class attribute (f, p, a, etc.)
         """
         global _releases
-        if name == 'OpenStackCharm':
+        # Do not attempt to calculate the release for an abstract class
+        if members.get('abstract_class', False):
             return
         if 'release' in members.keys():
             release = members['release']
@@ -204,6 +212,8 @@ class OpenStackCharm(object):
     See the other class variables for details on what they are for and do.
     """
 
+    abstract_class = True
+
     # first_release = this is the first release in which this charm works
     release = 'icehouse'
 
@@ -243,6 +253,10 @@ class OpenStackCharm(object):
     # The adapters class that this charm uses to adapt interfaces.
     adapters_class = None
 
+    ha_resources = []
+    adapters_class = None
+    HAPROXY_CONF = '/etc/haproxy/haproxy.cfg'
+
     @property
     def singleton(self):
         """Return the only instance of the charm class in this run"""
@@ -265,11 +279,32 @@ class OpenStackCharm(object):
         if interfaces and self.adapters_class:
             self.adapters_instance = self.adapters_class(interfaces)
 
+    @property
+    def all_packages(self):
+        """List of packages to be installed
+
+        @return ['pkg1', 'pkg2', ...]
+        """
+        return self.packages
+
+    @property
+    def full_restart_map(self):
+        """Map of services to be restarted if a file changes
+
+        @return {
+                    'file1': ['svc1', 'svc3'],
+                    'file2': ['svc2', 'svc3'],
+                    ...
+                }
+        """
+        return self.restart_map
+
     def install(self):
         """Install packages related to this charm based on
         contents of self.packages attribute.
         """
-        packages = charmhelpers.fetch.filter_installed_packages(self.packages)
+        packages = charmhelpers.fetch.filter_installed_packages(
+            self.all_packages)
         if packages:
             hookenv.status_set('maintenance', 'Installing packages')
             charmhelpers.fetch.apt_install(packages, fatal=True)
@@ -349,12 +384,12 @@ class OpenStackCharm(object):
         corresponding list.
         """
         checksums = {path: ch_host.path_hash(path)
-                     for path in self.restart_map.keys()}
+                     for path in self.full_restart_map.keys()}
         yield
         restarts = []
-        for path in self.restart_map:
+        for path in self.full_restart_map:
             if ch_host.path_hash(path) != checksums[path]:
-                restarts += self.restart_map[path]
+                restarts += self.full_restart_map[path]
         services_list = list(collections.OrderedDict.fromkeys(restarts).keys())
         for service_name in services_list:
             ch_host.service_restart(service_name)
@@ -372,7 +407,7 @@ class OpenStackCharm(object):
 
         :param adapters_instance: [optional] the adapters_instance to use.
         """
-        self.render_configs(self.restart_map.keys(),
+        self.render_configs(self.full_restart_map.keys(),
                             adapters_instance=adapters_instance)
 
     def render_configs(self, configs, adapters_instance=None):
@@ -396,13 +431,16 @@ class OpenStackCharm(object):
                     target=conf,
                     context=adapters_instance)
 
-    def render_with_interfaces(self, interfaces):
+    def render_with_interfaces(self, interfaces, configs=None):
         """Render the configs using the interfaces passed; overrides any
         interfaces passed in the instance creation.
 
         :param interfaces: list of interface objects to render against
         """
-        self.render_all_configs(
+        if not configs:
+            configs = self.full_restart_map.keys()
+        self.render_configs(
+            configs,
             adapters_instance=self.adapters_class(interfaces))
 
     def restart_all(self):
@@ -412,16 +450,18 @@ class OpenStackCharm(object):
         for svc in self.services:
             ch_host.service_restart(svc)
 
+    def db_sync_done(self):
+        return hookenv.leader_get(attribute='db-sync-done')
+
     def db_sync(self):
         """Perform a database sync using the command defined in the
         self.sync_cmd attribute. The services defined in self.services are
         restarted after the database sync.
         """
-        sync_done = hookenv.leader_get(attribute='db-sync-done')
-        if not sync_done:
+        if not self.db_sync_done() and hookenv.is_leader():
             subprocess.check_call(self.sync_cmd)
             hookenv.leader_set({'db-sync-done': True})
-            # Restart services immediatly after db sync as
+            # Restart services immediately after db sync as
             # render_domain_config needs a working system
             self.restart_all()
 
@@ -579,3 +619,87 @@ class OpenStackCharm(object):
         # The chain .. map  flattens all the values into a single list
         return sorted(set(itertools.chain(*map(lambda x: x.values(),
                                                self.api_ports.values()))))
+
+
+class HAOpenStackCharm(OpenStackCharm):
+
+    abstract_class = True
+
+    def __init__(self, **kwargs):
+        super(HAOpenStackCharm, self).__init__(**kwargs)
+        self.set_haproxy_stat_password()
+
+    @property
+    def all_packages(self):
+        """List of packages to be installed
+
+        @return ['pkg1', 'pkg2', ...]
+        """
+        _packages = self.packages[:]
+        if self.enable_haproxy():
+            _packages.append('haproxy')
+        return _packages
+
+    @property
+    def full_restart_map(self):
+        """Map of services to be restarted if a file changes
+
+        @return {
+                    'file1': ['svc1', 'svc3'],
+                    'file2': ['svc2', 'svc3'],
+                    ...
+                }
+        """
+        _restart_map = self.restart_map.copy()
+        if self.enable_haproxy():
+            _restart_map[self.HAPROXY_CONF] = ['haproxy']
+        return _restart_map
+
+    def enable_haproxy(self):
+        """Determine if haproxy is fronting the services
+
+        @return True if haproxy is fronting the service"""
+        return 'haproxy' in self.ha_resources
+
+    def configure_ha_resources(self, hacluster):
+        """Inform the ha subordinate about each service it should manage. The
+        child class specifies the services via self.ha_resources
+
+        @param hacluster instance of interface class HAClusterRequires
+        """
+        RESOURCE_TYPES = {
+            'vips': self._add_ha_vips_config,
+            'haproxy': self._add_ha_haproxy_config,
+        }
+        if self.ha_resources:
+            for res_type in self.ha_resources:
+                RESOURCE_TYPES[res_type](hacluster)
+            hacluster.bind_resources(iface=self.config[IFACE_KEY])
+
+    def _add_ha_vips_config(self, hacluster):
+        """Add a VirtualIP object for each user specified vip to self.resources
+
+        @param hacluster instance of interface class HAClusterRequires
+        """
+        for vip in self.config.get(VIP_KEY, '').split():
+            iface = (ch_ip.get_iface_for_address(vip) or
+                     self.config.get(IFACE_KEY))
+            netmask = (ch_ip.get_netmask_for_address(vip) or
+                       self.config.get(CIDR_KEY))
+            if iface is not None:
+                hacluster.add_vip(self.name, vip, iface, netmask)
+
+    def _add_ha_haproxy_config(self, hacluster):
+        """Add a InitService object for haproxy to self.resources
+
+        @param hacluster instance of interface class HAClusterRequires
+        """
+        hacluster.add_init_service(self.name, 'haproxy')
+
+    def set_haproxy_stat_password(self):
+        """Set a stats password for accessing haproxy statistics"""
+        if not charms.reactive.bus.get_state('haproxy.stat.password'):
+            password = ''.join([
+                random.choice(string.ascii_letters + string.digits)
+                for n in range(32)])
+            charms.reactive.bus.set_state('haproxy.stat.password', password)
