@@ -323,7 +323,7 @@ available, configuration changes, etc.
 e.g.
 
 ```python
-@reactive.when('amqp.connected')¬
+@reactive.when('amqp.connected')
 def setup_amqp_req(amqp):¬
     """Use the amqp interface to request access to the amqp broker using our
     local configuration.
