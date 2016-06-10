@@ -508,7 +508,7 @@ class OpenStackCharm(object):
 
         :returns (status, message) or (None, None)
         """
-        states_to_check = self.states_to_check
+        states_to_check = self.states_to_check()
         # bail if there is nothing to do.
         if not states_to_check:
             return None, None
@@ -528,7 +528,6 @@ class OpenStackCharm(object):
         # Everything is fine.
         return None, None
 
-    @property
     def states_to_check(self):
         """Construct a default set of connected and available states for each
         of the relations passed, along with error messages and new status
