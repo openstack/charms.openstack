@@ -4,6 +4,7 @@ from __future__ import absolute_import
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.contrib.network.ip as net_ip
 import charmhelpers.contrib.hahelpers.cluster
+import charms.reactive.bus
 
 PUBLIC = 'public'
 INTERNAL = 'int'
@@ -35,8 +36,8 @@ def canonical_url(endpoint_type=PUBLIC):
     :returns str: Base URL for services on the current service unit.
     """
     scheme = 'http'
-#    if 'https' in configs.complete_contexts():
-#        scheme = 'https'
+    if charms.reactive.bus.get_state('ssl.enabled'):
+        scheme = 'https'
     address = resolve_address(endpoint_type)
     if net_ip.is_ipv6(address):
         address = "[{}]".format(address)

@@ -313,7 +313,7 @@ class APIConfigurationAdapter(ConfigurationAdapter):
     """This configuration adapter extends the base class and adds properties
     common accross most OpenstackAPI services"""
 
-    def __init__(self, port_map=None):
+    def __init__(self, port_map=None, service_name=None):
         """
         :param  port_map: Map containing service names and the ports used e.g.
                 port_map = {
@@ -331,6 +331,16 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         """
         super(APIConfigurationAdapter, self).__init__()
         self.port_map = port_map
+        self.service_name = service_name
+        self.network_addresses = self.get_network_addresses()
+
+    @property
+    def external_ports(self):
+        ext_ports = set()
+        for svc in self.port_map.keys():
+            for net_type in self.port_map[svc].keys():
+                ext_ports.add(self.port_map[svc][net_type])
+        return ext_ports
 
     @property
     def ipv6_mode(self):
@@ -408,6 +418,15 @@ class APIConfigurationAdapter(ConfigurationAdapter):
                         singlenode_mode=True)]
         return service_ports
 
+    def apache_enabled(self):
+        return charms.reactive.bus.get_state('ssl.enabled')
+
+    def determine_service_port(self, port):
+        i = 10
+        if self.apache_enabled:
+            i = 20
+        return (port - i)
+
     @property
     def service_listen_info(self):
         """Dict of service names and attributes for backend to listen on
@@ -427,15 +446,15 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
         """
         info = {}
+        ip = self.local_host if self.apache_enabled else self.local_address
         if self.port_map:
             for service in self.port_map.keys():
                 key = service.replace('-', '_')
                 info[key] = {
                     'proto': 'http',
-                    'ip': self.local_address,
-                    'port': ch_cluster.determine_apache_port(
-                        self.port_map[service]['admin'],
-                        singlenode_mode=True)}
+                    'ip': ip,
+                    'port': self.determine_service_port(
+                        self.port_map[service]['admin'])}
                 info[key]['url'] = '{proto}://{ip}:{port}'.format(**info[key])
         return info
 
@@ -459,16 +478,81 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         """
         info = {}
         ip = getattr(self, 'vip', self.local_address)
+        proto = 'https' if self.apache_enabled else 'http'
         if self.port_map:
             for service in self.port_map.keys():
                 key = service.replace('-', '_')
                 info[key] = {
-                    'proto': 'http',
+                    'proto': proto,
                     'ip': ip,
                     'port': self.port_map[service]['admin']}
                 info[key]['url'] = '{proto}://{ip}:{port}'.format(**info[key])
         return info
 
+    def get_network_addresses(self):
+        """For each network configured, return corresponding address and vip
+           (if available).
+
+        Returns a list of tuples of the form:
+
+            [(address_in_net_a, vip_in_net_a),
+             (address_in_net_b, vip_in_net_b),
+             ...]
+
+            or, if no vip(s) available:
+
+            [(address_in_net_a, address_in_net_a),
+             (address_in_net_b, address_in_net_b),
+             ...]
+        """
+        addresses = []
+        vips = getattr(self, 'vip', [])
+
+        for net_type in ADDRESS_TYPES:
+            config_cidr = getattr(self, net_type, None)
+            addr = ch_ip.get_address_in_network(
+                config_cidr,
+                hookenv.unit_get('private-address'))
+            if len(vips) > 1 and ch_cluster.is_clustered():
+                if not config_cidr:
+                    hookenv.log("Multiple networks configured but net_type "
+                                "is None (%s)." % net_type, level=WARNING)
+                    continue
+
+                for vip in vips:
+                    if ch_ip.is_address_in_network(config_cidr, vip):
+                        addresses.append((addr, vip))
+                        break
+
+            elif ch_cluster.is_clustered() and vips:
+                addresses.append((addr, vips))
+            else:
+                addresses.append((addr, addr))
+
+        return sorted(addresses)
+
+    @property
+    def endpoints(self):
+        endpoints = []
+        for address, endpoint in sorted(set(self.network_addresses)):
+            for api_port in self.external_ports:
+                ext_port = ch_cluster.determine_apache_port(
+                    api_port,
+                    singlenode_mode=True)
+                int_port = ch_cluster.determine_api_port(
+                    api_port,
+                    singlenode_mode=True)
+                portmap = (address, endpoint, int(ext_port), int(int_port))
+                endpoints.append(portmap)
+        return endpoints
+
+    @property
+    def ext_ports(self):
+        for ep in self.endpoints:
+            print(ep)
+            print(ep[2])
+        eps = [ep[2] for ep in self.endpoints]
+        return sorted(list(set(eps)))
 
 class OpenStackRelationAdapters(object):
     """

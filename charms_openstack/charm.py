@@ -4,6 +4,7 @@
 # need/want absolute imports for the package imports to work properly
 from __future__ import absolute_import
 
+import base64
 import os
 import random
 import string
@@ -425,6 +426,19 @@ class HAOpenStackCharm(OpenStackCharm):
     def __init__(self, **kwargs):
         super(HAOpenStackCharm, self).__init__(**kwargs)
         self.set_haproxy_stat_password()
+        self.set_config_defined_certs_and_keys()
+        self.enable_apache()
+
+    @property
+    def apache_vhost_file(self):
+        return '/etc/apache2/sites-available/openstack_https_frontend.conf'
+
+    def enable_apache(self):
+        if os.path.exists(self.apache_vhost_file):
+            check_enabled = subprocess.call(
+                ['a2query', '-s', 'openstack_https_frontend'])
+            if check_enabled != 0:
+                subprocess.check_call(['a2ensite', 'openstack_https_frontend'])
 
     @property
     def all_packages(self):
@@ -433,8 +447,10 @@ class HAOpenStackCharm(OpenStackCharm):
         @return ['pkg1', 'pkg2', ...]
         """
         _packages = self.packages[:]
-        if self.enable_haproxy():
+        if self.haproxy_enabled():
             _packages.append('haproxy')
+        if self.apache_enabled():
+            _packages.append('apache2')
         return _packages
 
     @property
@@ -448,11 +464,19 @@ class HAOpenStackCharm(OpenStackCharm):
                 }
         """
         _restart_map = self.restart_map.copy()
-        if self.enable_haproxy():
+        if self.haproxy_enabled():
             _restart_map[self.HAPROXY_CONF] = ['haproxy']
+        if self.apache_enabled():
+            _restart_map[self.apache_vhost_file] = ['apache2']
         return _restart_map
 
-    def enable_haproxy(self):
+    def apache_enabled(self):
+        """Determine if apache is being used
+
+        @return True if apache is being used"""
+        return True
+
+    def haproxy_enabled(self):
         """Determine if haproxy is fronting the services
 
         @return True if haproxy is fronting the service"""
@@ -500,3 +524,64 @@ class HAOpenStackCharm(OpenStackCharm):
                 random.choice(string.ascii_letters + string.digits)
                 for n in range(32)])
             charms.reactive.bus.set_state('haproxy.stat.password', password)
+
+    def enable_modules(self):
+        cmd = ['a2enmod', 'ssl', 'proxy', 'proxy_http']
+        subprocess.check_call(cmd)
+
+    def configure_cert(self, cert, key, cn=None):
+        if not cn:
+            cn = os_ip.resolve_address(endpoint_type=os_ip.INTERNAL)
+        ssl_dir = os.path.join('/etc/apache2/ssl/', self.name)
+        ch_host.mkdir(path=ssl_dir)
+        if cn:
+            cert_filename = 'cert_{}'.format(cn)
+            key_filename = 'key_{}'.format(cn)
+        else:
+            cert_filename = 'cert'
+            key_filename = 'key'
+
+        ch_host.write_file(path=os.path.join(ssl_dir, cert_filename),
+                           content=cert)
+        ch_host.write_file(path=os.path.join(ssl_dir, key_filename),
+                           content=key)
+
+    def get_certs_and_keys(self, keystone_interface=None):
+        if self.config_defined_ssl_key and self.config_defined_ssl_cert:
+            return (self.config_defined_ssl_key, self.config_defined_ssl_cert,
+                    self.config_defined_ssl_ca)
+        elif keystone_interface:
+            return None, None, None
+        else: 
+            return None, None, None
+
+    def set_config_defined_certs_and_keys(self):
+        for ssl_param in ['ssl_key', 'ssl_cert', 'ssl_ca']:
+            key = 'config_defined_{}'.format(ssl_param)
+            if self.config.get(ssl_param):
+                setattr(self, key,
+                        base64.b64decode(self.config.get(ssl_param)))
+            else:
+                setattr(self, key, None)
+
+#    def enable_ssl(self, keystone_interface=None):
+#        return (self.ssl_key and self.ssl_cert)
+
+    def configure_ssl(self, keystone_interface=None, cn=None):
+        key, cert, ca_cert = self.get_certs_and_keys(
+            keystone_interface=keystone_interface)
+        if key and cert:
+            self.enable_modules()
+            self.configure_cert(cert, key, cn=cn)
+            self.configure_ca(ca_cert)
+            charms.reactive.bus.set_state('ssl.enabled', True)
+        else:
+            charms.reactive.bus.set_state('ssl.enabled', False)
+
+    def configure_ca(self, ca_cert):
+        cert_file = \
+            '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt'
+        if ca_cert:
+            with open(cert_file, 'w') as crt:                                                  
+                crt.write(ca_cert.decode('utf-8'))                                                  
+            subprocess.check_call(['update-ca-certificates', '--fresh'])    
