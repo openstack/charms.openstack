@@ -499,7 +499,7 @@ class OpenStackCharm(object):
                 hookenv.status_set(state, message)
                 return
         # No state was particularly set, so assume the unit is active
-        hookenv.state_set('active', 'Unit is ready')
+        hookenv.status_set('active', 'Unit is ready')
 
     def custom_assess_status_check(self):
         """Override this function in a derived class if there are any other
