@@ -128,6 +128,7 @@ class TestRegisterOSReleaseSelector(unittest.TestCase):
     def test_register(self):
         save_rsf = chm._release_selector_function
         chm._release_selector_function = None
+
         @chm.register_os_release_selector
         def test_func():
             pass
@@ -138,6 +139,7 @@ class TestRegisterOSReleaseSelector(unittest.TestCase):
     def test_cant_register_more_than_once(self):
         save_rsf = chm._release_selector_function
         chm._release_selector_function = None
+
         @chm.register_os_release_selector
         def test_func1():
             pass
@@ -473,6 +475,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         # a release function
         rsf_save = chm._release_selector_function
         chm._release_selector_function = None
+
         @chm.register_os_release_selector
         def selector():
             return 'icehouse'
@@ -658,8 +661,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         # next check that we get back the states we think we should
         self.patch_object(chm.charms.reactive.bus,
                           'get_states',
-                          return_value={'rel1.connected': 1,})
+                          return_value={'rel1.connected': 1, })
         self.patch_target('required_relations', new=['rel1', 'rel2'])
+
         def my_compare(x, y):
             if x is None:
                 x = 'unknown'
@@ -689,7 +693,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         # verify that the function calls _ows_check_services_running() with the
         # valid information
         self.patch_object(chm.os_utils, '_ows_check_services_running',
-                          return_value = ('active', 'that'))
+                          return_value=('active', 'that'))
         status, message = self.target.check_services_running()
         self.assertEqual((status, message), ('active', 'that'))
         self._ows_check_services_running.assert_called_once_with(
