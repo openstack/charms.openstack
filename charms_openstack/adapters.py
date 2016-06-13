@@ -418,6 +418,7 @@ class APIConfigurationAdapter(ConfigurationAdapter):
                         singlenode_mode=True)]
         return service_ports
 
+    @property
     def apache_enabled(self):
         return charms.reactive.bus.get_state('ssl.enabled')
 
