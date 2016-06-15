@@ -10,6 +10,7 @@ import string
 import subprocess
 import contextlib
 import collections
+import itertools
 
 import six
 
@@ -36,6 +37,11 @@ _releases = {}
 # `_singleton` stores the instance of the class that is being used during a
 # hook invocation.
 _singleton = None
+
+# `_release_selector_function` holds a function that takes optionally takes a
+# release and commutes it to another release or just returns a release.
+# This is to enable the defining code to define which release is used.
+_release_selector_function = None
 
 # List of releases that OpenStackCharm based charms know about
 KNOWN_RELEASES = [
@@ -82,6 +88,10 @@ def get_charm_instance(release=None, *args, **kwargs):
             "Release {} is not supported by this charm. Earliest support is "
             "{} release".format(release, known_releases[0]))
     else:
+        # check that the release is a valid release
+        if release not in KNOWN_RELEASES:
+            raise RuntimeError(
+                "Release {} is not a known OpenStack release?".format(release))
         # try to find the release that is supported.
         for known_release in reversed(known_releases):
             if release >= known_release:
@@ -90,6 +100,30 @@ def get_charm_instance(release=None, *args, **kwargs):
     if cls is None:
         raise RuntimeError("Release {} is not supported".format(release))
     return cls(release=release, *args, **kwargs)
+
+
+def register_os_release_selector(f):
+    """Register a function that determines what the release is for the
+    invocation run.  This allows the charm to define HOW the release is
+    determined.
+
+    Usage:
+
+        @register_os_release_selector
+        def my_release_selector():
+            return os_release_chooser()
+
+    The function should return a string which is an OS release.
+    """
+    global _release_selector_function
+    if _release_selector_function is None:
+        # we can only do this once in a system invocation.
+        _release_selector_function = f
+    else:
+        raise RuntimeError(
+            "Only a single release_selector_function is supported."
+            " Called with {}".format(f.__name__))
+    return f
 
 
 class OpenStackCharmMeta(type):
@@ -149,9 +183,18 @@ class OpenStackCharmMeta(type):
 
     @property
     def singleton(cls):
+        """Either returns the already created charm, or create a new one.
+
+        This uses the _release_selector_function to choose the release is one
+        has been registered, otherwise None is passed to get_charm_instance()
+        """
         global _singleton
         if _singleton is None:
-            _singleton = get_charm_instance()
+            release = None
+            # see if a _release_selector_function has been registered.
+            if _release_selector_function is not None:
+                release = _release_selector_function()
+            _singleton = get_charm_instance(release=release)
         return _singleton
 
 
@@ -196,6 +239,10 @@ class OpenStackCharm(object):
     #    'config2.file': ['more', 'services'],
     # }
     restart_map = {}
+
+    # The list of required services that are checked for assess_status
+    # e.g. required_relations = ['identity-service', 'shared-db']
+    required_relations = []
 
     # The command used to sync the database
     sync_cmd = []
@@ -261,11 +308,9 @@ class OpenStackCharm(object):
         if packages:
             hookenv.status_set('maintenance', 'Installing packages')
             charmhelpers.fetch.apt_install(packages, fatal=True)
-            # TODO need a call to assess_status(...) or equivalent so that we
-            # can determine the workload status at the end of the handler.  At
-            # the end of install the 'status' is stuck in maintenance until the
-            # next hook is run.
         self.set_state('{}-installed'.format(self.name))
+        hookenv.status_set('maintenance',
+                           'Installation complete - awaiting next status')
 
     def set_state(self, state, value=None):
         """proxy for charms.reactive.bus.set_state()"""
@@ -416,6 +461,165 @@ class OpenStackCharm(object):
         if not self.db_sync_done() and hookenv.is_leader():
             subprocess.check_call(self.sync_cmd)
             hookenv.leader_set({'db-sync-done': True})
+            # Restart services immediately after db sync as
+            # render_domain_config needs a working system
+            self.restart_all()
+
+    def assess_status(self):
+        """Assess the status of the unit and set the status and a useful
+        message as appropriate.
+
+        The 3 checks are:
+
+         1. Check if the unit has been paused (using
+            os_utils.is_unit_paused_set().
+         2. Check if the interfaces are all present (using the states that are
+            set by each interface as it comes 'live'.
+         3. Do a custom_assess_status_check() check.
+         4. Check that services that should be running are running.
+
+        Each sub-function determins what checks are taking place.
+
+        If custom assess_status() functionality is required then the derived
+        class should override any of the 4 check functions to alter the
+        behaviour as required.
+
+        Note that if ports are NOT to be checked, then the derived class should
+        override :meth:`ports_to_check()` and return an empty list.
+
+        SIDE EFFECT: this function calls status_set(state, message) to set the
+        workload status in juju.
+        """
+        for f in [self.check_if_paused,
+                  self.check_interfaces,
+                  self.custom_assess_status_check,
+                  self.check_services_running]:
+            state, message = f()
+            if state is not None:
+                hookenv.status_set(state, message)
+                return
+        # No state was particularly set, so assume the unit is active
+        hookenv.status_set('active', 'Unit is ready')
+
+    def custom_assess_status_check(self):
+        """Override this function in a derived class if there are any other
+        status checks that need to be done that aren't about relations, etc.
+
+        Return (None, None) if the status is okay (i.e. the unit is active).
+        Return ('active', message) do shortcut and force the unit to the active
+        status.
+        Return (other_status, message) to set the status to desired state.
+
+        :returns: None, None - no action in this function.
+        """
+        return None, None
+
+    def check_if_paused(self):
+        """Check if the unit is paused and return either the paused status,
+        message or None, None if the unit is not paused.  If the unit is paused
+        but a service is incorrectly running, then the function returns a
+        broken status.
+
+        :returns: (status, message) or (None, None)
+        """
+        return os_utils._ows_check_if_paused(
+            services=self.services,
+            ports=self.ports_to_check(self.api_ports))
+
+    def check_interfaces(self):
+        """Check that the required interfaces have both connected and availble
+        states set.
+
+        This requires a convention from the OS interfaces that they set the
+        '{relation_name}.connected' state on connection, and the
+        '{relation_name}.available' state when the connection information is
+        available and the interface is ready to go.
+
+        The interfaces (relations) that are checked are named in
+        self.required_relations which is a list of strings representing the
+        generic relation name.  e.g. 'identity-service' rather than 'keystone'.
+
+        Returns (None, None) if the interfaces are okay, or a status, message
+        if any of the interfaces are not ready.
+
+        Derived classes can augment/alter the checks done by overriding the
+        companion method :property:`states_to_check` which converts a relation
+        into the states to confirm existence, along with the error message.
+
+        :returns (status, message) or (None, None)
+        """
+        states_to_check = self.states_to_check()
+        # bail if there is nothing to do.
+        if not states_to_check:
+            return None, None
+        available_states = charms.reactive.bus.get_states().keys()
+        status = None
+        messages = []
+        for relation, states in states_to_check.items():
+            for state, err_status, err_msg in states:
+                if state not in available_states:
+                    messages.append(err_msg)
+                    status = os_utils.workload_state_compare(status,
+                                                             err_status)
+                    # as soon as we error on a relation, skip to the next one.
+                    break
+        if status is not None:
+            return status, ", ".join(messages)
+        # Everything is fine.
+        return None, None
+
+    def states_to_check(self):
+        """Construct a default set of connected and available states for each
+        of the relations passed, along with error messages and new status
+        conditions if they are missing.
+
+        The method returns a {relation: [(state, err_status, err_msg), (...),]}
+        This corresponds to the relation, the state to check for, the error
+        status to set if that state is missing, and the message to show if the
+        state is missing.
+
+        The list of tuples is evaulated in order for each relation, and stops
+        after the first failure.  This means that it doesn't check (say)
+        available if connected is not available.
+        """
+        states_to_check = collections.OrderedDict()
+        for relation in self.required_relations:
+            states_to_check[relation] = [
+                ("{}.connected".format(relation),
+                 "blocked",
+                 "'{}' missing".format(relation)),
+                ("{}.available".format(relation),
+                 "waiting",
+                 "'{}' incomplete".format(relation))]
+        return states_to_check
+
+    def check_services_running(self):
+        """Check that the services that should be running are actually running.
+
+        This uses the self.services and self.api_ports to determine what should
+        be checked.
+
+        :returns: (status, message) or (None, None).
+        """
+        # This returns either a None, None or a status, message if the service
+        # is not running or the ports are not open.
+        return os_utils._ows_check_services_running(
+            services=self.services,
+            ports=self.ports_to_check(self.api_ports))
+
+    def ports_to_check(self, ports):
+        """Return a flattened, sorted, unique list of ports from self.api_ports
+
+        NOTE. To disable port checking, simply override this method in the
+        derived class and return an empty [].
+
+        :param ports: {key: {subkey: value}}
+        :returns: [value1, value2, ...]
+        """
+        # NB self.api_ports = {key: {space: value}}
+        # The chain .. map  flattens all the values into a single list
+        return sorted(set(itertools.chain(*map(lambda x: x.values(),
+                                               self.api_ports.values()))))
 
 
 class HAOpenStackCharm(OpenStackCharm):

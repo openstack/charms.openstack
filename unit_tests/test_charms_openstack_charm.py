@@ -7,6 +7,7 @@
 from __future__ import absolute_import
 
 import collections
+import unittest
 
 import mock
 
@@ -120,6 +121,36 @@ class TestFunctions(BaseOpenStackCharmTest):
         # TODO this may be the wrong logic.  Assume latest release if no
         # release is passed?
         self.assertTrue(isinstance(chm.get_charm_instance(), self.C3))
+
+
+class TestRegisterOSReleaseSelector(unittest.TestCase):
+
+    def test_register(self):
+        save_rsf = chm._release_selector_function
+        chm._release_selector_function = None
+
+        @chm.register_os_release_selector
+        def test_func():
+            pass
+
+        self.assertEqual(chm._release_selector_function, test_func)
+        chm._release_selector_function = save_rsf
+
+    def test_cant_register_more_than_once(self):
+        save_rsf = chm._release_selector_function
+        chm._release_selector_function = None
+
+        @chm.register_os_release_selector
+        def test_func1():
+            pass
+
+        with self.assertRaises(RuntimeError):
+            @chm.register_os_release_selector
+            def test_func2():
+                pass
+
+        self.assertEqual(chm._release_selector_function, test_func1)
+        chm._release_selector_function = save_rsf
 
 
 class TestOpenStackCharm(BaseOpenStackCharmTest):
@@ -411,6 +442,11 @@ class MyOpenStackCharm(chm.OpenStackCharm):
     adapters_class = MyAdapter
 
 
+class MyNextOpenStackCharm(MyOpenStackCharm):
+
+    release = 'mitaka'
+
+
 class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
     def setUp(self):
@@ -421,8 +457,13 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                                                 TEST_CONFIG)
 
     def test_singleton(self):
+        # because we have two releases, we expect this to be the latter.
+        # e.g. MyNextOpenStackCharm
         s = self.target.singleton
+        self.assertEqual(s.__class__.release, 'mitaka')
         self.assertTrue(isinstance(s, MyOpenStackCharm))
+        # should also be the second one, as it's the latest
+        self.assertTrue(isinstance(s, MyNextOpenStackCharm))
         self.assertTrue(isinstance(MyOpenStackCharm.singleton,
                                    MyOpenStackCharm))
         self.assertTrue(isinstance(chm.OpenStackCharm.singleton,
@@ -430,6 +471,22 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.assertEqual(s, chm.OpenStackCharm.singleton)
         # Note that get_charm_instance() returns NEW instance each time.
         self.assertNotEqual(s, chm.get_charm_instance())
+        # now clear out the singleton and make sure we get the first one using
+        # a release function
+        rsf_save = chm._release_selector_function
+        chm._release_selector_function = None
+
+        @chm.register_os_release_selector
+        def selector():
+            return 'icehouse'
+
+        # This should choose the icehouse version instead of the mitaka version
+        chm._singleton = None
+        s = self.target.singleton
+        self.assertEqual(s.release, 'icehouse')
+        self.assertEqual(s.__class__.release, 'icehouse')
+        self.assertFalse(isinstance(s, MyNextOpenStackCharm))
+        chm._release_selector_function = rsf_save
 
     def test_install(self):
         # tests that the packages are filtered before installation
@@ -444,8 +501,10 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.target.install()
         self.target.set_state.assert_called_once_with('my-charm-installed')
         self.fip.assert_called_once_with(self.target.packages)
-        self.status_set.assert_called_once_with('maintenance',
-                                                'Installing packages')
+        self.status_set.assert_has_calls([
+            mock.call('maintenance', 'Installing packages'),
+            mock.call('maintenance',
+                      'Installation complete - awaiting next status')])
 
     def test_api_port(self):
         self.assertEqual(self.target.api_port('service1'), 1)
@@ -547,3 +606,96 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         # Assert that None was not passed to render via the context kwarg
         for call in self.render.call_args_list:
             self.assertTrue(call[1]['context'])
+
+    def test_assess_status_active(self):
+        self.patch_object(chm.hookenv, 'status_set')
+        # disable all of the check functions
+        self.patch_target('check_if_paused', return_value=(None, None))
+        self.patch_target('check_interfaces', return_value=(None, None))
+        self.patch_target('custom_assess_status_check',
+                          return_value=(None, None))
+        self.patch_target('check_services_running', return_value=(None, None))
+        self.target.assess_status()
+        self.status_set.assert_called_once_with('active', 'Unit is ready')
+        # check all the check functions got called
+        self.check_if_paused.assert_called_once_with()
+        self.check_interfaces.assert_called_once_with()
+        self.custom_assess_status_check.assert_called_once_with()
+        self.check_services_running.assert_called_once_with()
+
+    def test_assess_status_paused(self):
+        self.patch_object(chm.hookenv, 'status_set')
+        # patch out _ows_check_if_paused
+        self.patch_object(chm.os_utils, '_ows_check_if_paused',
+                          return_value=('paused', '123'))
+        self.target.assess_status()
+        self.status_set.assert_called_once_with('paused', '123')
+        self._ows_check_if_paused.assert_called_once_with(
+            services=self.target.services,
+            ports=[1, 2, 3, 1234, 2468, 3579])
+
+    def test_states_to_check(self):
+        self.patch_target('required_relations', new=['rel1', 'rel2'])
+        states = self.target.states_to_check()
+        self.assertEqual(
+            states,
+            {
+                'rel1': [
+                    ('rel1.connected', 'blocked', "'rel1' missing"),
+                    ('rel1.available', 'waiting', "'rel1' incomplete")
+                ],
+                'rel2': [
+                    ('rel2.connected', 'blocked', "'rel2' missing"),
+                    ('rel2.available', 'waiting', "'rel2' incomplete")
+                ]
+            })
+
+    def test_assess_status_check_interfaces(self):
+        self.patch_object(chm.hookenv, 'status_set')
+        self.patch_target('check_if_paused', return_value=(None, None))
+        # first check it returns None, None if there are no states
+        with mock.patch.object(self.target,
+                               'states_to_check',
+                               return_value={}):
+            self.assertEqual(self.target.check_interfaces(), (None, None))
+        # next check that we get back the states we think we should
+        self.patch_object(chm.charms.reactive.bus,
+                          'get_states',
+                          return_value={'rel1.connected': 1, })
+        self.patch_target('required_relations', new=['rel1', 'rel2'])
+
+        def my_compare(x, y):
+            if x is None:
+                x = 'unknown'
+            if x <= y:
+                return x
+            return y
+
+        self.patch_object(chm.os_utils, 'workload_state_compare',
+                          new=my_compare)
+        self.assertEqual(self.target.check_interfaces(),
+                         ('blocked', "'rel1' incomplete, 'rel2' missing"))
+        # check that the assess_status give the same result
+        self.target.assess_status()
+        self.status_set.assert_called_once_with(
+            'blocked', "'rel1' incomplete, 'rel2' missing")
+
+        # Now check it returns None, None if all states are available
+        self.get_states.return_value = {
+            'rel1.connected': 1,
+            'rel1.available': 2,
+            'rel2.connected': 3,
+            'rel2.available': 4,
+        }
+        self.assertEqual(self.target.check_interfaces(), (None, None))
+
+    def test_check_assess_status_check_services_running(self):
+        # verify that the function calls _ows_check_services_running() with the
+        # valid information
+        self.patch_object(chm.os_utils, '_ows_check_services_running',
+                          return_value=('active', 'that'))
+        status, message = self.target.check_services_running()
+        self.assertEqual((status, message), ('active', 'that'))
+        self._ows_check_services_running.assert_called_once_with(
+            services=['my-default-service', 'my-second-service'],
+            ports=[1, 2, 3, 1234, 2468, 3579])
