@@ -582,14 +582,15 @@ class OpenStackCharm(object):
         after the first failure.  This means that it doesn't check (say)
         available if connected is not available.
         """
-        states_to_check = {
-            relation: [("{}.connected".format(relation),
-                        "blocked",
-                        "'{}' missing".format(relation)),
-                       ("{}.available".format(relation),
-                        "waiting",
-                        "'{}' incomplete".format(relation))]
-            for relation in self.required_relations}
+        states_to_check = collections.OrderedDict()
+        for relation in self.required_relations:
+            states_to_check[relation] = [
+                ("{}.connected".format(relation),
+                 "blocked",
+                 "'{}' missing".format(relation)),
+                ("{}.available".format(relation),
+                 "waiting",
+                 "'{}' incomplete".format(relation))]
         return states_to_check
 
     def check_services_running(self):
