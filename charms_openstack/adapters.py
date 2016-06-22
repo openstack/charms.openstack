@@ -29,10 +29,10 @@ class OpenStackRelationAdapter(object):
            :param accessors: List of accessible interfaces properties
            :param relation_name: String name of relation
         """
+        self.relation = relation
         if relation and relation_name:
             raise ValueError('Cannot speciiy relation and relation_name')
         if relation:
-            self.relation = relation
             self.accessors = accessors or []
             self._setup_properties()
         else:
@@ -164,6 +164,9 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
                 relation_info = {
                     'cluster_hosts': self.local_default_addresses(),
                 }
+                net_split = self.local_network_split_addresses()
+                for key in net_split.keys():
+                    relation_info['cluster_hosts'][key] = net_split[key]
         except IndexError:
             pass
         return relation_info
@@ -507,17 +510,19 @@ class APIConfigurationAdapter(ConfigurationAdapter):
              ...]
         """
         addresses = []
-        vips = getattr(self, 'vip', [])
+        vips = getattr(self, 'vip', '').split()
 
         for net_type in ADDRESS_TYPES:
-            config_cidr = getattr(self, net_type, None)
+            net_cfg_opt = 'os_{}_network'.format(net_type)
+            config_cidr = getattr(self, net_cfg_opt, None)
             addr = ch_ip.get_address_in_network(
                 config_cidr,
                 hookenv.unit_get('private-address'))
             if len(vips) > 1 and ch_cluster.is_clustered():
                 if not config_cidr:
                     hookenv.log("Multiple networks configured but net_type "
-                                "is None (%s)." % net_type, level=WARNING)
+                                "is None (%s)." % net_type,
+                                level=hookenv.WARNING)
                     continue
 
                 for vip in vips:
@@ -526,7 +531,8 @@ class APIConfigurationAdapter(ConfigurationAdapter):
                         break
 
             elif ch_cluster.is_clustered() and vips:
-                addresses.append((addr, vips))
+                if ch_ip.is_address_in_network(config_cidr, vips[0]):
+                    addresses.append((addr, vips[0]))
             else:
                 addresses.append((addr, addr))
 
@@ -549,11 +555,9 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
     @property
     def ext_ports(self):
-        for ep in self.endpoints:
-            print(ep)
-            print(ep[2])
         eps = [ep[2] for ep in self.endpoints]
         return sorted(list(set(eps)))
+
 
 class OpenStackRelationAdapters(object):
     """

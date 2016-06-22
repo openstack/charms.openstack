@@ -17,6 +17,9 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
     def test_canonical_url(self):
         self.patch_object(ip, 'resolve_address', return_value='address1')
         self.patch_object(ip.net_ip, 'is_ipv6', return_value=False)
+        self.patch_object(
+            ip.charms.reactive.bus, 'get_state',
+            return_value=False)
         # not ipv6
         url = ip.canonical_url()
         self.assertEqual(url, 'http://address1')

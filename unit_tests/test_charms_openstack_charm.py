@@ -277,9 +277,9 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         super(TestHAOpenStackCharm, self).setUp(chm.HAOpenStackCharm,
                                                 TEST_CONFIG)
 
-    def test_enable_haproxy(self):
+    def test_haproxy_enabled(self):
         self.patch_target('ha_resources', new=['haproxy'])
-        self.assertTrue(self.target.enable_haproxy())
+        self.assertTrue(self.target.haproxy_enabled())
 
     def test__init__(self):
         # Note cls.setUpClass() creates an OpenStackCharm() instance
@@ -354,16 +354,28 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
                                                mock.ANY)
 
     def test_hacharm_all_packages(self):
-        self.patch_target('enable_haproxy', return_value=True)
+        self.patch_target('haproxy_enabled', return_value=True)
         self.assertTrue('haproxy' in self.target.all_packages)
-        self.patch_target('enable_haproxy', return_value=False)
+        self.patch_target('haproxy_enabled', return_value=False)
         self.assertFalse('haproxy' in self.target.all_packages)
 
     def test_hacharm_full_restart_map(self):
-        self.patch_target('enable_haproxy', return_value=True)
+        self.patch_target('haproxy_enabled', return_value=True)
         self.assertTrue(
             self.target.full_restart_map.get(
                 '/etc/haproxy/haproxy.cfg', False))
+
+    def test_enable_apache(self):
+        self.patch_object(chm.os.path, 'exists', return_value=True)
+        self.patch_object(chm.subprocess, 'call', return_value=1)
+        self.patch_object(chm.subprocess, 'check_call')
+        self.target.enable_apache()
+        self.check_call.assert_called_once_with(
+            ['a2ensite', 'openstack_https_frontend'])
+        self.check_call.reset_mock()
+        self.patch_object(chm.subprocess, 'call', return_value=0)
+        self.target.enable_apache()
+        self.assertFalse(self.check_call.called)
 
 
 class MyAdapter(object):

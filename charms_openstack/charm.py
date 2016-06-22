@@ -24,6 +24,7 @@ import charmhelpers.fetch
 import charms.reactive.bus
 
 import charms_openstack.ip as os_ip
+import charms_openstack.adapters as os_adapters
 
 
 # _releases{} is a dictionary of release -> class that is instantiated
@@ -474,7 +475,7 @@ class HAOpenStackCharm(OpenStackCharm):
         """Determine if apache is being used
 
         @return True if apache is being used"""
-        return True
+        return charms.reactive.bus.get_state('ssl.enabled')
 
     def haproxy_enabled(self):
         """Determine if haproxy is fronting the services
@@ -546,14 +547,39 @@ class HAOpenStackCharm(OpenStackCharm):
         ch_host.write_file(path=os.path.join(ssl_dir, key_filename),
                            content=key)
 
+    def get_local_addresses(self):
+        addresses = [
+            os_utils.get_host_ip(hookenv.unit_get('private-address'))]
+        for addr_type in os_adapters.ADDRESS_TYPES:
+            cfg_opt = 'os-{}-network'.format(addr_type)
+            laddr = ch_ip.get_address_in_network(self.config.get(cfg_opt))
+            if laddr:
+                addresses.append(laddr)
+        return sorted(list(set(addresses)))
+
     def get_certs_and_keys(self, keystone_interface=None):
         if self.config_defined_ssl_key and self.config_defined_ssl_cert:
-            return (self.config_defined_ssl_key, self.config_defined_ssl_cert,
-                    self.config_defined_ssl_ca)
+            return [{
+                'key': self.config_defined_ssl_key.decode('utf-8'),
+                'cert': self.config_defined_ssl_cert.decode('utf-8'),
+                'ca': self.config_defined_ssl_ca.decode('utf-8'),
+                'cn': None}]
         elif keystone_interface:
-            return None, None, None
-        else: 
-            return None, None, None
+            keys_and_certs = []
+            for addr in self.get_local_addresses():
+                key = keystone_interface.get_remote(
+                    'ssl_key_{}'.format(addr))
+                cert = keystone_interface.get_remote(
+                    'ssl_cert_{}'.format(addr))
+                if key and cert:
+                    keys_and_certs.append({
+                        'key': base64.b64decode(key),
+                        'cert': base64.b64decode(cert),
+                        'ca': base64.b64decode(keystone_interface.ca_cert()),
+                        'cn': addr})
+            return keys_and_certs
+        else:
+            return []
 
     def set_config_defined_certs_and_keys(self):
         for ssl_param in ['ssl_key', 'ssl_cert', 'ssl_ca']:
@@ -564,24 +590,27 @@ class HAOpenStackCharm(OpenStackCharm):
             else:
                 setattr(self, key, None)
 
-#    def enable_ssl(self, keystone_interface=None):
-#        return (self.ssl_key and self.ssl_cert)
-
     def configure_ssl(self, keystone_interface=None, cn=None):
-        key, cert, ca_cert = self.get_certs_and_keys(
+        ssl_objects = self.get_certs_and_keys(
             keystone_interface=keystone_interface)
-        if key and cert:
+        if ssl_objects:
             self.enable_modules()
-            self.configure_cert(cert, key, cn=cn)
-            self.configure_ca(ca_cert)
+            for ssl in ssl_objects:
+                self.configure_cert(ssl['cert'], ssl['key'], cn=ssl['cn'])
+                self.configure_ca(ssl['ca'], update_certs=False)
+            self.run_update_certs()
             charms.reactive.bus.set_state('ssl.enabled', True)
         else:
             charms.reactive.bus.set_state('ssl.enabled', False)
 
-    def configure_ca(self, ca_cert):
+    def configure_ca(self, ca_cert, update_certs=True):
         cert_file = \
             '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt'
         if ca_cert:
-            with open(cert_file, 'w') as crt:                                                  
-                crt.write(ca_cert.decode('utf-8'))                                                  
-            subprocess.check_call(['update-ca-certificates', '--fresh'])    
+            with open(cert_file, 'wb') as crt:
+                crt.write(ca_cert)
+            if update_certs:
+                self.run_update_certs()
+
+    def run_update_certs(self):
+        subprocess.check_call(['update-ca-certificates', '--fresh'])
