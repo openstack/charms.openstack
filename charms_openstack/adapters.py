@@ -331,6 +331,7 @@ class APIConfigurationAdapter(ConfigurationAdapter):
                         'internal': 9002,
                     },
                 }
+        :param service_name: Name of service being deployed
         """
         super(APIConfigurationAdapter, self).__init__()
         self.port_map = port_map
@@ -339,6 +340,10 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
     @property
     def external_ports(self):
+        """Return ports the service will be accessed on
+
+        @return set of ports service can be accessed on
+        """
         ext_ports = set()
         for svc in self.port_map.keys():
             for net_type in self.port_map[svc].keys():
@@ -423,9 +428,27 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
     @property
     def apache_enabled(self):
+        """Whether apache is being used for this service
+
+        @return True if apache2 os being used for this service
+        """
         return charms.reactive.bus.get_state('ssl.enabled')
 
     def determine_service_port(self, port):
+        """Calculate port service should use given external port
+
+        Haproxy fronts connections for a service and may pass connections to
+        Apache for SSL termination. Is Apache is being used:
+            Haproxy listens on N
+            Apache listens on N-10
+            Service listens on N-20
+        else
+            Haproxy listens on N
+            Service listens on N-10
+
+        :param int port: port service uses for external connections
+        @return int port: port backend service should use
+        """
         i = 10
         if self.apache_enabled:
             i = 20
@@ -540,6 +563,18 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
     @property
     def endpoints(self):
+        """List of endpoint information.
+
+           Endpoint information used to configure apache
+           Client -> endpoint -> address:ext_port -> local:int_port
+
+           NOTE: endpoint map be a vi
+           returns [
+               (address1, endpoint1, ext_port1, int_port1),
+               (address2, endpoint2, ext_port2, int_port2)
+           ...
+           ]
+        """
         endpoints = []
         for address, endpoint in sorted(set(self.network_addresses)):
             for api_port in self.external_ports:
@@ -555,6 +590,10 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
     @property
     def ext_ports(self):
+        """ List of endpoint ports
+
+            @returns List of ports
+        """
         eps = [ep[2] for ep in self.endpoints]
         return sorted(list(set(eps)))
 

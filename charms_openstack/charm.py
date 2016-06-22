@@ -636,9 +636,18 @@ class HAOpenStackCharm(OpenStackCharm):
 
     @property
     def apache_vhost_file(self):
+        """Apache vhost for SSL termination
+
+        :returns: string
+        """
         return '/etc/apache2/sites-available/openstack_https_frontend.conf'
 
     def enable_apache(self):
+        """Enable Apache vhost for SSL termination
+
+        Enable Apache vhost for SSL termination if vhost exists and it is not
+        curently enabled
+        """
         if os.path.exists(self.apache_vhost_file):
             check_enabled = subprocess.call(
                 ['a2query', '-s', 'openstack_https_frontend'])
@@ -731,10 +740,19 @@ class HAOpenStackCharm(OpenStackCharm):
             charms.reactive.bus.set_state('haproxy.stat.password', password)
 
     def enable_modules(self):
+        """Enable Apache modules needed for SSL termination"""
         cmd = ['a2enmod', 'ssl', 'proxy', 'proxy_http']
         subprocess.check_call(cmd)
 
     def configure_cert(self, cert, key, cn=None):
+        """Configure service SSL cert and key
+
+        Write out service SSL certificate and key for Apache.
+
+        @param cert string SSL Certificate
+        @param key string SSL Key
+        @param cn string Canonical name for service
+        """
         if not cn:
             cn = os_ip.resolve_address(endpoint_type=os_ip.INTERNAL)
         ssl_dir = os.path.join('/etc/apache2/ssl/', self.name)
@@ -752,6 +770,13 @@ class HAOpenStackCharm(OpenStackCharm):
                            content=key)
 
     def get_local_addresses(self):
+        """Return list of local addresses on each configured network
+
+        For each network return an address the local unit has on that network
+        if one exists.
+
+        @returns [private_addr, admin_addr, public_addr, ...]
+        """
         addresses = [
             os_utils.get_host_ip(hookenv.unit_get('private-address'))]
         for addr_type in os_adapters.ADDRESS_TYPES:
@@ -762,6 +787,20 @@ class HAOpenStackCharm(OpenStackCharm):
         return sorted(list(set(addresses)))
 
     def get_certs_and_keys(self, keystone_interface=None):
+        """Collect SSL config for local endpoints
+
+        SSL keys and certs may come from user specified configuration for this
+        charm or they may come directly from Keystone.
+
+        If collecting from keystone there may be a certificate and key per
+        endpoint (public, admin etc).
+
+        @returns [
+            {'key': 'key1', 'cert': 'cert1', 'ca': 'ca1', 'cn': 'cn1'}
+            {'key': 'key2', 'cert': 'cert2', 'ca': 'ca2', 'cn': 'cn2'}
+            ...
+        ]
+        """
         if self.config_defined_ssl_key and self.config_defined_ssl_cert:
             return [{
                 'key': self.config_defined_ssl_key.decode('utf-8'),
@@ -777,15 +816,21 @@ class HAOpenStackCharm(OpenStackCharm):
                     'ssl_cert_{}'.format(addr))
                 if key and cert:
                     keys_and_certs.append({
-                        'key': base64.b64decode(key),
-                        'cert': base64.b64decode(cert),
-                        'ca': base64.b64decode(keystone_interface.ca_cert()),
+                        'key': base64.b64decode(key).decode('utf-8'),
+                        'cert': base64.b64decode(cert).decode('utf-8'),
+                        'ca': base64.b64decode(
+                            keystone_interface.ca_cert()).decode('utf-8'),
                         'cn': addr})
             return keys_and_certs
         else:
             return []
 
     def set_config_defined_certs_and_keys(self):
+        """Set class attributes for user defined ssl options
+
+        Inspect user defined SSL config and set
+        config_defined_{ssl_key, ssl_cert, ssl_ca}
+        """
         for ssl_param in ['ssl_key', 'ssl_cert', 'ssl_ca']:
             key = 'config_defined_{}'.format(ssl_param)
             if self.config.get(ssl_param):
@@ -794,7 +839,11 @@ class HAOpenStackCharm(OpenStackCharm):
             else:
                 setattr(self, key, None)
 
-    def configure_ssl(self, keystone_interface=None, cn=None):
+    def configure_ssl(self, keystone_interface=None):
+        """Configure SSL certificates and keys
+
+        @param keystone_interface KeystoneRequires class
+        """
         ssl_objects = self.get_certs_and_keys(
             keystone_interface=keystone_interface)
         if ssl_objects:
@@ -808,6 +857,7 @@ class HAOpenStackCharm(OpenStackCharm):
             charms.reactive.bus.set_state('ssl.enabled', False)
 
     def configure_ca(self, ca_cert, update_certs=True):
+        """Write Certificate Authority certificate"""
         cert_file = \
             '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt'
         if ca_cert:
@@ -817,4 +867,10 @@ class HAOpenStackCharm(OpenStackCharm):
                 self.run_update_certs()
 
     def run_update_certs(self):
+        """Update certifiacte
+
+        Run update-ca-certificates to update the directory /etc/ssl/certs to
+        hold SSL certificates and generates ca-certificates.crt, a concatenated
+        single-file list of certificates
+        """
         subprocess.check_call(['update-ca-certificates', '--fresh'])
