@@ -590,7 +590,7 @@ class OpenStackCharm(object):
         # Everything is fine.
         return None, None
 
-    def states_to_check(self):
+    def states_to_check(self, required_relations=None):
         """Construct a default set of connected and available states for each
         of the relations passed, along with error messages and new status
         conditions if they are missing.
@@ -603,9 +603,14 @@ class OpenStackCharm(object):
         The list of tuples is evaulated in order for each relation, and stops
         after the first failure.  This means that it doesn't check (say)
         available if connected is not available.
+
+        :param required_relations: (default None) - override self.relations
+        :returns: {relation: [(state, err_status, err_msg), (...),]}
         """
         states_to_check = collections.OrderedDict()
-        for relation in self.required_relations:
+        if required_relations is None:
+            required_relations = self.required_relations
+        for relation in required_relations:
             states_to_check[relation] = [
                 ("{}.connected".format(relation),
                  "blocked",
@@ -641,7 +646,7 @@ class OpenStackCharm(object):
         # NB self.api_ports = {key: {space: value}}
         # The chain .. map  flattens all the values into a single list
         return sorted(set(itertools.chain(*map(lambda x: x.values(),
-                                               self.api_ports.values()))))
+                                               ports.values()))))
 
 
 class HAOpenStackCharm(OpenStackCharm):

@@ -865,6 +865,16 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                     ('rel2.available', 'waiting', "'rel2' incomplete")
                 ]
             })
+        # test override feature of target.states_to_check()
+        states = self.target.states_to_check(required_relations=['rel3'])
+        self.assertEqual(
+            states,
+            {
+                'rel3': [
+                    ('rel3.connected', 'blocked', "'rel3' missing"),
+                    ('rel3.available', 'waiting', "'rel3' incomplete")
+                ],
+            })
 
     def test_assess_status_check_interfaces(self):
         self.patch_object(chm.hookenv, 'status_set')
@@ -915,3 +925,12 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self._ows_check_services_running.assert_called_once_with(
             services=['my-default-service', 'my-second-service'],
             ports=[1, 2, 3, 1234, 2468, 3579])
+
+    def test_check_ports_to_check(self):
+        ports = {
+            's1': {'k1': 3, 'k2': 4, 'k3': 5},
+            's2': {'k4': 6, 'k5': 1, 'k6': 2},
+            's3': {'k2': 4, 'k5': 1},
+        }
+        self.assertEqual(self.target.ports_to_check(ports),
+                         [1, 2, 3, 4, 5, 6])
