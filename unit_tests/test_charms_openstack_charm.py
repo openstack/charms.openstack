@@ -397,21 +397,21 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             self.target.full_restart_map.get(
                 '/etc/haproxy/haproxy.cfg', False))
 
-    def test_enable_apache(self):
+    def test_enable_apache_ssl_vhost(self):
         self.patch_object(chm.os.path, 'exists', return_value=True)
         self.patch_object(chm.subprocess, 'call', return_value=1)
         self.patch_object(chm.subprocess, 'check_call')
-        self.target.enable_apache()
+        self.target.enable_apache_ssl_vhost()
         self.check_call.assert_called_once_with(
             ['a2ensite', 'openstack_https_frontend'])
         self.check_call.reset_mock()
         self.patch_object(chm.subprocess, 'call', return_value=0)
-        self.target.enable_apache()
+        self.target.enable_apache_ssl_vhost()
         self.assertFalse(self.check_call.called)
 
-    def test_enable_modules(self):
+    def test_enable_apache_modules(self):
         self.patch_object(chm.subprocess, 'check_call')
-        self.target.enable_modules()
+        self.target.enable_apache_modules()
         self.check_call.assert_called_once_with(
             ['a2enmod', 'ssl', 'proxy', 'proxy_http'])
 
@@ -423,10 +423,10 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         calls = [
             mock.call(
                 path='/etc/apache2/ssl/charmname/cert_mycn',
-                content='mycert'),
+                content=b'mycert'),
             mock.call(
                 path='/etc/apache2/ssl/charmname/key_mycn',
-                content='mykey')]
+                content=b'mykey')]
         self.write_file.assert_has_calls(calls)
         self.write_file.reset_mock()
         self.patch_object(chm.os_ip, 'resolve_address', 'addr')
@@ -434,10 +434,10 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         calls = [
             mock.call(
                 path='/etc/apache2/ssl/charmname/cert_addr',
-                content='mycert'),
+                content=b'mycert'),
             mock.call(
                 path='/etc/apache2/ssl/charmname/key_addr',
-                content='mykey')]
+                content=b'mykey')]
         self.write_file.assert_has_calls(calls)
 
     def test_get_local_addresses(self):
@@ -540,7 +540,7 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
                 'ca': 'ca2',
                 'cn': 'cn2'}]
         self.patch_target('get_certs_and_keys', return_value=ssl_objs)
-        self.patch_target('enable_modules')
+        self.patch_target('configure_apache')
         self.patch_target('configure_cert')
         self.patch_target('configure_ca')
         self.patch_target('run_update_certs')
@@ -555,6 +555,7 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.configure_cert.assert_has_calls(cert_calls)
         self.configure_ca.assert_has_calls(ca_calls)
         self.run_update_certs.assert_called_once_with()
+        self.configure_apache.assert_called_once_with()
         self.set_state.assert_called_once_with('ssl.enabled', True)
 
     def test_configure_ssl_off(self):
@@ -569,7 +570,7 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             self.target.configure_ca('myca')
             mock_open.assert_called_with(
                 '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt',
-                'wb')
+                'w')
             mock_file.write.assert_called_with('myca')
             self.run_update_certs.assert_called_once_with()
 

@@ -632,7 +632,6 @@ class HAOpenStackCharm(OpenStackCharm):
         super(HAOpenStackCharm, self).__init__(**kwargs)
         self.set_haproxy_stat_password()
         self.set_config_defined_certs_and_keys()
-        self.enable_apache()
 
     @property
     def apache_vhost_file(self):
@@ -642,7 +641,7 @@ class HAOpenStackCharm(OpenStackCharm):
         """
         return '/etc/apache2/sites-available/openstack_https_frontend.conf'
 
-    def enable_apache(self):
+    def enable_apache_ssl_vhost(self):
         """Enable Apache vhost for SSL termination
 
         Enable Apache vhost for SSL termination if vhost exists and it is not
@@ -653,6 +652,13 @@ class HAOpenStackCharm(OpenStackCharm):
                 ['a2query', '-s', 'openstack_https_frontend'])
             if check_enabled != 0:
                 subprocess.check_call(['a2ensite', 'openstack_https_frontend'])
+                ch_host.service_restart('apache2')
+
+    def configure_apache(self):
+        if self.apache_enabled():
+            self.install()
+            self.enable_apache_modules()
+            self.enable_apache_ssl_vhost()
 
     @property
     def all_packages(self):
@@ -739,7 +745,7 @@ class HAOpenStackCharm(OpenStackCharm):
                 for n in range(32)])
             charms.reactive.bus.set_state('haproxy.stat.password', password)
 
-    def enable_modules(self):
+    def enable_apache_modules(self):
         """Enable Apache modules needed for SSL termination"""
         cmd = ['a2enmod', 'ssl', 'proxy', 'proxy_http']
         subprocess.check_call(cmd)
@@ -765,9 +771,9 @@ class HAOpenStackCharm(OpenStackCharm):
             key_filename = 'key'
 
         ch_host.write_file(path=os.path.join(ssl_dir, cert_filename),
-                           content=cert)
+                           content=cert.encode('utf-8'))
         ch_host.write_file(path=os.path.join(ssl_dir, key_filename),
-                           content=key)
+                           content=key.encode('utf-8'))
 
     def get_local_addresses(self):
         """Return list of local addresses on each configured network
@@ -847,12 +853,12 @@ class HAOpenStackCharm(OpenStackCharm):
         ssl_objects = self.get_certs_and_keys(
             keystone_interface=keystone_interface)
         if ssl_objects:
-            self.enable_modules()
             for ssl in ssl_objects:
                 self.configure_cert(ssl['cert'], ssl['key'], cn=ssl['cn'])
                 self.configure_ca(ssl['ca'], update_certs=False)
             self.run_update_certs()
             charms.reactive.bus.set_state('ssl.enabled', True)
+            self.configure_apache()
         else:
             charms.reactive.bus.set_state('ssl.enabled', False)
 
@@ -861,7 +867,7 @@ class HAOpenStackCharm(OpenStackCharm):
         cert_file = \
             '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt'
         if ca_cert:
-            with open(cert_file, 'wb') as crt:
+            with open(cert_file, 'w') as crt:
                 crt.write(ca_cert)
             if update_certs:
                 self.run_update_certs()
