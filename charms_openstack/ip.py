@@ -70,6 +70,19 @@ def _get_address_override(endpoint_type=PUBLIC):
         return addr_override.format(service_name=hookenv.service_name())
 
 
+def _network_get_primary_address(binding):
+    """Wrapper for hookenv.network_get_primary_address
+
+    hookenv.network_get_primary_address may return a string or bytes depending
+    on the version of python (Bug #1595418). When fix has landed in pypi
+    wrapper may be discarded"""
+    try:
+        address = hookenv.network_get_primary_address(binding).decode('utf-8')
+    except AttributeError:
+        address = hookenv.network_get_primary_address(binding)
+    return address
+
+
 def resolve_address(endpoint_type=PUBLIC, override=True):
     """Return unit address depending on net config.
 
@@ -109,7 +122,7 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
             #       bindings
             try:
                 bound_cidr = net_ip.resolve_network_cidr(
-                    hookenv.network_get_primary_address(binding)
+                    _network_get_primary_address(binding)
                 )
                 for vip in vips:
                     if net_ip.is_address_in_network(bound_cidr, vip):
@@ -132,7 +145,7 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
             # NOTE: only try to use extra bindings if legacy network
             #       configuration is not in use
             try:
-                resolved_address = hookenv.network_get_primary_address(binding)
+                resolved_address = _network_get_primary_address(binding)
             except NotImplementedError:
                 resolved_address = fallback_addr
 
