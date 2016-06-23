@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.contrib.network.ip as net_ip
-import charmhelpers.contrib.hahelpers.cluster
+import charmhelpers.contrib.hahelpers.cluster as cluster
 import charms.reactive.bus
 
 PUBLIC = 'public'
@@ -12,17 +12,23 @@ ADMIN = 'admin'
 
 _ADDRESS_MAP = {
     PUBLIC: {
+        'binding': 'public',
         'config': 'os-public-network',
-        'fallback': 'public-address'
+        'fallback': 'public-address',
+        'override': 'os-public-hostname',
     },
     INTERNAL: {
+        'binding': 'internal',
         'config': 'os-internal-network',
-        'fallback': 'private-address'
+        'fallback': 'private-address',
+        'override': 'os-internal-hostname',
     },
     ADMIN: {
+        'binding': 'admin',
         'config': 'os-admin-network',
-        'fallback': 'private-address'
-    }
+        'fallback': 'private-address',
+        'override': 'os-admin-hostname',
+    },
 }
 
 
@@ -44,40 +50,95 @@ def canonical_url(endpoint_type=PUBLIC):
     return "{0}://{1}".format(scheme, address)
 
 
-def resolve_address(endpoint_type=PUBLIC):
-    """Return the address from the config() using endpoint_type to determine
-    which address to return.
+def _get_address_override(endpoint_type=PUBLIC):
+    """Returns any address overrides that the user has defined based on the
+    endpoint type.
 
-    It returns either the vip if the unit is clustered and there is no specific
-    config() item for the specified address type.
+    Note: this function allows for the service name to be inserted into the
+    address if the user specifies {service_name}.somehost.org.
 
-    If the unit is not clustered then it attempts to return either the ipv6 or
-    ipv4 address for the unit.
+    :param endpoint_type: the type of endpoint to retrieve the override
+                          value for.
+    :returns: any endpoint address or hostname that the user has overridden
+              or None if an override is not present.
+    """
+    override_key = _ADDRESS_MAP[endpoint_type]['override']
+    addr_override = hookenv.config(override_key)
+    if not addr_override:
+        return None
+    else:
+        return addr_override.format(service_name=hookenv.service_name())
+
+
+def resolve_address(endpoint_type=PUBLIC, override=True):
+    """Return unit address depending on net config.
+
+    If unit is clustered with vip(s) and has net splits defined, return vip on
+    correct network. If clustered with no nets defined, return primary vip.
+
+    If not clustered, return unit address ensuring address is on configured net
+    split if one is configured, or a Juju 2.0 extra-binding has been used.
+
+    :param endpoint_type: Network endpoing type
+    :param override: Accept hostname overrides or not
     """
     resolved_address = None
-    if charmhelpers.contrib.hahelpers.cluster.is_clustered():
-        if hookenv.config(_ADDRESS_MAP[endpoint_type]['config']) is None:
-            # Assume vip is simple and pass back directly
-            resolved_address = hookenv.config('vip')
-        else:
-            for vip in hookenv.config('vip').split():
-                if net_ip.is_address_in_network(
-                        hookenv.config(_ADDRESS_MAP[endpoint_type]['config']),
-                        vip):
+    if override:
+        resolved_address = _get_address_override(endpoint_type)
+        if resolved_address:
+            return resolved_address
+
+    vips = hookenv.config('vip')
+    if vips:
+        vips = vips.split()
+
+    net_type = _ADDRESS_MAP[endpoint_type]['config']
+    net_addr = hookenv.config(net_type)
+    net_fallback = _ADDRESS_MAP[endpoint_type]['fallback']
+    binding = _ADDRESS_MAP[endpoint_type]['binding']
+    clustered = cluster.is_clustered()
+
+    if clustered and vips:
+        if net_addr:
+            for vip in vips:
+                if net_ip.is_address_in_network(net_addr, vip):
                     resolved_address = vip
+                    break
+        else:
+            # NOTE: endeavour to check vips against network space
+            #       bindings
+            try:
+                bound_cidr = net_ip.resolve_network_cidr(
+                    hookenv.network_get_primary_address(binding)
+                )
+                for vip in vips:
+                    if net_ip.is_address_in_network(bound_cidr, vip):
+                        resolved_address = vip
+                        break
+            except NotImplementedError:
+                # If no net-splits configured and no support for extra
+                # bindings/network spaces so we expect a single vip
+                resolved_address = vips[0]
     else:
         if hookenv.config('prefer-ipv6'):
-            fallback_addr = net_ip.get_ipv6_addr(
-                exc_list=[hookenv.config('vip')])[0]
+            fallback_addr = net_ip.get_ipv6_addr(exc_list=vips)[0]
         else:
-            fallback_addr = hookenv.unit_get(
-                _ADDRESS_MAP[endpoint_type]['fallback'])
-        resolved_address = net_ip.get_address_in_network(
-            hookenv.config(_ADDRESS_MAP[endpoint_type]['config']),
-            fallback_addr)
+            fallback_addr = hookenv.unit_get(net_fallback)
+
+        if net_addr:
+            resolved_address = net_ip.get_address_in_network(net_addr,
+                                                             fallback_addr)
+        else:
+            # NOTE: only try to use extra bindings if legacy network
+            #       configuration is not in use
+            try:
+                resolved_address = hookenv.network_get_primary_address(binding)
+            except NotImplementedError:
+                resolved_address = fallback_addr
 
     if resolved_address is None:
-        raise ValueError('Unable to resolve a suitable IP address'
-                         ' based on charm state and configuration')
-    else:
-        return resolved_address
+        raise ValueError("Unable to resolve a suitable IP address based on "
+                         "charm state and configuration. (net_type=%s, "
+                         "clustered=%s)" % (net_type, clustered))
+
+    return resolved_address
