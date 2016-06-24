@@ -1,5 +1,6 @@
 # need/want absolute imports for the package imports to work properly
 from __future__ import absolute_import
+import netaddr
 
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.contrib.network.ip as net_ip
@@ -82,6 +83,16 @@ def _network_get_primary_address(binding):
         address = hookenv.network_get_primary_address(binding)
     return address
 
+def _resolve_network_cidr(ip_address):
+    '''
+    Resolves the full address cidr of an ip_address based on
+    configured network interfaces
+
+    This is in charmhelpers trunk but not in pypi. Please revert to using
+    charmhelpers version when pypi has been updated
+    '''
+    netmask = net_ip.get_netmask_for_address(ip_address)
+    return str(netaddr.IPNetwork("%s/%s" % (ip_address, netmask)).cidr)
 
 def resolve_address(endpoint_type=PUBLIC, override=True):
     """Return unit address depending on net config.
@@ -121,7 +132,7 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
             # NOTE: endeavour to check vips against network space
             #       bindings
             try:
-                bound_cidr = net_ip.resolve_network_cidr(
+                bound_cidr = _resolve_network_cidr(
                     _network_get_primary_address(binding)
                 )
                 for vip in vips:
