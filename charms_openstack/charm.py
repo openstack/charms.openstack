@@ -797,7 +797,7 @@ class HAOpenStackCharm(OpenStackCharm):
             os_utils.get_host_ip(hookenv.unit_get('private-address'))]
         for addr_type in os_ip.ADDRESS_MAP.keys():
             cfg_opt = os_ip.ADDRESS_MAP[addr_type]['config']
-            laddr = ch_ip.get_address_in_network(self.config.get(cfg_opt))
+            laddr = os_ip.resolve_address(endpoint_type=addr_type)
             if laddr:
                 addresses.append(laddr)
         return sorted(list(set(addresses)))
@@ -888,3 +888,12 @@ class HAOpenStackCharm(OpenStackCharm):
         single-file list of certificates
         """
         subprocess.check_call(['update-ca-certificates', '--fresh'])
+
+    def update_peers(self, cluster):
+        for addr_type in os_ip.ADDRESS_MAP.keys():
+            cidr = self.config.get(os_ip.ADDRESS_MAP[addr_type]['config'])
+            laddr = ch_ip.get_address_in_network(cidr)
+            if laddr:
+                cluster.set_address(
+                    os_ip.ADDRESS_MAP[addr_type]['binding'],
+                    laddr)
