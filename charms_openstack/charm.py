@@ -796,7 +796,6 @@ class HAOpenStackCharm(OpenStackCharm):
         addresses = [
             os_utils.get_host_ip(hookenv.unit_get('private-address'))]
         for addr_type in os_ip.ADDRESS_MAP.keys():
-            cfg_opt = os_ip.ADDRESS_MAP[addr_type]['config']
             laddr = os_ip.resolve_address(endpoint_type=addr_type)
             if laddr:
                 addresses.append(laddr)

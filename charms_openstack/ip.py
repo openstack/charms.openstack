@@ -83,6 +83,7 @@ def _network_get_primary_address(binding):
         address = hookenv.network_get_primary_address(binding)
     return address
 
+
 def _resolve_network_cidr(ip_address):
     '''
     Resolves the full address cidr of an ip_address based on
@@ -93,6 +94,7 @@ def _resolve_network_cidr(ip_address):
     '''
     netmask = net_ip.get_netmask_for_address(ip_address)
     return str(netaddr.IPNetwork("%s/%s" % (ip_address, netmask)).cidr)
+
 
 def resolve_address(endpoint_type=PUBLIC, override=True):
     """Return unit address depending on net config.

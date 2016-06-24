@@ -231,9 +231,11 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
             if laddr:
                 self.cluster_hosts[laddr] = \
                     self.local_network_split_addresses()[laddr]
-                key = '{}-address'.format(addr_type)
+                key = '{}-address'.format(
+                    os_ip.ADDRESS_MAP[addr_type]['binding'])
                 for _unit, _laddr in self.relation.ip_map(address_key=key):
-                    self.cluster_hosts[laddr]['backends'][_unit] = _laddr
+                    if _laddr:
+                        self.cluster_hosts[laddr]['backends'][_unit] = _laddr
 
     def add_default_addresses(self):
         """Populate cluster_hosts with private-address of this unit and its

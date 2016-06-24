@@ -105,7 +105,7 @@ class FakePeerRelation():
             'public-address': [
                 ('peer_unit-1', 'peer_unit1_public_addr'),
                 ('peer_unit-2', 'peer_unit2_public_addr')],
-            'int-address': [
+            'internal-address': [
                 ('peer_unit-1', 'peer_unit1_internal_addr'),
                 ('peer_unit-2', 'peer_unit2_internal_addr')],
             'admin-address': [

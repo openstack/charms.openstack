@@ -451,17 +451,13 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_get_local_addresses(self):
         self.patch_object(chm.os_utils, 'get_host_ip', return_value='privaddr')
-        config = {
-            'os-admin-network': 'admin_net',
-            'os-internal-network': 'internal_net',
-            'os-public-network': 'public_net'}
+        self.patch_object(chm.os_ip, 'resolve_address')
         addresses = {
-            'admin_net': 'admin_addr',
-            'internal_net': 'internal_addr',
-            'public_net': 'public_addr'}
-        self.patch_target('config', new=config)
-        self.patch_object(chm.ch_ip, 'get_address_in_network')
-        self.get_address_in_network.side_effect = lambda x: addresses[x]
+            'admin': 'admin_addr',
+            'int': 'internal_addr',
+            'public': 'public_addr'}
+        self.resolve_address.side_effect = \
+            lambda endpoint_type=None: addresses[endpoint_type]
         self.assertEqual(
             self.target.get_local_addresses(),
             ['admin_addr', 'internal_addr', 'privaddr', 'public_addr'])
