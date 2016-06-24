@@ -410,10 +410,19 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.assertFalse(self.check_call.called)
 
     def test_enable_apache_modules(self):
+        apache_mods = {
+            'ssl': 0,
+            'proxy': 0,
+            'proxy_http': 1}
+        self.patch_object(chm.ch_host, 'service_restart')
         self.patch_object(chm.subprocess, 'check_call')
+        self.patch_object(
+            chm.subprocess, 'call',
+            new=lambda x: apache_mods[x.pop()])
         self.target.enable_apache_modules()
         self.check_call.assert_called_once_with(
-            ['a2enmod', 'ssl', 'proxy', 'proxy_http'])
+            ['a2enmod', 'proxy_http'])
+        self.service_restart.assert_called_once_with('apache2')
 
     def test_configure_cert(self):
         self.patch_object(chm.ch_host, 'mkdir')
@@ -473,20 +482,25 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_get_certs_and_keys_ks_interface(self):
         class KSInterface(object):
-            def get_remote(self, key):
-                ssl = {
-                    'ssl_key_int_addr': b'int_key',
-                    'ssl_key_priv_addr': b'priv_key',
-                    'ssl_key_pub_addr': b'pub_key',
-                    'ssl_key_admin_addr': b'admin_key',
-                    'ssl_cert_int_addr': b'int_cert',
-                    'ssl_cert_priv_addr': b'priv_cert',
-                    'ssl_cert_pub_addr': b'pub_cert',
-                    'ssl_cert_admin_addr': b'admin_cert'}
-                return base64.b64encode(ssl[key])
+            def get_ssl_key(self, key):
+                keys = {
+                    'int_addr': 'int_key',
+                    'priv_addr': 'priv_key',
+                    'pub_addr': 'pub_key',
+                    'admin_addr': 'admin_key'}
+                return keys[key]
 
-            def ca_cert(self):
-                return base64.b64encode(b'ca')
+            def get_ssl_cert(self, key):
+                certs = {
+                    'int_addr': 'int_cert',
+                    'priv_addr': 'priv_cert',
+                    'pub_addr': 'pub_cert',
+                    'admin_addr': 'admin_cert'}
+                return certs[key]
+
+            def get_ssl_ca(self):
+                return 'ca'
+
         self.patch_target(
             'get_local_addresses',
             return_value=['int_addr', 'priv_addr', 'pub_addr', 'admin_addr'])

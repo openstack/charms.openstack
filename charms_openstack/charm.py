@@ -25,7 +25,6 @@ import charmhelpers.fetch
 import charms.reactive.bus
 
 import charms_openstack.ip as os_ip
-import charms_openstack.adapters as os_adapters
 
 
 # _releases{} is a dictionary of release -> class that is instantiated
@@ -62,6 +61,7 @@ KNOWN_RELEASES = [
 VIP_KEY = "vip"
 CIDR_KEY = "vip_cidr"
 IFACE_KEY = "vip_iface"
+APACHE_SSL_VHOST = '/etc/apache2/sites-available/openstack_https_frontend.conf'
 
 
 def get_charm_instance(release=None, *args, **kwargs):
@@ -321,6 +321,10 @@ class OpenStackCharm(object):
     def remove_state(self, state):
         """proxy for charms.reactive.bus.remove_state()"""
         charms.reactive.bus.remove_state(state)
+
+    def get_state(self, state):
+        """proxy for charms.reactive.bus.get_state()"""
+        return charms.reactive.bus.get_state(state)
 
     def api_port(self, service, endpoint_type=os_ip.PUBLIC):
         """Return the API port for a particular endpoint type from the
@@ -639,7 +643,7 @@ class HAOpenStackCharm(OpenStackCharm):
 
         :returns: string
         """
-        return '/etc/apache2/sites-available/openstack_https_frontend.conf'
+        return APACHE_SSL_VHOST
 
     def enable_apache_ssl_vhost(self):
         """Enable Apache vhost for SSL termination
@@ -652,7 +656,7 @@ class HAOpenStackCharm(OpenStackCharm):
                 ['a2query', '-s', 'openstack_https_frontend'])
             if check_enabled != 0:
                 subprocess.check_call(['a2ensite', 'openstack_https_frontend'])
-                ch_host.service_restart('apache2')
+                ch_host.service_reload('apache2', restart_on_failure=True)
 
     def configure_apache(self):
         if self.apache_enabled():
@@ -694,7 +698,7 @@ class HAOpenStackCharm(OpenStackCharm):
         """Determine if apache is being used
 
         @return True if apache is being used"""
-        return charms.reactive.bus.get_state('ssl.enabled')
+        return self.get_state('ssl.enabled')
 
     def haproxy_enabled(self):
         """Determine if haproxy is fronting the services
@@ -739,16 +743,22 @@ class HAOpenStackCharm(OpenStackCharm):
 
     def set_haproxy_stat_password(self):
         """Set a stats password for accessing haproxy statistics"""
-        if not charms.reactive.bus.get_state('haproxy.stat.password'):
+        if not self.get_state('haproxy.stat.password'):
             password = ''.join([
                 random.choice(string.ascii_letters + string.digits)
                 for n in range(32)])
-            charms.reactive.bus.set_state('haproxy.stat.password', password)
+            self.set_state('haproxy.stat.password', password)
 
     def enable_apache_modules(self):
         """Enable Apache modules needed for SSL termination"""
-        cmd = ['a2enmod', 'ssl', 'proxy', 'proxy_http']
-        subprocess.check_call(cmd)
+        restart = False
+        for module in ['ssl', 'proxy', 'proxy_http']:
+            check_enabled = subprocess.call(['a2query', '-m', module])
+            if check_enabled != 0:
+                subprocess.check_call(['a2enmod', module])
+                restart = True
+        if restart:
+            ch_host.service_restart('apache2')
 
     def configure_cert(self, cert, key, cn=None):
         """Configure service SSL cert and key
@@ -785,8 +795,8 @@ class HAOpenStackCharm(OpenStackCharm):
         """
         addresses = [
             os_utils.get_host_ip(hookenv.unit_get('private-address'))]
-        for addr_type in os_adapters.ADDRESS_TYPES:
-            cfg_opt = 'os-{}-network'.format(addr_type)
+        for addr_type in os_ip.ADDRESS_MAP.keys():
+            cfg_opt = os_ip.ADDRESS_MAP[addr_type]['config']
             laddr = ch_ip.get_address_in_network(self.config.get(cfg_opt))
             if laddr:
                 addresses.append(laddr)
@@ -816,16 +826,14 @@ class HAOpenStackCharm(OpenStackCharm):
         elif keystone_interface:
             keys_and_certs = []
             for addr in self.get_local_addresses():
-                key = keystone_interface.get_remote(
-                    'ssl_key_{}'.format(addr))
-                cert = keystone_interface.get_remote(
-                    'ssl_cert_{}'.format(addr))
+                key = keystone_interface.get_ssl_key(addr)
+                cert = keystone_interface.get_ssl_cert(addr)
+                ca = keystone_interface.get_ssl_ca()
                 if key and cert:
                     keys_and_certs.append({
-                        'key': base64.b64decode(key).decode('utf-8'),
-                        'cert': base64.b64decode(cert).decode('utf-8'),
-                        'ca': base64.b64decode(
-                            keystone_interface.ca_cert()).decode('utf-8'),
+                        'key': key,
+                        'cert': cert,
+                        'ca': ca,
                         'cn': addr})
             return keys_and_certs
         else:
@@ -857,10 +865,10 @@ class HAOpenStackCharm(OpenStackCharm):
                 self.configure_cert(ssl['cert'], ssl['key'], cn=ssl['cn'])
                 self.configure_ca(ssl['ca'], update_certs=False)
             self.run_update_certs()
-            charms.reactive.bus.set_state('ssl.enabled', True)
+            self.set_state('ssl.enabled', True)
             self.configure_apache()
         else:
-            charms.reactive.bus.set_state('ssl.enabled', False)
+            self.set_state('ssl.enabled', False)
 
     def configure_ca(self, ca_cert, update_certs=True):
         """Write Certificate Authority certificate"""

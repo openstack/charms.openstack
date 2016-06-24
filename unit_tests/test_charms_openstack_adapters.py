@@ -105,7 +105,7 @@ class FakePeerRelation():
             'public-address': [
                 ('peer_unit-1', 'peer_unit1_public_addr'),
                 ('peer_unit-2', 'peer_unit2_public_addr')],
-            'internal-address': [
+            'int-address': [
                 ('peer_unit-1', 'peer_unit1_internal_addr'),
                 ('peer_unit-2', 'peer_unit2_internal_addr')],
             'admin-address': [
@@ -289,15 +289,17 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             'vip': '',
         }
         with mock.patch.object(adapters.hookenv, 'config',
-                               new=lambda: test_config):
-            with mock.patch.object(adapters.hookenv, 'local_unit',
-                                   return_value='my-unit/0'):
-                c = adapters.APIConfigurationAdapter()
-                self.assertEqual(c.local_unit_name, 'my-unit-0')
-                self.assertEqual(c.haproxy_stat_port, '8888')
-                self.assertEqual(c.service_ports, {})
-                self.assertEqual(c.service_listen_info, {})
-                self.assertEqual(c.external_endpoints, {})
+                               new=lambda: test_config), \
+                mock.patch.object(adapters.APIConfigurationAdapter,
+                                  'get_network_addresses'), \
+                mock.patch.object(adapters.hookenv, 'local_unit',
+                                  return_value='my-unit/0'):
+            c = adapters.APIConfigurationAdapter()
+            self.assertEqual(c.local_unit_name, 'my-unit-0')
+            self.assertEqual(c.haproxy_stat_port, '8888')
+            self.assertEqual(c.service_ports, {})
+            self.assertEqual(c.service_listen_info, {})
+            self.assertEqual(c.external_endpoints, {})
 
     def test_ipv4_mode(self):
         test_config = {
@@ -309,7 +311,9 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
                 mock.patch.object(adapters.hookenv, 'config',
                                   new=lambda: test_config), \
                 mock.patch.object(adapters.hookenv, 'unit_get',
-                                  return_value='10.0.0.20'):
+                                  return_value='10.0.0.20'), \
+                mock.patch.object(adapters.APIConfigurationAdapter,
+                                  'get_network_addresses'):
             c = adapters.APIConfigurationAdapter(service_name='svc1')
             self.assertFalse(c.ipv6_mode)
             self.assertEqual(c.local_address, '10.0.0.10')
@@ -323,14 +327,18 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             'vip': '',
         }
         with mock.patch.object(adapters.hookenv, 'config',
-                               new=lambda: test_config):
-            with mock.patch.object(adapters.ch_ip, 'get_ipv6_addr',
-                                   return_value=['fe80::f2de:f1ff:fedd:8dc7']):
-                c = adapters.APIConfigurationAdapter()
-                self.assertTrue(c.ipv6_mode)
-                self.assertEqual(c.local_address, 'fe80::f2de:f1ff:fedd:8dc7')
-                self.assertEqual(c.local_host, 'ip6-localhost')
-                self.assertEqual(c.haproxy_host, '::')
+                               new=lambda: test_config), \
+                mock.patch.object(
+                    adapters.ch_ip,
+                    'get_ipv6_addr',
+                    return_value=['fe80::f2de:f1ff:fedd:8dc7']), \
+                mock.patch.object(adapters.APIConfigurationAdapter,
+                                  'get_network_addresses'):
+            c = adapters.APIConfigurationAdapter()
+            self.assertTrue(c.ipv6_mode)
+            self.assertEqual(c.local_address, 'fe80::f2de:f1ff:fedd:8dc7')
+            self.assertEqual(c.local_host, 'ip6-localhost')
+            self.assertEqual(c.haproxy_host, '::')
 
     def test_external_ports(self):
         c = adapters.APIConfigurationAdapter(port_map=self.api_ports)
@@ -348,39 +356,32 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             'public_net': 'public_addr',
             'internal_net': 'internal_addr',
         }
+        resolved_addresses = {
+            'admin': 'admin_addr',
+            'public': 'public_addr',
+            'int': 'int_vip',
+        }
 
         def _is_address_in_network(cidr, vip):
             return cidr == vip.replace('vip_', '')
+
+        def _resolve_address(endpoint_type=None):
+            return resolved_addresses[endpoint_type]
 
         with mock.patch.object(adapters.hookenv, 'config',
                                new=lambda: test_config), \
                 mock.patch.object(adapters.hookenv, 'unit_get',
                                   return_value='thisunit'), \
-                mock.patch.object(adapters.ch_ip, 'is_address_in_network',
-                                  side_effect=_is_address_in_network), \
+                mock.patch.object(adapters.os_ip, 'resolve_address',
+                                  new=_resolve_address), \
                 mock.patch.object(adapters.ch_ip, 'get_address_in_network',
                                   new=lambda x, y: test_networks[x]):
-            with mock.patch.object(adapters.ch_cluster, 'is_clustered',
-                                   return_value=True):
-                test_config['vip'] = 'vip_admin_net vip_internal_net'
-                c = adapters.APIConfigurationAdapter()
-                expect = [
-                    ('admin_addr', 'vip_admin_net'),
-                    ('internal_addr', 'vip_internal_net')]
-                self.assertEqual(c.get_network_addresses(), expect)
-                # Test single vip
-                test_config['vip'] = 'vip_admin_net'
-                c = adapters.APIConfigurationAdapter()
-                expect = [('admin_addr', 'vip_admin_net')]
-                self.assertEqual(c.get_network_addresses(), expect)
-            with mock.patch.object(adapters.ch_cluster, 'is_clustered',
-                                   return_value=False):
-                c = adapters.APIConfigurationAdapter()
-                expect = [
+            c = adapters.APIConfigurationAdapter()
+            self.assertEqual(
+                c.get_network_addresses(), [
                     ('admin_addr', 'admin_addr'),
-                    ('internal_addr', 'internal_addr'),
-                    ('public_addr', 'public_addr')]
-                self.assertEqual(c.get_network_addresses(), expect)
+                    ('internal_addr', 'int_vip'),
+                    ('public_addr', 'public_addr')])
 
     def test_port_maps(self):
         class MockAddrAPIConfigurationAdapt(adapters.APIConfigurationAdapter):
@@ -402,6 +403,8 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
                 mock.patch.object(adapters.APIConfigurationAdapter,
                                   'determine_service_port',
                                   side_effect=_determine_apache_port), \
+                mock.patch.object(adapters.APIConfigurationAdapter,
+                                  'get_network_addresses'), \
                 mock.patch.object(adapters.hookenv, 'config',
                                   new=lambda: test_config):
             with mock.patch.object(adapters.APIConfigurationAdapter,
@@ -514,6 +517,16 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             self.assertEqual(c.determine_service_port(80), 70)
 
 
+class FakePeerHARelationAdapter(object):
+
+    def __init__(self, relation=None, relation_name=None):
+        pass
+
+    @property
+    def single_mode_map(self):
+        return {'cluster_hosts': {'my': 'map'}}
+
+
 class TestOpenStackRelationAdapters(unittest.TestCase):
     # test the OpenStackRelationAdapters() class, and then derive from it to
     # test the additonal relation_adapters member on __init__
@@ -525,8 +538,10 @@ class TestOpenStackRelationAdapters(unittest.TestCase):
             'three': 3,
             'that-one': 4
         }
-        with mock.patch.object(adapters.hookenv, 'config',
-                               new=lambda: test_config):
+        with mock.patch.object(adapters, 'PeerHARelationAdapter',
+                               new=FakePeerHARelationAdapter), \
+                mock.patch.object(adapters.hookenv, 'config',
+                                  new=lambda: test_config):
             amqp = FakeRabbitMQRelation()
             shared_db = FakeDatabaseRelation()
             mine = MyRelation()
@@ -535,9 +550,10 @@ class TestOpenStackRelationAdapters(unittest.TestCase):
             self.assertEqual(a.my_name.this, 'this')
             items = list(a)
             self.assertEqual(items[0][0], 'options')
-            self.assertEqual(items[1][0], 'amqp')
-            self.assertEqual(items[2][0], 'shared_db')
-            self.assertEqual(items[3][0], 'my_name')
+            self.assertEqual(items[1][0], 'cluster')
+            self.assertEqual(items[2][0], 'amqp')
+            self.assertEqual(items[3][0], 'shared_db')
+            self.assertEqual(items[4][0], 'my_name')
 
 
 class MyRelationAdapter(adapters.OpenStackRelationAdapter):
@@ -575,9 +591,8 @@ class TestCustomOpenStackRelationAdapters(unittest.TestCase):
                 mock.patch.object(adapters.hookenv,
                                   'config',
                                   new=lambda: test_config), \
-                mock.patch.object(adapters.PeerHARelationAdapter,
-                                  'single_mode_map',
-                                  new={'cluster_hosts': {'my': 'map'}}):
+                mock.patch.object(adapters, 'PeerHARelationAdapter',
+                                  new=FakePeerHARelationAdapter):
             amqp = FakeRabbitMQRelation()
             shared_db = FakeDatabaseRelation()
             mine = MyRelation()

@@ -6,8 +6,9 @@ import charmhelpers.contrib.hahelpers.cluster as ch_cluster
 import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.utils as ch_utils
 import charmhelpers.core.hookenv as hookenv
+import charms_openstack.ip as os_ip
 
-ADDRESS_TYPES = ['admin', 'internal', 'public']
+ADDRESS_TYPES = os_ip.ADDRESS_MAP.keys()
 
 
 class OpenStackRelationAdapter(object):
@@ -192,7 +193,7 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         config = hookenv.config()
         _cluster_hosts = {}
         for addr_type in ADDRESS_TYPES:
-            cfg_opt = 'os-{}-network'.format(addr_type)
+            cfg_opt = os_ip.ADDRESS_MAP[addr_type]['config']
             laddr = ch_ip.get_address_in_network(config.get(cfg_opt))
             if laddr:
                 netmask = ch_ip.get_netmask_for_address(laddr)
@@ -225,7 +226,7 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
            @return None
         """
         for addr_type in ADDRESS_TYPES:
-            cfg_opt = 'os-{}-network'.format(addr_type)
+            cfg_opt = os_ip.ADDRESS_MAP[addr_type]['config']
             laddr = ch_ip.get_address_in_network(self.config.get(cfg_opt))
             if laddr:
                 self.cluster_hosts[laddr] = \
@@ -533,32 +534,15 @@ class APIConfigurationAdapter(ConfigurationAdapter):
              ...]
         """
         addresses = []
-        vips = getattr(self, 'vip', '').split()
-
         for net_type in ADDRESS_TYPES:
-            net_cfg_opt = 'os_{}_network'.format(net_type)
+            net_cfg_opt = os_ip.ADDRESS_MAP[net_type]['config'].replace('-',
+                                                                        '_')
             config_cidr = getattr(self, net_cfg_opt, None)
             addr = ch_ip.get_address_in_network(
                 config_cidr,
                 hookenv.unit_get('private-address'))
-            if len(vips) > 1 and ch_cluster.is_clustered():
-                if not config_cidr:
-                    hookenv.log("Multiple networks configured but net_type "
-                                "is None (%s)." % net_type,
-                                level=hookenv.WARNING)
-                    continue
-
-                for vip in vips:
-                    if ch_ip.is_address_in_network(config_cidr, vip):
-                        addresses.append((addr, vip))
-                        break
-
-            elif ch_cluster.is_clustered() and vips:
-                if ch_ip.is_address_in_network(config_cidr, vips[0]):
-                    addresses.append((addr, vips[0]))
-            else:
-                addresses.append((addr, addr))
-
+            addresses.append(
+                (addr, os_ip.resolve_address(endpoint_type=net_type)))
         return sorted(addresses)
 
     @property

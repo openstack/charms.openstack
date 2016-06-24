@@ -10,7 +10,7 @@ PUBLIC = 'public'
 INTERNAL = 'int'
 ADMIN = 'admin'
 
-_ADDRESS_MAP = {
+ADDRESS_MAP = {
     PUBLIC: {
         'binding': 'public',
         'config': 'os-public-network',
@@ -62,7 +62,7 @@ def _get_address_override(endpoint_type=PUBLIC):
     :returns: any endpoint address or hostname that the user has overridden
               or None if an override is not present.
     """
-    override_key = _ADDRESS_MAP[endpoint_type]['override']
+    override_key = ADDRESS_MAP[endpoint_type]['override']
     addr_override = hookenv.config(override_key)
     if not addr_override:
         return None
@@ -105,10 +105,10 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
     if vips:
         vips = vips.split()
 
-    net_type = _ADDRESS_MAP[endpoint_type]['config']
+    net_type = ADDRESS_MAP[endpoint_type]['config']
     net_addr = hookenv.config(net_type)
-    net_fallback = _ADDRESS_MAP[endpoint_type]['fallback']
-    binding = _ADDRESS_MAP[endpoint_type]['binding']
+    net_fallback = ADDRESS_MAP[endpoint_type]['fallback']
+    binding = ADDRESS_MAP[endpoint_type]['binding']
     clustered = cluster.is_clustered()
 
     if clustered and vips:
