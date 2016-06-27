@@ -15,9 +15,34 @@
 # sys.modules['charmhelpers.contrib.openstack.utils'] = mock.MagicMock()
 # sys.modules['charmhelpers.contrib.network.ip'] = mock.MagicMock()
 
-
-import unittest
+import contextlib
+import io
 import mock
+import six
+import unittest
+
+if not six.PY3:
+    builtin_open = '__builtin__.open'
+else:
+    builtin_open = 'builtins.open'
+
+
+@contextlib.contextmanager
+def patch_open():
+    '''Patch open() to allow mocking both open() itself and the file that is
+    yielded.
+
+    Yields the mock for "open" and "file", respectively.'''
+    mock_open = mock.MagicMock(spec=open)
+    mock_file = mock.MagicMock(spec=io.FileIO)
+
+    @contextlib.contextmanager
+    def stub_open(*args, **kwargs):
+        mock_open(*args, **kwargs)
+        yield mock_file
+
+    with mock.patch(builtin_open, stub_open):
+        yield mock_open, mock_file
 
 
 class BaseTestCase(unittest.TestCase):

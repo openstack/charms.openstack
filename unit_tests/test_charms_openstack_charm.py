@@ -6,6 +6,7 @@
 # sys.modules['charmhelpers.contrib.network.ip'] = mock.MagicMock()
 from __future__ import absolute_import
 
+import base64
 import collections
 import unittest
 
@@ -308,9 +309,9 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         super(TestHAOpenStackCharm, self).setUp(chm.HAOpenStackCharm,
                                                 TEST_CONFIG)
 
-    def test_enable_haproxy(self):
+    def test_haproxy_enabled(self):
         self.patch_target('ha_resources', new=['haproxy'])
-        self.assertTrue(self.target.enable_haproxy())
+        self.assertTrue(self.target.haproxy_enabled())
 
     def test__init__(self):
         # Note cls.setUpClass() creates an OpenStackCharm() instance
@@ -385,16 +386,209 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
                                                mock.ANY)
 
     def test_hacharm_all_packages(self):
-        self.patch_target('enable_haproxy', return_value=True)
+        self.patch_target('haproxy_enabled', return_value=True)
         self.assertTrue('haproxy' in self.target.all_packages)
-        self.patch_target('enable_haproxy', return_value=False)
+        self.patch_target('haproxy_enabled', return_value=False)
         self.assertFalse('haproxy' in self.target.all_packages)
 
     def test_hacharm_full_restart_map(self):
-        self.patch_target('enable_haproxy', return_value=True)
+        self.patch_target('haproxy_enabled', return_value=True)
         self.assertTrue(
             self.target.full_restart_map.get(
                 '/etc/haproxy/haproxy.cfg', False))
+
+    def test_enable_apache_ssl_vhost(self):
+        self.patch_object(chm.os.path, 'exists', return_value=True)
+        self.patch_object(chm.subprocess, 'call', return_value=1)
+        self.patch_object(chm.subprocess, 'check_call')
+        self.target.enable_apache_ssl_vhost()
+        self.check_call.assert_called_once_with(
+            ['a2ensite', 'openstack_https_frontend'])
+        self.check_call.reset_mock()
+        self.patch_object(chm.subprocess, 'call', return_value=0)
+        self.target.enable_apache_ssl_vhost()
+        self.assertFalse(self.check_call.called)
+
+    def test_enable_apache_modules(self):
+        apache_mods = {
+            'ssl': 0,
+            'proxy': 0,
+            'proxy_http': 1}
+        self.patch_object(chm.ch_host, 'service_restart')
+        self.patch_object(chm.subprocess, 'check_call')
+        self.patch_object(
+            chm.subprocess, 'call',
+            new=lambda x: apache_mods[x.pop()])
+        self.target.enable_apache_modules()
+        self.check_call.assert_called_once_with(
+            ['a2enmod', 'proxy_http'])
+        self.service_restart.assert_called_once_with('apache2')
+
+    def test_configure_cert(self):
+        self.patch_object(chm.ch_host, 'mkdir')
+        self.patch_object(chm.ch_host, 'write_file')
+        self.target.configure_cert('mycert', 'mykey', cn='mycn')
+        self.mkdir.assert_called_once_with(path='/etc/apache2/ssl/charmname')
+        calls = [
+            mock.call(
+                path='/etc/apache2/ssl/charmname/cert_mycn',
+                content=b'mycert'),
+            mock.call(
+                path='/etc/apache2/ssl/charmname/key_mycn',
+                content=b'mykey')]
+        self.write_file.assert_has_calls(calls)
+        self.write_file.reset_mock()
+        self.patch_object(chm.os_ip, 'resolve_address', 'addr')
+        self.target.configure_cert('mycert', 'mykey')
+        calls = [
+            mock.call(
+                path='/etc/apache2/ssl/charmname/cert_addr',
+                content=b'mycert'),
+            mock.call(
+                path='/etc/apache2/ssl/charmname/key_addr',
+                content=b'mykey')]
+        self.write_file.assert_has_calls(calls)
+
+    def test_get_local_addresses(self):
+        self.patch_object(chm.os_utils, 'get_host_ip', return_value='privaddr')
+        self.patch_object(chm.os_ip, 'resolve_address')
+        addresses = {
+            'admin': 'admin_addr',
+            'int': 'internal_addr',
+            'public': 'public_addr'}
+        self.resolve_address.side_effect = \
+            lambda endpoint_type=None: addresses[endpoint_type]
+        self.assertEqual(
+            self.target.get_local_addresses(),
+            ['admin_addr', 'internal_addr', 'privaddr', 'public_addr'])
+
+    def test_get_certs_and_keys(self):
+        self.patch_target(
+            'config_defined_ssl_cert',
+            new=b'cert')
+        self.patch_target(
+            'config_defined_ssl_key',
+            new=b'key')
+        self.patch_target(
+            'config_defined_ssl_ca',
+            new=b'ca')
+        self.assertEqual(
+            self.target.get_certs_and_keys(),
+            [{'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': None}])
+
+    def test_get_certs_and_keys_ks_interface(self):
+        class KSInterface(object):
+            def get_ssl_key(self, key):
+                keys = {
+                    'int_addr': 'int_key',
+                    'priv_addr': 'priv_key',
+                    'pub_addr': 'pub_key',
+                    'admin_addr': 'admin_key'}
+                return keys[key]
+
+            def get_ssl_cert(self, key):
+                certs = {
+                    'int_addr': 'int_cert',
+                    'priv_addr': 'priv_cert',
+                    'pub_addr': 'pub_cert',
+                    'admin_addr': 'admin_cert'}
+                return certs[key]
+
+            def get_ssl_ca(self):
+                return 'ca'
+
+        self.patch_target(
+            'get_local_addresses',
+            return_value=['int_addr', 'priv_addr', 'pub_addr', 'admin_addr'])
+        expect = [
+            {
+                'ca': 'ca',
+                'cert': 'int_cert',
+                'cn': 'int_addr',
+                'key': 'int_key'},
+            {
+                'ca': 'ca',
+                'cert': 'priv_cert',
+                'cn': 'priv_addr',
+                'key': 'priv_key'},
+            {
+                'ca': 'ca',
+                'cert': 'pub_cert',
+                'cn': 'pub_addr',
+                'key': 'pub_key'},
+            {
+                'ca': 'ca',
+                'cert': 'admin_cert',
+                'cn': 'admin_addr',
+                'key': 'admin_key'}]
+
+        self.assertEqual(
+            self.target.get_certs_and_keys(keystone_interface=KSInterface()),
+            expect)
+
+    def test_set_config_defined_certs_and_keys(self):
+        config = {
+            'ssl_key': base64.b64encode(b'confkey'),
+            'ssl_cert': base64.b64encode(b'confcert'),
+            'ssl_ca': base64.b64encode(b'confca')}
+        self.patch_target('config', new=config)
+        self.target.set_config_defined_certs_and_keys()
+        self.assertEqual(self.target.config_defined_ssl_key, b'confkey')
+        self.assertEqual(self.target.config_defined_ssl_cert, b'confcert')
+        self.assertEqual(self.target.config_defined_ssl_ca, b'confca')
+
+    def test_configure_ssl(self):
+        ssl_objs = [
+            {
+                'cert': 'cert1',
+                'key': 'key1',
+                'ca': 'ca1',
+                'cn': 'cn1'},
+            {
+                'cert': 'cert2',
+                'key': 'key2',
+                'ca': 'ca2',
+                'cn': 'cn2'}]
+        self.patch_target('get_certs_and_keys', return_value=ssl_objs)
+        self.patch_target('configure_apache')
+        self.patch_target('configure_cert')
+        self.patch_target('configure_ca')
+        self.patch_target('run_update_certs')
+        self.patch_object(chm.charms.reactive.bus, 'set_state')
+        self.target.configure_ssl()
+        cert_calls = [
+            mock.call('cert1', 'key1', cn='cn1'),
+            mock.call('cert2', 'key2', cn='cn2')]
+        ca_calls = [
+            mock.call('ca1', update_certs=False),
+            mock.call('ca2', update_certs=False)]
+        self.configure_cert.assert_has_calls(cert_calls)
+        self.configure_ca.assert_has_calls(ca_calls)
+        self.run_update_certs.assert_called_once_with()
+        self.configure_apache.assert_called_once_with()
+        self.set_state.assert_called_once_with('ssl.enabled', True)
+
+    def test_configure_ssl_off(self):
+        self.patch_target('get_certs_and_keys', return_value=[])
+        self.patch_object(chm.charms.reactive.bus, 'set_state')
+        self.target.configure_ssl()
+        self.set_state.assert_called_once_with('ssl.enabled', False)
+
+    def test_configure_ca(self):
+        self.patch_target('run_update_certs')
+        with utils.patch_open() as (mock_open, mock_file):
+            self.target.configure_ca('myca')
+            mock_open.assert_called_with(
+                '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt',
+                'w')
+            mock_file.write.assert_called_with('myca')
+            self.run_update_certs.assert_called_once_with()
+
+    def test_run_update_certs(self):
+        self.patch_object(chm.subprocess, 'check_call')
+        self.target.run_update_certs()
+        self.check_call.assert_called_once_with(
+            ['update-ca-certificates', '--fresh'])
 
 
 class MyAdapter(object):

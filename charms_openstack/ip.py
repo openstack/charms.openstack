@@ -1,15 +1,17 @@
 # need/want absolute imports for the package imports to work properly
 from __future__ import absolute_import
+import netaddr
 
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.contrib.network.ip as net_ip
 import charmhelpers.contrib.hahelpers.cluster as cluster
+import charms.reactive.bus
 
 PUBLIC = 'public'
 INTERNAL = 'int'
 ADMIN = 'admin'
 
-_ADDRESS_MAP = {
+ADDRESS_MAP = {
     PUBLIC: {
         'binding': 'public',
         'config': 'os-public-network',
@@ -41,8 +43,8 @@ def canonical_url(endpoint_type=PUBLIC):
     :returns str: Base URL for services on the current service unit.
     """
     scheme = 'http'
-#    if 'https' in configs.complete_contexts():
-#        scheme = 'https'
+    if charms.reactive.bus.get_state('ssl.enabled'):
+        scheme = 'https'
     address = resolve_address(endpoint_type)
     if net_ip.is_ipv6(address):
         address = "[{}]".format(address)
@@ -61,12 +63,37 @@ def _get_address_override(endpoint_type=PUBLIC):
     :returns: any endpoint address or hostname that the user has overridden
               or None if an override is not present.
     """
-    override_key = _ADDRESS_MAP[endpoint_type]['override']
+    override_key = ADDRESS_MAP[endpoint_type]['override']
     addr_override = hookenv.config(override_key)
     if not addr_override:
         return None
     else:
         return addr_override.format(service_name=hookenv.service_name())
+
+
+def _network_get_primary_address(binding):
+    """Wrapper for hookenv.network_get_primary_address
+
+    hookenv.network_get_primary_address may return a string or bytes depending
+    on the version of python (Bug #1595418). When fix has landed in pypi
+    wrapper may be discarded"""
+    try:
+        address = hookenv.network_get_primary_address(binding).decode('utf-8')
+    except AttributeError:
+        address = hookenv.network_get_primary_address(binding)
+    return address
+
+
+def _resolve_network_cidr(ip_address):
+    '''
+    Resolves the full address cidr of an ip_address based on
+    configured network interfaces
+
+    This is in charmhelpers trunk but not in pypi. Please revert to using
+    charmhelpers version when pypi has been updated
+    '''
+    netmask = net_ip.get_netmask_for_address(ip_address)
+    return str(netaddr.IPNetwork("%s/%s" % (ip_address, netmask)).cidr)
 
 
 def resolve_address(endpoint_type=PUBLIC, override=True):
@@ -91,10 +118,10 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
     if vips:
         vips = vips.split()
 
-    net_type = _ADDRESS_MAP[endpoint_type]['config']
+    net_type = ADDRESS_MAP[endpoint_type]['config']
     net_addr = hookenv.config(net_type)
-    net_fallback = _ADDRESS_MAP[endpoint_type]['fallback']
-    binding = _ADDRESS_MAP[endpoint_type]['binding']
+    net_fallback = ADDRESS_MAP[endpoint_type]['fallback']
+    binding = ADDRESS_MAP[endpoint_type]['binding']
     clustered = cluster.is_clustered()
 
     if clustered and vips:
@@ -107,8 +134,8 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
             # NOTE: endeavour to check vips against network space
             #       bindings
             try:
-                bound_cidr = net_ip.resolve_network_cidr(
-                    hookenv.network_get_primary_address(binding)
+                bound_cidr = _resolve_network_cidr(
+                    _network_get_primary_address(binding)
                 )
                 for vip in vips:
                     if net_ip.is_address_in_network(bound_cidr, vip):
@@ -131,7 +158,7 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
             # NOTE: only try to use extra bindings if legacy network
             #       configuration is not in use
             try:
-                resolved_address = hookenv.network_get_primary_address(binding)
+                resolved_address = _network_get_primary_address(binding)
             except NotImplementedError:
                 resolved_address = fallback_addr
 

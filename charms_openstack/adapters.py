@@ -6,8 +6,9 @@ import charmhelpers.contrib.hahelpers.cluster as ch_cluster
 import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.utils as ch_utils
 import charmhelpers.core.hookenv as hookenv
+import charms_openstack.ip as os_ip
 
-ADDRESS_TYPES = ['admin', 'internal', 'public']
+ADDRESS_TYPES = os_ip.ADDRESS_MAP.keys()
 
 
 class OpenStackRelationAdapter(object):
@@ -29,10 +30,10 @@ class OpenStackRelationAdapter(object):
            :param accessors: List of accessible interfaces properties
            :param relation_name: String name of relation
         """
+        self.relation = relation
         if relation and relation_name:
             raise ValueError('Cannot speciiy relation and relation_name')
         if relation:
-            self.relation = relation
             self.accessors = accessors or []
             self._setup_properties()
         else:
@@ -164,6 +165,9 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
                 relation_info = {
                     'cluster_hosts': self.local_default_addresses(),
                 }
+                net_split = self.local_network_split_addresses()
+                for key in net_split.keys():
+                    relation_info['cluster_hosts'][key] = net_split[key]
         except IndexError:
             pass
         return relation_info
@@ -189,7 +193,7 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         config = hookenv.config()
         _cluster_hosts = {}
         for addr_type in ADDRESS_TYPES:
-            cfg_opt = 'os-{}-network'.format(addr_type)
+            cfg_opt = os_ip.ADDRESS_MAP[addr_type]['config']
             laddr = ch_ip.get_address_in_network(config.get(cfg_opt))
             if laddr:
                 netmask = ch_ip.get_netmask_for_address(laddr)
@@ -222,14 +226,16 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
            @return None
         """
         for addr_type in ADDRESS_TYPES:
-            cfg_opt = 'os-{}-network'.format(addr_type)
+            cfg_opt = os_ip.ADDRESS_MAP[addr_type]['config']
             laddr = ch_ip.get_address_in_network(self.config.get(cfg_opt))
             if laddr:
                 self.cluster_hosts[laddr] = \
                     self.local_network_split_addresses()[laddr]
-                key = '{}-address'.format(addr_type)
+                key = '{}-address'.format(
+                    os_ip.ADDRESS_MAP[addr_type]['binding'])
                 for _unit, _laddr in self.relation.ip_map(address_key=key):
-                    self.cluster_hosts[laddr]['backends'][_unit] = _laddr
+                    if _laddr:
+                        self.cluster_hosts[laddr]['backends'][_unit] = _laddr
 
     def add_default_addresses(self):
         """Populate cluster_hosts with private-address of this unit and its
@@ -313,7 +319,7 @@ class APIConfigurationAdapter(ConfigurationAdapter):
     """This configuration adapter extends the base class and adds properties
     common accross most OpenstackAPI services"""
 
-    def __init__(self, port_map=None):
+    def __init__(self, port_map=None, service_name=None):
         """
         :param  port_map: Map containing service names and the ports used e.g.
                 port_map = {
@@ -328,9 +334,24 @@ class APIConfigurationAdapter(ConfigurationAdapter):
                         'internal': 9002,
                     },
                 }
+        :param service_name: Name of service being deployed
         """
         super(APIConfigurationAdapter, self).__init__()
         self.port_map = port_map
+        self.service_name = service_name
+        self.network_addresses = self.get_network_addresses()
+
+    @property
+    def external_ports(self):
+        """Return ports the service will be accessed on
+
+        @return set of ports service can be accessed on
+        """
+        ext_ports = set()
+        for svc in self.port_map.keys():
+            for net_type in self.port_map[svc].keys():
+                ext_ports.add(self.port_map[svc][net_type])
+        return ext_ports
 
     @property
     def ipv6_mode(self):
@@ -409,6 +430,34 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         return service_ports
 
     @property
+    def apache_enabled(self):
+        """Whether apache is being used for this service
+
+        @return True if apache2 os being used for this service
+        """
+        return charms.reactive.bus.get_state('ssl.enabled')
+
+    def determine_service_port(self, port):
+        """Calculate port service should use given external port
+
+        Haproxy fronts connections for a service and may pass connections to
+        Apache for SSL termination. Is Apache is being used:
+            Haproxy listens on N
+            Apache listens on N-10
+            Service listens on N-20
+        else
+            Haproxy listens on N
+            Service listens on N-10
+
+        :param int port: port service uses for external connections
+        @return int port: port backend service should use
+        """
+        i = 10
+        if self.apache_enabled:
+            i = 20
+        return (port - i)
+
+    @property
     def service_listen_info(self):
         """Dict of service names and attributes for backend to listen on
 
@@ -427,15 +476,15 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
         """
         info = {}
+        ip = self.local_host if self.apache_enabled else self.local_address
         if self.port_map:
             for service in self.port_map.keys():
                 key = service.replace('-', '_')
                 info[key] = {
                     'proto': 'http',
-                    'ip': self.local_address,
-                    'port': ch_cluster.determine_apache_port(
-                        self.port_map[service]['admin'],
-                        singlenode_mode=True)}
+                    'ip': ip,
+                    'port': self.determine_service_port(
+                        self.port_map[service]['admin'])}
                 info[key]['url'] = '{proto}://{ip}:{port}'.format(**info[key])
         return info
 
@@ -459,15 +508,80 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         """
         info = {}
         ip = getattr(self, 'vip', self.local_address)
+        proto = 'https' if self.apache_enabled else 'http'
         if self.port_map:
             for service in self.port_map.keys():
                 key = service.replace('-', '_')
                 info[key] = {
-                    'proto': 'http',
+                    'proto': proto,
                     'ip': ip,
                     'port': self.port_map[service]['admin']}
                 info[key]['url'] = '{proto}://{ip}:{port}'.format(**info[key])
         return info
+
+    def get_network_addresses(self):
+        """For each network configured, return corresponding address and vip
+           (if available).
+
+        Returns a list of tuples of the form:
+
+            [(address_in_net_a, vip_in_net_a),
+             (address_in_net_b, vip_in_net_b),
+             ...]
+
+            or, if no vip(s) available:
+
+            [(address_in_net_a, address_in_net_a),
+             (address_in_net_b, address_in_net_b),
+             ...]
+        """
+        addresses = []
+        for net_type in ADDRESS_TYPES:
+            net_cfg_opt = os_ip.ADDRESS_MAP[net_type]['config'].replace('-',
+                                                                        '_')
+            config_cidr = getattr(self, net_cfg_opt, None)
+            addr = ch_ip.get_address_in_network(
+                config_cidr,
+                hookenv.unit_get('private-address'))
+            addresses.append(
+                (addr, os_ip.resolve_address(endpoint_type=net_type)))
+        return sorted(addresses)
+
+    @property
+    def endpoints(self):
+        """List of endpoint information.
+
+           Endpoint information used to configure apache
+           Client -> endpoint -> address:ext_port -> local:int_port
+
+           NOTE: endpoint map be a vi
+           returns [
+               (address1, endpoint1, ext_port1, int_port1),
+               (address2, endpoint2, ext_port2, int_port2)
+           ...
+           ]
+        """
+        endpoints = []
+        for address, endpoint in sorted(set(self.network_addresses)):
+            for api_port in self.external_ports:
+                ext_port = ch_cluster.determine_apache_port(
+                    api_port,
+                    singlenode_mode=True)
+                int_port = ch_cluster.determine_api_port(
+                    api_port,
+                    singlenode_mode=True)
+                portmap = (address, endpoint, int(ext_port), int(int_port))
+                endpoints.append(portmap)
+        return endpoints
+
+    @property
+    def ext_ports(self):
+        """ List of endpoint ports
+
+            @returns List of ports
+        """
+        eps = [ep[2] for ep in self.endpoints]
+        return sorted(list(set(eps)))
 
 
 class OpenStackRelationAdapters(object):
