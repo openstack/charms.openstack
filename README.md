@@ -1,4 +1,4 @@
-# charms.openstack [![Build Status](https://travis-ci.org/openstack-charmers/charms.openstack.svg?branch=master)](https://travis-ci.org/openstack-charmers/charms.openstack)
+# charms.openstack
 
 Helpers for building layered, reactive OpenStack charms.
 

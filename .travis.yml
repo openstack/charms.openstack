@@ -1,7 +1,0 @@
-language: python
-install:
- - pip install tox
-script: tox
-cache:
-    directories:
-        - $HOME/.cache/pip
