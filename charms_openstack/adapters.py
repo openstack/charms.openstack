@@ -604,11 +604,7 @@ class OpenStackRelationAdapters(object):
     By default, relations will be wrapped in an OpenStackRelationAdapter.
     """
 
-    _adapters = {
-        'amqp': RabbitMQRelationAdapter,
-        'shared_db': DatabaseRelationAdapter,
-        'cluster': PeerHARelationAdapter,
-    }
+    _adapters = {}
     """
     Default adapter mappings; may be overridden by relation adapters
     in subclasses.
@@ -629,14 +625,6 @@ class OpenStackRelationAdapters(object):
             self.options = options_instance or ConfigurationAdapter()
         self._relations.append('options')
         self._adapters.update(self.relation_adapters)
-        # LY: The cluster interface only gets initialised if there are more
-        # than one unit in a cluster, however, a cluster of one unit is valid
-        # for the Openstack API charms. So, create and populate the 'cluster'
-        # namespace with data for a single unit if there are no peers.
-        smm = PeerHARelationAdapter(relation_name='cluster').single_mode_map
-        if smm:
-            setattr(self, 'cluster', smm)
-            self._relations.append('cluster')
         for relation in relations:
             relation_name = relation.relation_name.replace('-', '_')
             try:
@@ -652,3 +640,31 @@ class OpenStackRelationAdapters(object):
         """
         for relation in self._relations:
             yield relation, getattr(self, relation)
+
+
+class OpenStackAPIRelationAdapters(OpenStackRelationAdapters):
+
+    _adapters = {
+        'amqp': RabbitMQRelationAdapter,
+        'shared_db': DatabaseRelationAdapter,
+        'cluster': PeerHARelationAdapter,
+    }
+
+    def __init__(self, relations, options=None, options_instance=None):
+        """
+        :param relations: List of instances of relation classes
+        :param options: Configuration class to use (DEPRECATED)
+        :param options_instance: Instance of Configuration class to use
+        """
+        super(OpenStackAPIRelationAdapters, self).__init__(
+            relations,
+            options=options,
+            options_instance=options_instance)
+        # LY: The cluster interface only gets initialised if there are more
+        # than one unit in a cluster, however, a cluster of one unit is valid
+        # for the Openstack API charms. So, create and populate the 'cluster'
+        # namespace with data for a single unit if there are no peers.
+        smm = PeerHARelationAdapter(relation_name='cluster').single_mode_map
+        if smm:
+            setattr(self, 'cluster', smm)
+            self._relations.append('cluster')

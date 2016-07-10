@@ -398,7 +398,9 @@ class OpenStackCharm(object):
                 restarts += self.full_restart_map[path]
         services_list = list(collections.OrderedDict.fromkeys(restarts).keys())
         for service_name in services_list:
-            ch_host.service_restart(service_name)
+            ch_host.service_stop(service_name)
+        for service_name in services_list:
+            ch_host.service_start(service_name)
 
     def render_all_configs(self, adapters_instance=None):
         """Render (write) all of the config files identified as the keys in the
