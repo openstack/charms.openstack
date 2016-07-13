@@ -564,10 +564,10 @@ class TestOpenStackRelationAdapters(unittest.TestCase):
             self.assertEqual(a.my_name.this, 'this')
             items = list(a)
             self.assertEqual(items[0][0], 'options')
-            self.assertEqual(items[1][0], 'cluster')
-            self.assertEqual(items[2][0], 'amqp')
-            self.assertEqual(items[3][0], 'shared_db')
-            self.assertEqual(items[4][0], 'my_name')
+#            self.assertEqual(items[1][0], 'cluster')
+            self.assertEqual(items[1][0], 'amqp')
+            self.assertEqual(items[2][0], 'shared_db')
+            self.assertEqual(items[3][0], 'my_name')
 
 
 class MyRelationAdapter(adapters.OpenStackRelationAdapter):
@@ -578,6 +578,13 @@ class MyRelationAdapter(adapters.OpenStackRelationAdapter):
 
 
 class MyOpenStackRelationAdapters(adapters.OpenStackRelationAdapters):
+
+    relation_adapters = {
+        'my_name': MyRelationAdapter,
+    }
+
+
+class MyOpenStackAPIRelationAdapters(adapters.OpenStackAPIRelationAdapters):
 
     relation_adapters = {
         'my_name': MyRelationAdapter,
@@ -604,9 +611,7 @@ class TestCustomOpenStackRelationAdapters(unittest.TestCase):
                                return_value=[]), \
                 mock.patch.object(adapters.hookenv,
                                   'config',
-                                  new=lambda: test_config), \
-                mock.patch.object(adapters, 'PeerHARelationAdapter',
-                                  new=FakePeerHARelationAdapter):
+                                  new=lambda: test_config):
             amqp = FakeRabbitMQRelation()
             shared_db = FakeDatabaseRelation()
             mine = MyRelation()
@@ -616,10 +621,45 @@ class TestCustomOpenStackRelationAdapters(unittest.TestCase):
                                             options=MyConfigAdapter,)
             self.assertEqual(a.my_name.us, 'this-us')
             self.assertEqual(a.options.instancearg, 'instancearg1')
-            self.assertEqual(a.cluster['cluster_hosts'], {'my': 'map'})
             # Test using 'options_instance' argument to pass in
             # instance of configuration class
             b = MyOpenStackRelationAdapters(
+                [amqp, shared_db, mine],
+                options_instance=MyConfigAdapter(key1='customarg1'),)
+            self.assertEqual(b.my_name.us, 'this-us')
+            self.assertEqual(b.options.instancearg, 'instancearg1')
+            self.assertEqual(b.options.customarg, 'customarg1')
+
+
+class TestCustomOpenStackAPIRelationAdapters(unittest.TestCase):
+
+    def test_class(self):
+        test_config = {
+            'one': 1,
+            'two': 2,
+            'three': 3,
+            'that-one': 4
+        }
+        with mock.patch.object(adapters.hookenv, 'related_units',
+                               return_value=[]), \
+                mock.patch.object(adapters.hookenv,
+                                  'config',
+                                  new=lambda: test_config), \
+                mock.patch.object(adapters, 'PeerHARelationAdapter',
+                                  new=FakePeerHARelationAdapter):
+            amqp = FakeRabbitMQRelation()
+            shared_db = FakeDatabaseRelation()
+            mine = MyRelation()
+            # Test using deprecated 'options' argument to pass in
+            # configuration class
+            a = MyOpenStackAPIRelationAdapters([amqp, shared_db, mine],
+                                               options=MyConfigAdapter,)
+            self.assertEqual(a.my_name.us, 'this-us')
+            self.assertEqual(a.options.instancearg, 'instancearg1')
+            self.assertEqual(a.cluster['cluster_hosts'], {'my': 'map'})
+            # Test using 'options_instance' argument to pass in
+            # instance of configuration class
+            b = MyOpenStackAPIRelationAdapters(
                 [amqp, shared_db, mine],
                 options_instance=MyConfigAdapter(key1='customarg1'),)
             self.assertEqual(b.my_name.us, 'this-us')
