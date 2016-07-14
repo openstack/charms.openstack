@@ -217,6 +217,36 @@ relationship.
 
 To be completed.
 
+## OpenStacke Upgrade via config
+
+An OpenStack principle charm has an 'openstack-origin' configruation option.
+This is used to setup the package source for a charm. If a user updates this
+option to point at a package repository then the charm can be configured to
+automatically upgrade. This is achieved with the following steps:
+
+ 1. Add hook to reactive handler
+
+```python
+@reactive.when(*COMPLETE_INTERFACE_STATES)
+def config_changed(args):
+    MyCharm.singleton.upgrade_if_available(args)
+```
+ 2. Define the package for the charm to monitor and a mapping of OpenStack
+    releases to package versions.
+
+```python
+class TheCharm(OpenStackCharm):
+
+    release_pkg = 'pkg-name'
+    package_codenames = {
+        'pkg-name': collections.OrderedDict([
+            ('2', 'mitaka'),
+            ('3', 'newton'),
+            ('4', 'ocata'),
+        ]),
+    }
+```
+
 ## Workload status
 
 OpenStack charms support the concept of _workload status_ which helps to inform

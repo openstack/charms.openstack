@@ -19,14 +19,16 @@
 from __future__ import absolute_import
 
 import base64
+import collections
+import contextlib
+import itertools
 import os
 import random
+import re
 import string
 import subprocess
-import contextlib
-import collections
-import itertools
 
+import apt_pkg as apt
 import six
 
 import charmhelpers.contrib.network.ip as ch_ip
@@ -70,6 +72,7 @@ KNOWN_RELEASES = [
     'kilo',
     'liberty',
     'mitaka',
+    'newton',
 ]
 
 VIP_KEY = "vip"
@@ -272,6 +275,7 @@ class OpenStackCharm(object):
     ha_resources = []
     adapters_class = None
     HAPROXY_CONF = '/etc/haproxy/haproxy.cfg'
+    package_codenames = {}
 
     @property
     def singleton(self):
@@ -647,6 +651,143 @@ class OpenStackCharm(object):
         # The chain .. map  flattens all the values into a single list
         return sorted(set(itertools.chain(*map(lambda x: x.values(),
                                                ports.values()))))
+
+    @staticmethod
+    def get_os_codename_package(package, codenames, fatal=True):
+        """Derive OpenStack release codename from an installed package.
+
+        :param package: str Package name to lookup in apt cache
+        :param codenames: dict of OrderedDict eg
+            {
+             'pkg1': collections.OrderedDict([
+                 ('2', 'mitaka'),
+                 ('3', 'newton'),
+                 ('4', 'ocata'), ]),
+             'pkg2': collections.OrderedDict([
+                 ('12.6', 'mitaka'),
+                 ('13.2', 'newton'),
+                 ('14.7', 'ocata'), ]),
+            }
+        :param fatal: bool Raise exception if pkg not installed
+        :returns: str OpenStack version name corresponding to package
+        """
+        cache = charmhelpers.fetch.apt_cache()
+
+        try:
+            pkg = cache[package]
+        except KeyError:
+            if not fatal:
+                return None
+            # the package is unknown to the current apt cache.
+            e = ('Could not determine version of package with no installation '
+                 'candidate: {}'.format(package))
+            raise Exception(e)
+        if not pkg.current_ver:
+            if not fatal:
+                return None
+
+        vers = apt.upstream_version(pkg.current_ver.ver_str)
+        # x.y match only for 20XX.X
+        # and ignore patch level for other packages
+        match = re.match('^(\d+)\.(\d+)', vers)
+
+        if match:
+            vers = match.group(0)
+
+        # Generate a major version number for newer semantic
+        # versions of openstack projects
+        major_vers = vers.split('.')[0]
+        if (package in codenames and
+                major_vers in codenames[package]):
+            return codenames[package][major_vers]
+
+    def get_os_version_package(self, package, fatal=True):
+        """Derive OpenStack version number from an installed package.
+
+        :param package: str Package name to lookup in apt cache
+        :param fatal: bool Raise exception if pkg not installed
+        :returns: str OpenStack version number corresponding to package
+        """
+        codenames = self.package_codenames or os_utils.PACKAGE_CODENAMES
+        codename = self.get_os_codename_package(
+            package, codenames, fatal=fatal)
+        if not codename:
+            return None
+
+        vers_map = os_utils.OPENSTACK_CODENAMES
+        for version, cname in vers_map.items():
+            if cname == codename:
+                return version
+
+    def openstack_upgrade_available(self, package=None):
+        """Check if an OpenStack upgrade is available
+
+        :param package: str Package name to use to check upgrade availability
+        :returns: bool
+        """
+        if not package:
+            package = self.release_pkg
+
+        src = self.config['openstack-origin']
+        cur_vers = self.get_os_version_package(package)
+        avail_vers = os_utils.get_os_version_install_source(src)
+        apt.init()
+        return apt.version_compare(avail_vers, cur_vers) == 1
+
+    def upgrade_if_available(self, interfaces_list):
+        """Upgrade OpenStack if an upgrade is available
+
+        :param interfaces_list: List of instances of interface classes
+        :returns: None
+        """
+        if self.openstack_upgrade_available(self.release_pkg):
+            hookenv.status_set('maintenance', 'Running openstack upgrade')
+            self.do_openstack_pkg_upgrade()
+            self.do_openstack_upgrade_config_render(interfaces_list)
+            self.do_openstack_upgrade_db_migration()
+
+    def do_openstack_pkg_upgrade(self):
+        """Upgrade OpenStack packages
+
+        :returns: None
+        """
+        new_src = self.config['openstack-origin']
+        new_os_rel = os_utils.get_os_codename_install_source(new_src)
+        hookenv.log('Performing OpenStack upgrade to %s.' % (new_os_rel))
+
+        os_utils.configure_installation_source(new_src)
+        charmhelpers.fetch.apt_update()
+
+        dpkg_opts = [
+            '--option', 'Dpkg::Options::=--force-confnew',
+            '--option', 'Dpkg::Options::=--force-confdef',
+        ]
+        charmhelpers.fetch.apt_upgrade(
+            options=dpkg_opts,
+            fatal=True,
+            dist=True)
+        charmhelpers.fetch.apt_install(
+            packages=self.all_packages,
+            options=dpkg_opts,
+            fatal=True)
+        self.release = new_os_rel
+
+    def do_openstack_upgrade_config_render(self, interfaces_list):
+        """Render configs after upgrade
+
+        :returns: None
+        """
+        self.render_with_interfaces(interfaces_list)
+
+    def do_openstack_upgrade_db_migration(self):
+        """Run database migration after upgrade
+
+        :returns: None
+        """
+        if hookenv.is_leader():
+            subprocess.check_call(self.sync_cmd)
+        else:
+            hookenv.log("Deferring DB sync to leader", level=hookenv.INFO)
 
 
 class HAOpenStackCharm(OpenStackCharm):

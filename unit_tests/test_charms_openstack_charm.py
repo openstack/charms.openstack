@@ -656,6 +656,7 @@ class MyOpenStackCharm(chm.OpenStackCharm):
     sync_cmd = ['my-sync-cmd', 'param1']
     services = ['my-default-service', 'my-second-service']
     adapters_class = MyAdapter
+    release_pkg = 'my-pkg'
 
 
 class MyNextOpenStackCharm(MyOpenStackCharm):
@@ -934,3 +935,119 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         }
         self.assertEqual(self.target.ports_to_check(ports),
                          [1, 2, 3, 4, 5, 6])
+
+    def test_get_os_codename_package(self):
+        codenames = {
+            'testpkg': collections.OrderedDict([
+                ('2', 'mitaka'),
+                ('3', 'newton'),
+                ('4', 'ocata'), ])}
+        self.patch_object(chm.charmhelpers.fetch, 'apt_cache')
+        pkg_mock = mock.MagicMock()
+        self.apt_cache.return_value = {
+            'testpkg': pkg_mock}
+        self.patch_object(chm.apt, 'upstream_version')
+        self.upstream_version.return_value = '3.0.0~b1'
+        self.assertEqual(
+            chm.OpenStackCharm.get_os_codename_package('testpkg', codenames),
+            'newton')
+        # Test non-fatal fail
+        self.assertEqual(
+            chm.OpenStackCharm.get_os_codename_package('unknownpkg',
+                                                       codenames,
+                                                       fatal=False),
+            None)
+        # Test fatal fail
+        with self.assertRaises(Exception):
+            chm.OpenStackCharm.get_os_codename_package('unknownpkg',
+                                                       codenames,
+                                                       fatal=True)
+
+    def test_get_os_version_package(self):
+        self.patch_target('package_codenames')
+        self.patch_target('get_os_codename_package',
+                          return_value='my-series')
+        self.assertEqual(
+            self.target.get_os_version_package('testpkg'),
+            '2011.2')
+        # Test unknown codename
+        self.patch_target('get_os_codename_package',
+                          return_value='unknown-series')
+        self.assertEqual(self.target.get_os_version_package('testpkg'), None)
+
+    def test_openstack_upgrade_available(self):
+        self.patch_target('get_os_version_package')
+        self.patch_object(chm.os_utils, 'get_os_version_install_source')
+        self.patch_object(chm, 'apt')
+        self.patch_target('config',
+                          new={'openstack-origin': 'cloud:natty-folsom'})
+        self.get_os_version_package.return_value = 2
+        self.get_os_version_install_source.return_value = 3
+        self.target.openstack_upgrade_available('testpkg')
+        self.apt.version_compare.assert_called_once_with(3, 2)
+
+    def test_upgrade_if_available(self):
+        self.patch_target('openstack_upgrade_available')
+        self.patch_object(chm.hookenv, 'status_set')
+        self.patch_target('do_openstack_pkg_upgrade')
+        self.patch_target('do_openstack_upgrade_config_render')
+        self.patch_target('do_openstack_upgrade_db_migration')
+        # Test no upgrade avaialble
+        self.openstack_upgrade_available.return_value = False
+        self.target.upgrade_if_available('int_list')
+        self.assertFalse(self.status_set.called)
+        self.assertFalse(self.do_openstack_pkg_upgrade.called)
+        self.assertFalse(self.do_openstack_upgrade_config_render.called)
+        self.assertFalse(self.do_openstack_upgrade_db_migration.called)
+        # Test upgrade avaialble
+        self.openstack_upgrade_available.return_value = True
+        self.target.upgrade_if_available('int_list')
+        self.status_set.assert_called_once_with('maintenance',
+                                                'Running openstack upgrade')
+        self.do_openstack_pkg_upgrade.assert_called_once_with()
+        self.do_openstack_upgrade_config_render.assert_called_once_with(
+            'int_list')
+        self.do_openstack_upgrade_db_migration.assert_called_once_with()
+
+    def test_do_openstack_pkg_upgrade(self):
+        self.patch_target('config',
+                          new={'openstack-origin': 'cloud:natty-kilo'})
+        self.patch_object(chm.os_utils, 'get_os_codename_install_source')
+        self.patch_object(chm.hookenv, 'log')
+        self.patch_object(chm.os_utils, 'configure_installation_source')
+        self.patch_object(chm.charmhelpers.fetch, 'apt_update')
+        self.patch_object(chm.charmhelpers.fetch, 'apt_upgrade')
+        self.patch_object(chm.charmhelpers.fetch, 'apt_install')
+        self.target.do_openstack_pkg_upgrade()
+        self.configure_installation_source.assert_called_once_with(
+            'cloud:natty-kilo')
+        self.apt_update.assert_called_once_with()
+        self.apt_upgrade.assert_called_once_with(
+            dist=True, fatal=True,
+            options=[
+                '--option', 'Dpkg::Options::=--force-confnew', '--option',
+                'Dpkg::Options::=--force-confdef'])
+        self.apt_install.assert_called_once_with(
+            packages=['p1', 'p2', 'p3', 'package-to-filter'],
+            options=[
+                '--option', 'Dpkg::Options::=--force-confnew', '--option',
+                'Dpkg::Options::=--force-confdef'],
+            fatal=True)
+
+    def test_do_openstack_upgrade_config_render(self):
+        self.patch_target('render_with_interfaces')
+        self.target.do_openstack_upgrade_config_render('int_list')
+        self.render_with_interfaces.assert_called_once_with('int_list')
+
+    def test_do_openstack_upgrade_db_migration(self):
+        self.patch_object(chm.hookenv, 'is_leader')
+        self.patch_object(chm.subprocess, 'check_call')
+        self.patch_object(chm.hookenv, 'log')
+        # Check migration not run if not leader
+        self.is_leader.return_value = False
+        self.target.do_openstack_upgrade_db_migration()
+        self.assertFalse(self.check_call.called)
+        # Check migration run on leader
+        self.is_leader.return_value = True
+        self.target.do_openstack_upgrade_db_migration()
+        self.check_call.assert_called_once_with(['my-sync-cmd', 'param1'])
