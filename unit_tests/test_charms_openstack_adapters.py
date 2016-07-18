@@ -293,7 +293,7 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
         },
         'svc2': {
             'admin': 9002,
-            'public': 9002,
+            'public': 9003,
             'internal': 9002,
         }}
 
@@ -356,7 +356,7 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
 
     def test_external_ports(self):
         c = adapters.APIConfigurationAdapter(port_map=self.api_ports)
-        self.assertEqual(c.external_ports, {9001, 9002})
+        self.assertEqual(c.external_ports, {9001, 9002, 9003})
 
     def test_get_network_addresses(self):
         test_config = {
@@ -427,15 +427,23 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
                 c = MockAddrAPIConfigurationAdapt(port_map=self.api_ports)
                 self.assertEqual(
                     c.service_ports,
-                    {'svc1': [9001, 8991], 'svc2': [9002, 8992]})
+                    {'svc1_admin': [9001, 8991],
+                     'svc2_admin': [9002, 8992],
+                     'svc2_public': [9003, 8993]})
                 self.assertEqual(
                     c.service_listen_info, {
                         'svc1': {
+                            'public_port': 8991,
+                            'admin_port': 8991,
+                            'internal_port': 8991,
                             'proto': 'http',
                             'ip': '10.0.0.10',
                             'port': 8991,
                             'url': 'http://10.0.0.10:8991'},
                         'svc2': {
+                            'public_port': 8993,
+                            'admin_port': 8992,
+                            'internal_port': 8992,
                             'proto': 'http',
                             'ip': '10.0.0.10',
                             'port': 8992,
@@ -458,15 +466,23 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
                 c = MockAddrAPIConfigurationAdapt(port_map=self.api_ports)
                 self.assertEqual(
                     c.service_ports,
-                    {'svc1': [9001, 8991], 'svc2': [9002, 8992]})
+                    {'svc1_admin': [9001, 8991],
+                     'svc2_admin': [9002, 8992],
+                     'svc2_public': [9003, 8993]})
                 self.assertEqual(
                     c.service_listen_info, {
                         'svc1': {
+                            'public_port': 8991,
+                            'admin_port': 8991,
+                            'internal_port': 8991,
                             'proto': 'http',
                             'ip': '127.0.0.1',
                             'port': 8991,
                             'url': 'http://127.0.0.1:8991'},
                         'svc2': {
+                            'public_port': 8993,
+                            'admin_port': 8992,
+                            'internal_port': 8992,
                             'proto': 'http',
                             'ip': '127.0.0.1',
                             'port': 8992,
@@ -499,12 +515,14 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             expect = [
                 ('admin_addr', 'vip_admin_net', 8991, 8981),
                 ('admin_addr', 'vip_admin_net', 8992, 8982),
+                ('admin_addr', 'vip_admin_net', 8993, 8983),
                 ('internal_addr', 'vip_internal_net', 8991, 8981),
-                ('internal_addr', 'vip_internal_net', 8992, 8982)
+                ('internal_addr', 'vip_internal_net', 8992, 8982),
+                ('internal_addr', 'vip_internal_net', 8993, 8983),
             ]
 
             self.assertEqual(c.endpoints, expect)
-            self.assertEqual(c.ext_ports, [8991, 8992])
+            self.assertEqual(c.ext_ports, [8991, 8992, 8993])
 
     def test_apache_enabled(self):
         with mock.patch.object(adapters.charms.reactive.bus,

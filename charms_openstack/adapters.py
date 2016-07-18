@@ -436,11 +436,22 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         service_ports = {}
         if self.port_map:
             for service in self.port_map.keys():
-                service_ports[service] = [
-                    self.port_map[service]['admin'],
-                    ch_cluster.determine_apache_port(
-                        self.port_map[service]['admin'],
-                        singlenode_mode=True)]
+                port_types = sorted(list(self.port_map[service].keys()))
+                for port_type in port_types:
+                    listen_port = self.port_map[service][port_type]
+                    key = '{}_{}'.format(service, port_type)
+                    used_ports = [v[0] for v in service_ports.values()]
+                    if listen_port in used_ports:
+                        hookenv.log("Not adding haproxy listen stanza for {} "
+                                    "port is already in use".format(key),
+                                    level=hookenv.WARNING)
+                        continue
+                    service_ports[key] = [
+                        self.port_map[service][port_type],
+                        ch_cluster.determine_apache_port(
+                            self.port_map[service][port_type],
+                            singlenode_mode=True)]
+
         return service_ports
 
     @property
@@ -499,6 +510,10 @@ class APIConfigurationAdapter(ConfigurationAdapter):
                     'ip': ip,
                     'port': self.determine_service_port(
                         self.port_map[service]['admin'])}
+                for port_type in self.port_map[service].keys():
+                    port_key = '{}_port'.format(port_type)
+                    info[key][port_key] = self.determine_service_port(
+                        self.port_map[service][port_type])
                 info[key]['url'] = '{proto}://{ip}:{port}'.format(**info[key])
         return info
 
