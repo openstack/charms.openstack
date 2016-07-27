@@ -214,6 +214,11 @@ class TestPeerHARelationAdapter(unittest.TestCase):
                     expect_local_default['this_unit_private_addr']
                 peer_ra = adapters.PeerHARelationAdapter(FakePeerRelation())
                 self.assertEqual(peer_ra.single_mode_map, expect)
+                self.assertEqual(peer_ra.internal_addresses, [
+                    'peer_unit1_internal_addr',
+                    'peer_unit2_internal_addr',
+                    'this_unit_internal_addr'])
+
             # Test single_mode_map when a cluster relation is not present
             with mock.patch.object(adapters.hookenv, 'relation_ids',
                                    new=lambda x: []):

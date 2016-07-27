@@ -162,6 +162,20 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
             self.add_default_addresses()
 
     @property
+    def internal_addresses(self):
+        """Return list of internal addresses of this unit and peers
+
+           Return list of internal addresses of this unit and peers. If no
+           internal address cidr has been set return private addresses.
+
+           @return list [ip1, ip2, ...]
+        """
+        cfg_opt = os_ip.ADDRESS_MAP[os_ip.INTERNAL]['config']
+        int_net = self.config.get(cfg_opt)
+        laddr = ch_ip.get_address_in_network(int_net) or self.local_address
+        return sorted(list(self.cluster_hosts[laddr]['backends'].values()))
+
+    @property
     def single_mode_map(self):
         """Return map of local addresses only if this is a single node cluster
 
