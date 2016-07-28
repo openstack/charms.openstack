@@ -173,18 +173,24 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         cfg_opt = os_ip.ADDRESS_MAP[os_ip.INTERNAL]['config']
         int_net = self.config.get(cfg_opt)
         laddr = ch_ip.get_address_in_network(int_net) or self.local_address
-        return sorted(list(self.cluster_hosts[laddr]['backends'].values()))
+        try:
+            hosts = sorted(
+                list(self.cluster_hosts[laddr]['backends'].values()))
+        except KeyError:
+            hosts = [laddr]
+        return hosts
 
     @property
     def single_mode_map(self):
         """Return map of local addresses only if this is a single node cluster
 
-           @return dict of private address info local unit e.g.
+           @return dict of local address info e.g.
                {'cluster_hosts':
                    {'this_unit_private_addr': {
                         'backends': {
                             'this_unit-1': 'this_unit_private_addr'},
-                        'network': 'this_unit_private_addr/private_netmask'}}
+                        'network': 'this_unit_private_addr/private_netmask'},
+                'internal_addresses': ['intaddr']}
         """
         relation_info = {}
         try:
@@ -192,6 +198,7 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
             if not hookenv.related_units(relid=cluster_relid):
                 relation_info = {
                     'cluster_hosts': self.local_default_addresses(),
+                    'internal_addresses': self.internal_addresses,
                 }
                 net_split = self.local_network_split_addresses()
                 for key in net_split.keys():

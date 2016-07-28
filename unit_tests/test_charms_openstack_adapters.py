@@ -186,6 +186,7 @@ class TestPeerHARelationAdapter(unittest.TestCase):
             'this_unit_private_addr': expect_local_ns['this_unit_private_addr']
         }
         del expect_local_ns['this_unit_private_addr']
+        # Tests PeerHARelationAdapter with peers
         with mock.patch.object(adapters.ch_ip, 'get_address_in_network',
                                new=lambda x: test_addresses.get(x)), \
                 mock.patch.object(adapters.ch_ip, 'get_netmask_for_address',
@@ -204,22 +205,37 @@ class TestPeerHARelationAdapter(unittest.TestCase):
             self.assertEqual(lnetsplit, expect_local_ns)
             ldefault = padapt().local_default_addresses()
             self.assertEqual(ldefault, expect_local_default)
+            self.assertEqual(peer_ra.internal_addresses, [
+                'peer_unit1_internal_addr',
+                'peer_unit2_internal_addr',
+                'this_unit_internal_addr'])
+
+        # Tests PeerHARelationAdapter without peers
+        with mock.patch.object(adapters.ch_ip, 'get_address_in_network',
+                               new=lambda x: test_addresses.get(x)), \
+                mock.patch.object(adapters.ch_ip, 'get_netmask_for_address',
+                                  new=lambda x: test_netmasks.get(x)), \
+                mock.patch.object(adapters, 'APIConfigurationAdapter',
+                                  side_effect=FakeAPIConfigAdapter), \
+                mock.patch.object(adapters.hookenv, 'config',
+                                  new=lambda: test_config):
+
             # Test single_mode_map when a cluster relation is present
             with mock.patch.object(adapters.hookenv, 'relation_ids',
                                    new=lambda x: ['rid1']), \
                     mock.patch.object(adapters.hookenv, 'related_units',
                                       new=lambda relid: []):
-                expect = {'cluster_hosts': expect_local_ns}
+                expect = {
+                    'internal_addresses': ['this_unit_internal_addr'],
+                    'cluster_hosts': expect_local_ns}
                 expect['cluster_hosts']['this_unit_private_addr'] = \
                     expect_local_default['this_unit_private_addr']
-                peer_ra = adapters.PeerHARelationAdapter(FakePeerRelation())
+                peer_ra = adapters.PeerHARelationAdapter(
+                    relation_name='cluster')
                 self.assertEqual(peer_ra.single_mode_map, expect)
-                self.assertEqual(peer_ra.internal_addresses, [
-                    'peer_unit1_internal_addr',
-                    'peer_unit2_internal_addr',
-                    'this_unit_internal_addr'])
 
             # Test single_mode_map when a cluster relation is not present
+            # i.e is not defined in metadata.yaml
             with mock.patch.object(adapters.hookenv, 'relation_ids',
                                    new=lambda x: []):
                 peer_ra = adapters.PeerHARelationAdapter(FakePeerRelation())
