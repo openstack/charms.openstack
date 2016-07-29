@@ -202,7 +202,7 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_set_state(self):
         # tests that OpenStackCharm.set_state() calls set_state() global
-        self.patch_object(chm.charms.reactive.bus, 'set_state')
+        self.patch_object(chm.reactive.bus, 'set_state')
         self.target.set_state('hello')
         self.set_state.assert_called_once_with('hello', None)
         self.set_state.reset_mock()
@@ -211,7 +211,7 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_remove_state(self):
         # tests that OpenStackCharm.remove_state() calls remove_state() global
-        self.patch_object(chm.charms.reactive.bus, 'remove_state')
+        self.patch_object(chm.reactive.bus, 'remove_state')
         self.target.remove_state('hello')
         self.remove_state.assert_called_once_with('hello')
 
@@ -400,8 +400,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             'haproxy')
 
     def test_set_haproxy_stat_password(self):
-        self.patch_object(chm.charms.reactive.bus, 'get_state')
-        self.patch_object(chm.charms.reactive.bus, 'set_state')
+        self.patch_object(chm.reactive.bus, 'get_state')
+        self.patch_object(chm.reactive.bus, 'set_state')
         self.get_state.return_value = None
         self.target.set_haproxy_stat_password()
         self.set_state.assert_called_once_with('haproxy.stat.password',
@@ -575,26 +575,51 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('configure_apache')
         self.patch_target('configure_cert')
         self.patch_target('configure_ca')
-        self.patch_target('run_update_certs')
-        self.patch_object(chm.charms.reactive.bus, 'set_state')
+        self.patch_object(chm.reactive.bus, 'set_state')
+        self.patch_object(chm.reactive.RelationBase, 'from_state',
+                          return_value=None)
         self.target.configure_ssl()
         cert_calls = [
             mock.call('cert1', 'key1', cn='cn1'),
             mock.call('cert2', 'key2', cn='cn2')]
         ca_calls = [
-            mock.call('ca1', update_certs=False),
-            mock.call('ca2', update_certs=False)]
+            mock.call('ca1'),
+            mock.call('ca2')]
         self.configure_cert.assert_has_calls(cert_calls)
         self.configure_ca.assert_has_calls(ca_calls)
-        self.run_update_certs.assert_called_once_with()
         self.configure_apache.assert_called_once_with()
         self.set_state.assert_called_once_with('ssl.enabled', True)
 
     def test_configure_ssl_off(self):
         self.patch_target('get_certs_and_keys', return_value=[])
-        self.patch_object(chm.charms.reactive.bus, 'set_state')
+        self.patch_object(chm.reactive.bus, 'set_state')
+        self.patch_object(chm.reactive.RelationBase, 'from_state',
+                          return_value=None)
         self.target.configure_ssl()
         self.set_state.assert_called_once_with('ssl.enabled', False)
+
+    def test_configure_ssl_rabbit(self):
+        self.patch_target('get_certs_and_keys', return_value=[])
+        self.patch_target('configure_rabbit_cert')
+        self.patch_object(chm.reactive.bus, 'set_state')
+        self.patch_object(chm.reactive.RelationBase, 'from_state',
+                          return_value='ssl_int')
+        self.target.configure_ssl()
+        self.set_state.assert_called_once_with('ssl.enabled', False)
+        self.configure_rabbit_cert.assert_called_once_with('ssl_int')
+
+    def test_configure_rabbit_cert(self):
+        rabbit_int_mock = mock.MagicMock()
+        rabbit_int_mock.get_ssl_cert.return_value = 'rabbit_cert'
+        self.patch_object(chm.os.path, 'exists', return_value=True)
+        self.patch_object(chm.os, 'mkdir')
+        self.patch_object(chm.hookenv, 'service_name', return_value='svc1')
+        with utils.patch_open() as (mock_open, mock_file):
+            self.target.configure_rabbit_cert(rabbit_int_mock)
+            mock_open.assert_called_with(
+                '/var/lib/charm/svc1/rabbit-client-ca.pem',
+                'w')
+            mock_file.write.assert_called_with('rabbit_cert')
 
     def test_configure_ca(self):
         self.patch_target('run_update_certs')
@@ -604,13 +629,32 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
                 '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt',
                 'w')
             mock_file.write.assert_called_with('myca')
-            self.run_update_certs.assert_called_once_with()
 
     def test_run_update_certs(self):
         self.patch_object(chm.subprocess, 'check_call')
         self.target.run_update_certs()
         self.check_call.assert_called_once_with(
             ['update-ca-certificates', '--fresh'])
+
+    def test_update_central_cacerts(self):
+        self.patch_target('run_update_certs')
+        change_hashes = ['hash1', 'hash2']
+        nochange_hashes = ['hash1', 'hash1']
+
+        def fake_hash(hash_dict):
+            def fake_hash_inner(filename):
+                return hash_dict.pop()
+            return fake_hash_inner
+        self.patch_object(chm.ch_host, 'path_hash')
+        self.path_hash.side_effect = fake_hash(change_hashes)
+        with self.target.update_central_cacerts(['file1']):
+            pass
+        self.run_update_certs.assert_called_with()
+        self.run_update_certs.reset_mock()
+        self.path_hash.side_effect = fake_hash(nochange_hashes)
+        with self.target.update_central_cacerts(['file1']):
+            pass
+        self.assertFalse(self.run_update_certs.called)
 
 
 class MyAdapter(object):
@@ -886,7 +930,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                                return_value={}):
             self.assertEqual(self.target.check_interfaces(), (None, None))
         # next check that we get back the states we think we should
-        self.patch_object(chm.charms.reactive.bus,
+        self.patch_object(chm.reactive.bus,
                           'get_states',
                           return_value={'rel1.connected': 1, })
         self.patch_target('required_relations', new=['rel1', 'rel2'])

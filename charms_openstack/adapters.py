@@ -119,6 +119,15 @@ class RabbitMQRelationAdapter(OpenStackRelationAdapter):
         else:
             return None
 
+    @property
+    def ssl_data_complete(self):
+        return self.relation.ssl_data_complete()
+
+    @property
+    def ssl_ca_file(self):
+        return '/var/lib/charm/{}/rabbit-client-ca.pem'.format(
+            hookenv.service_name())
+
 
 class PeerHARelationAdapter(OpenStackRelationAdapter):
     """

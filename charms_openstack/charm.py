@@ -38,7 +38,7 @@ import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charmhelpers.core.templating
 import charmhelpers.fetch
-import charms.reactive.bus
+import charms.reactive as reactive
 
 import charms_openstack.ip as os_ip
 
@@ -334,15 +334,15 @@ class OpenStackCharm(object):
 
     def set_state(self, state, value=None):
         """proxy for charms.reactive.bus.set_state()"""
-        charms.reactive.bus.set_state(state, value)
+        reactive.bus.set_state(state, value)
 
     def remove_state(self, state):
         """proxy for charms.reactive.bus.remove_state()"""
-        charms.reactive.bus.remove_state(state)
+        reactive.bus.remove_state(state)
 
     def get_state(self, state):
         """proxy for charms.reactive.bus.get_state()"""
-        return charms.reactive.bus.get_state(state)
+        return reactive.bus.get_state(state)
 
     def api_port(self, service, endpoint_type=os_ip.PUBLIC):
         """Return the API port for a particular endpoint type from the
@@ -578,7 +578,7 @@ class OpenStackCharm(object):
         # bail if there is nothing to do.
         if not states_to_check:
             return None, None
-        available_states = charms.reactive.bus.get_states().keys()
+        available_states = reactive.bus.get_states().keys()
         status = None
         messages = []
         for relation, states in states_to_check.items():
@@ -1014,32 +1014,62 @@ class HAOpenStackCharm(OpenStackCharm):
             else:
                 setattr(self, key, None)
 
+    @property
+    def rabbit_client_cert_dir(self):
+        return '/var/lib/charm/{}'.format(hookenv.service_name())
+
+    @property
+    def rabbit_cert_file(self):
+        return '{}/rabbit-client-ca.pem'.format(self.rabbit_client_cert_dir)
+
     def configure_ssl(self, keystone_interface=None):
         """Configure SSL certificates and keys
 
         @param keystone_interface KeystoneRequires class
         """
+        keystone_interface = (reactive.RelationBase.from_state(
+            'identity-service.available.ssl') or
+            reactive.RelationBase.from_state(
+                'identity-service.available.ssl_legacy'))
         ssl_objects = self.get_certs_and_keys(
             keystone_interface=keystone_interface)
         if ssl_objects:
             for ssl in ssl_objects:
                 self.configure_cert(ssl['cert'], ssl['key'], cn=ssl['cn'])
-                self.configure_ca(ssl['ca'], update_certs=False)
-            self.run_update_certs()
+                self.configure_ca(ssl['ca'])
             self.set_state('ssl.enabled', True)
             self.configure_apache()
         else:
             self.set_state('ssl.enabled', False)
+        amqp_ssl = reactive.RelationBase.from_state('amqp.available.ssl')
+        if amqp_ssl:
+            self.configure_rabbit_cert(amqp_ssl)
+
+    def configure_rabbit_cert(self, rabbit_interface):
+        if not os.path.exists(self.rabbit_client_cert_dir):
+            os.makedirs(self.rabbit_client_cert_dir)
+        with open(self.rabbit_cert_file, 'w') as crt:
+            crt.write(rabbit_interface.get_ssl_cert())
+
+    @contextlib.contextmanager
+    def update_central_cacerts(self, cert_files, update_certs=True):
+        """Update Central certs info if once of cert_files changes"""
+        checksums = {path: ch_host.path_hash(path)
+                     for path in cert_files}
+        yield
+        new_checksums = {path: ch_host.path_hash(path)
+                         for path in cert_files}
+        if checksums != new_checksums and update_certs:
+            self.run_update_certs()
 
     def configure_ca(self, ca_cert, update_certs=True):
         """Write Certificate Authority certificate"""
         cert_file = \
             '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt'
         if ca_cert:
-            with open(cert_file, 'w') as crt:
-                crt.write(ca_cert)
-            if update_certs:
-                self.run_update_certs()
+            with self.update_central_cacerts([cert_file], update_certs):
+                with open(cert_file, 'w') as crt:
+                    crt.write(ca_cert)
 
     def run_update_certs(self):
         """Update certifiacte
