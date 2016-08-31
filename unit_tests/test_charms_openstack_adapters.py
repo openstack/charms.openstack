@@ -27,6 +27,29 @@ import mock
 import charms_openstack.adapters as adapters
 
 
+class TestCustomProperties(unittest.TestCase):
+
+    def test_adapter_property(self):
+        with mock.patch.object(adapters, '_custom_adapter_properties', new={}):
+
+            @adapters.adapter_property('my-int')
+            def test_func():
+                pass
+
+            self.assertTrue(adapters._custom_adapter_properties['my-int'],
+                            test_func)
+
+    def test_config_property(self):
+        with mock.patch.object(adapters, '_custom_config_properties', new={}):
+
+            @adapters.config_property
+            def test_func():
+                pass
+
+            self.assertTrue(adapters._custom_config_properties['test_func'],
+                            test_func)
+
+
 class MyRelation(object):
 
     auto_accessors = ['this', 'that']
@@ -56,6 +79,27 @@ class TestOpenStackRelationAdapter(unittest.TestCase):
     def test_class_no_relation(self):
         ad = adapters.OpenStackRelationAdapter(relation_name='cluster')
         self.assertEqual(ad.relation_name, 'cluster')
+
+    def test_make_default_relation_adapter(self):
+        # test that no properties just gets the standard one.
+        self.assertEqual(
+            adapters.make_default_relation_adapter('fake', None, {}),
+            'fake')
+
+        # now create a fake class with some properties to work with
+        class FakeRelation(object):
+            a = 4
+
+        def b(int):
+            return int.a  # e.g. in test, return the 4 for the property 'b'
+
+        kls = adapters.make_default_relation_adapter(
+            FakeRelation, 'my./?-int', {'b': b})
+        self.assertEqual(kls.__name__, 'MyIntRelationAdapterModified')
+
+        i = kls()
+        self.assertIsInstance(i, FakeRelation)
+        self.assertEqual(i.b, 4)
 
 
 class FakeRabbitMQRelation():
@@ -304,6 +348,50 @@ class TestConfigurationAdapter(unittest.TestCase):
             self.assertEqual(c.three, 3)
             self.assertEqual(c.that_one, 4)
 
+    def test_make_default_configuration_adapter_class(self):
+        # test that emply class just gives us a normal ConfigurationAdapter
+        self.assertEqual(
+            adapters.make_default_configuration_adapter_class(None, {}),
+            adapters.ConfigurationAdapter)
+        # now test with a custom class, but no properties
+        self.assertEqual(
+            adapters.make_default_configuration_adapter_class(
+                adapters.APIConfigurationAdapter, {}),
+            adapters.APIConfigurationAdapter)
+        # finally give it a custom property
+
+        def custom_property(config):
+            return 'custom-thing'
+
+        kls = adapters.make_default_configuration_adapter_class(
+            None, {'custom_property': custom_property})
+        self.assertEqual(kls.__name__, 'DefaultConfigurationAdapter')
+        self.assertTrue(
+            'ConfigurationAdapter' in [c.__name__ for c in kls.mro()])
+        # instantiate the kls and check for the property
+        test_config = {
+            'my-value': True,
+        }
+        with mock.patch.object(adapters.hookenv,
+                               'config',
+                               new=lambda: test_config):
+            c = kls()
+            self.assertTrue(c.my_value)
+            self.assertEqual(c.custom_property, 'custom-thing')
+
+    def test_charm_instance(self):
+        with mock.patch.object(adapters.hookenv, 'config', new=lambda: {}):
+            c = adapters.ConfigurationAdapter()
+            self.assertEqual(c.charm_instance, None)
+
+            class MockCharm(object):
+                pass
+
+            instance = MockCharm()
+            c = adapters.ConfigurationAdapter(charm_instance=instance)
+            self.assertEqual(c.charm_instance, instance)
+            self.assertTrue(c._charm_instance_weakref is not None)
+
 
 class TestAPIConfigurationAdapter(unittest.TestCase):
     api_ports = {
@@ -335,6 +423,20 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             self.assertEqual(c.service_ports, {})
             self.assertEqual(c.service_listen_info, {})
             self.assertEqual(c.external_endpoints, {})
+
+    def test_class_init_using_charm_instance(self):
+
+        class TestCharm(object):
+
+            api_ports = TestAPIConfigurationAdapter.api_ports
+            name = 'test-charm'
+
+        with mock.patch.object(adapters.hookenv, 'config', new=lambda: {}), \
+                mock.patch.object(adapters.APIConfigurationAdapter,
+                                  'get_network_addresses'):
+            c = adapters.APIConfigurationAdapter(charm_instance=TestCharm())
+            self.assertEqual(c.port_map, TestCharm.api_ports)
+            self.assertEqual(c.service_name, 'test-charm')
 
     def test_ipv4_mode(self):
         test_config = {
@@ -607,6 +709,116 @@ class TestOpenStackRelationAdapters(unittest.TestCase):
             self.assertEqual(items[1][0], 'amqp')
             self.assertEqual(items[2][0], 'shared_db')
             self.assertEqual(items[3][0], 'my_name')
+
+    def test_set_charm_instance(self):
+
+        # a fake charm instance to play with
+        class FakeCharm(object):
+            name = 'fake-charm'
+
+        shared_db = FakeDatabaseRelation()
+        charm = FakeCharm()
+        a = adapters.OpenStackRelationAdapters([shared_db],
+                                               charm_instance=charm)
+        self.assertEqual(a.charm_instance, charm)
+
+    def test_custom_configurations_creation(self):
+        # Test we can bring in a custom configurations
+
+        class FakeConfigurationAdapter(adapters.ConfigurationAdapter):
+
+            def __init__(self, charm_instance):
+                self.test = 'hello'
+
+        class FakeCharm(object):
+            name = 'fake-charm'
+            configuration_class = FakeConfigurationAdapter
+
+        with mock.patch.object(adapters, '_custom_config_properties', new={}):
+
+            @adapters.config_property
+            def custom_prop(config):
+                return config.test
+
+            a = adapters.OpenStackRelationAdapters(
+                [], charm_instance=FakeCharm())
+
+            self.assertEqual(a.options.custom_prop, 'hello')
+            self.assertIsInstance(a.options, FakeConfigurationAdapter)
+
+    def test_hoists_custom_relation_properties(self):
+
+        class FakeConfigurationAdapter(adapters.ConfigurationAdapter):
+
+            def __init__(self, charm_instance):
+                pass
+
+        class FakeSharedDBAdapter(adapters.OpenStackRelationAdapter):
+            interface_name = 'shared-db'
+
+        class FakeThingAdapter(adapters.OpenStackRelationAdapter):
+            interface_name = 'some-interface'
+
+        class FakeAdapters(adapters.OpenStackRelationAdapters):
+            # override the relation_adapters to our shared_db adapter
+            relation_adapters = {
+                'shared-db': FakeSharedDBAdapter,
+                'some-interface': FakeThingAdapter,
+            }
+
+        class FakeThing(object):
+            relation_name = 'some-interface'
+            auto_accessors = []
+
+        class FakeSharedDB(object):
+            relation_name = 'shared-db'
+            auto_accessors = ('thing',)
+
+            def thing(self):
+                return 'kenobi'
+
+        class FakeCharm(object):
+            name = 'fake-charm'
+            adapters_class = FakeAdapters
+            configuration_class = FakeConfigurationAdapter
+
+        with mock.patch.object(adapters, '_custom_adapter_properties', {}):
+
+            @adapters.adapter_property('some-interface')
+            def custom_property(interface):
+                return 'goodbye'
+
+            @adapters.adapter_property('shared-db')
+            def custom_thing(shared_db):
+                return 'obe wan {}'.format(shared_db.thing)
+
+            shared_db = FakeSharedDB()
+            fake_thing = FakeThing()
+            a = FakeAdapters([shared_db, fake_thing],
+                             charm_instance=FakeCharm())
+
+            # Verify that the custom properties got set.
+            # This also checks that all the classes were instantiated
+            self.assertEqual(a.some_interface.custom_property, 'goodbye')
+            self.assertEqual(a.shared_db.custom_thing, 'obe wan kenobi')
+
+            # verify that the right relations clases were instantiated.
+            # Note that this checks that the adapters' inheritence is correct;
+            # they are actually modified classes.
+            self.assertEqual(len(a._adapters), 2)
+            self.assertIsInstance(a.some_interface, FakeThingAdapter)
+            self.assertNotEqual(a.some_interface.__class__.__name__,
+                                'FakeThingAdapter')
+            self.assertIsInstance(a.shared_db, FakeSharedDBAdapter)
+            self.assertNotEqual(a.shared_db.__class__.__name__,
+                                'FakeSharedDBAdapter')
+
+            # verify that the iteration of the adapters yields the interfaces
+            ctxt = dict(a)
+            self.assertIsInstance(ctxt['options'], FakeConfigurationAdapter)
+            self.assertIsInstance(ctxt['shared_db'], FakeSharedDBAdapter)
+            self.assertIsInstance(ctxt['some_interface'], FakeThingAdapter)
+            self.assertEqual(len(ctxt.keys()), 3)
 
 
 class MyRelationAdapter(adapters.OpenStackRelationAdapter):

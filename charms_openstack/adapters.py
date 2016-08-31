@@ -15,6 +15,11 @@
 """Adapter classes and utilities for use with Reactive interfaces"""
 from __future__ import absolute_import
 
+import re
+import weakref
+
+import six
+
 import charms.reactive.bus
 import charmhelpers.contrib.hahelpers.cluster as ch_cluster
 import charmhelpers.contrib.network.ip as ch_ip
@@ -23,6 +28,57 @@ import charmhelpers.core.hookenv as hookenv
 import charms_openstack.ip as os_ip
 
 ADDRESS_TYPES = os_ip.ADDRESS_MAP.keys()
+
+# handle declarative adapter properties using a decorator and simple functions
+
+# Hold the custom adapter properties somewhere!
+_custom_adapter_properties = {}
+
+
+def adapter_property(interface_name):
+    """Decorator to take the interface name and add a custom property.
+    These are used to generate custom Adapter classes automatically for the
+    charm author which are then plugged into the class.  The adapter class is
+    built using a different function.
+
+    :param interface_name: the name of the interface to add the property to
+    """
+    def wrapper(f):
+        property_name = f.__name__
+        if interface_name not in _custom_adapter_properties:
+            _custom_adapter_properties[interface_name] = {}
+        if property_name in _custom_adapter_properties[interface_name]:
+            raise RuntimeError(
+                "Property name '{}' used more than once for '{} interface?"
+                .format(property_name, interface_name))
+        _custom_adapter_properties[interface_name][property_name] = f
+        return f
+    return wrapper
+
+
+# declaring custom configuration properties:
+
+# Hold the custom configuration adapter properties somewhere!
+_custom_config_properties = {}
+
+
+def config_property(f):
+    """Decorator to add a custom configuration property.
+
+    These are used to generate a custom ConfigurationAdapter for use when
+    automatically creating a Charm class
+
+    :param f: the function passed as part of the @decorator syntax
+    """
+    property_name = f.__name__
+    if property_name in _custom_config_properties:
+        raise RuntimeError(
+            "Property name '{}' used more than once for configuration?"
+            .format(property_name))
+    _custom_config_properties[property_name] = f
+    return f
+
+##
 
 
 class OpenStackRelationAdapter(object):
@@ -346,25 +402,74 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
         return self.get_uri()
 
 
+def make_default_configuration_adapter_class(base_cls=None,
+                                             custom_properties=None):
+    """Create a default configuration adapter, using the base type specified
+    and any customer configuration properties.
+
+    This is called by the charm creation metaclass when 'bringing' up the class
+    if no configuration adapter has been specified in the adapters_class
+
+    :param base_cls: a ConfigurationAdapter derived class; or None
+    :param custom_properties: the name:function for the properties to set.
+    """
+    base_cls = base_cls or ConfigurationAdapter
+    # if there are no custom properties, just return the base_cls
+    if not custom_properties:
+        return base_cls
+    # turns the functions into properties on the class
+    properties = {n: property(f) for n, f in six.iteritems(custom_properties)}
+    # build a custom class with the custom properties
+    return type('DefaultConfigurationAdapter', (base_cls, ), properties)
+
+
 class ConfigurationAdapter(object):
     """
     Configuration Adapter which provides python based access
     to all configuration options for the current charm.
+
+    It also holds a weakref to the instance of the OpenStackCharm derived class
+    that it is associated with.  This is so that methods on the configuration
+    adapter can query the charm class for global config (e.g. service_name).
+
+
+    The configuration items from Juju are copied over and the '-' are replaced
+    with '_'.  This allows them to be used directly on the instance.
     """
 
-    def __init__(self):
+    def __init__(self, charm_instance=None):
+        """Create a ConfigurationAdapter (or derived) class.
+
+        :param charm_instance: the instance of the OpenStackCharm derived
+            class.
+        """
+        self._charm_instance_weakref = None
+        if charm_instance is not None:
+            self._charm_instance_weakref = weakref.ref(charm_instance)
+        # copy over (statically) the items of the charms Juju configuration
         _config = hookenv.config()
-        for k, v in _config.items():
+        for k, v in six.iteritems(_config):
             k = k.replace('-', '_')
             setattr(self, k, v)
+
+    @property
+    def charm_instance(self):
+        """Return the reference to the charm_instance or return None"""
+        if self._charm_instance_weakref:
+            return self._charm_instance_weakref()
+        return None
 
 
 class APIConfigurationAdapter(ConfigurationAdapter):
     """This configuration adapter extends the base class and adds properties
-    common accross most OpenstackAPI services"""
+    common accross most OpenstackAPI services
+    """
 
-    def __init__(self, port_map=None, service_name=None):
+    def __init__(self, port_map=None, service_name=None, charm_instance=None):
         """
+        Note passing port_map and service_name is deprecated, but supporte for
+        backwards compatibility.  The port_map and service_name can be got from
+        the self.charm_instance weak reference.
         :param  port_map: Map containing service names and the ports used e.g.
                 port_map = {
                         'svc1': {
@@ -379,10 +484,29 @@ class APIConfigurationAdapter(ConfigurationAdapter):
                     },
                 }
         :param service_name: Name of service being deployed
+        :param charm_instance: a charm instance that will be passed to the base
+            constructor
         """
-        super(APIConfigurationAdapter, self).__init__()
-        self.port_map = port_map
-        self.service_name = service_name
+        super(APIConfigurationAdapter, self).__init__(
+            charm_instance=charm_instance)
+        if port_map is not None:
+            hookenv.log(
+                "DEPRECATION: should not use port_map parameter in "
+                "APIConfigurationAdapter.__init__()", level=hookenv.WARNING)
+            self.port_map = port_map
+        elif self.charm_instance is not None:
+            self.port_map = self.charm_instance.api_ports
+        else:
+            self.port_map = None
+        if service_name is not None:
+            hookenv.log(
+                "DEPRECATION: should not use service_name parameter in "
+                "APIConfigurationAdapter.__init__()", level=hookenv.WARNING)
+            self.service_name = service_name
+        elif self.charm_instance is not None:
+            self.service_name = self.charm_instance.name
+        else:
+            self.service_name = None
         self.network_addresses = self.get_network_addresses()
 
     @property
@@ -643,6 +767,36 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         return sorted(list(set(eps)))
 
 
+def make_default_relation_adapter(base_cls, relation, properties):
+    """Create a default relation adapter using a base class, and custom
+    properties for various relations that may have been defined as custom
+    properties.
+
+    This mixes the declarative 'custom' properties + with the default classes
+    to provide a class that manages the relation for the charm.
+
+    This mixes the associated RelationAdapter class with the custom relations.
+
+    :param base_cls: the class to use as the base for the properties
+    :param relation: the relation we want the properties for
+    :param properties: {key: function} functions to make custom properties
+    """
+    # Just return the base_cls if there's nothing to modify
+    if not properties:
+        return base_cls
+    # convert the functions into properties
+    props = {n: property(f) for n, f in six.iteritems(properties)}
+    # turn 'my-Something_interface' into 'MySomethingInterface'
+    # future proof incase other chars come in which can't be in an Python Class
+    # name.
+    relation = re.sub(r'[^a-zA-Z_-]', '', relation)
+    parts = relation.replace('-', '_').lower().split('_')
+    header = ''.join([s.capitalize() for s in parts])
+    name = "{}RelationAdapterModified".format(header)
+    # and make the class
+    return type(name, (base_cls,), props)
+
+
 class OpenStackRelationAdapters(object):
     """
     Base adapters class for OpenStack Charms, used to aggregate
@@ -661,29 +815,63 @@ class OpenStackRelationAdapters(object):
         }
 
     By default, relations will be wrapped in an OpenStackRelationAdapter.
+
+    Each derived class can define their OWN relation_adapters and they will
+    overlay on the class further back in the class hierarchy, according to the
+    mro() for the class.
     """
 
-    _adapters = {}
-    """
-    Default adapter mappings; may be overridden by relation adapters
-    in subclasses.
-    """
-
-    def __init__(self, relations, options=None, options_instance=None):
+    def __init__(self, relations, options=None, options_instance=None,
+                 charm_instance=None):
         """
         :param relations: List of instances of relation classes
         :param options: Configuration class to use (DEPRECATED)
         :param options_instance: Instance of Configuration class to use
+        :param charm_instance: optional charm_instance that is captured as a
+            weakref for use on the adapter.
         """
+        self._charm_instance_weakref = None
+        if charm_instance is not None:
+            self._charm_instance_weakref = weakref.ref(charm_instance)
         self._relations = []
-        if options:
+        if options is not None:
             hookenv.log("The 'options' argument is deprecated please use "
                         "options_instance instead.", level=hookenv.WARNING)
             self.options = options()
+        elif options_instance is not None:
+            self.options = options_instance
         else:
-            self.options = options_instance or ConfigurationAdapter()
+            # create a default, customised ConfigurationAdapter if the
+            # APIConfigurationAdapter is needed as a base, then it must be
+            # passed as an instance on the options_instance First pull the
+            # configuration class from the charm instance (if it's available).
+            base_cls = ConfigurationAdapter
+            if self.charm_instance:
+                base_cls = getattr(self.charm_instance, 'configuration_class',
+                                   base_cls)
+            self.options = make_default_configuration_adapter_class(
+                base_cls=base_cls,
+                custom_properties=_custom_config_properties)(
+                    charm_instance=self.charm_instance)
         self._relations.append('options')
-        self._adapters.update(self.relation_adapters)
+        # walk the mro() from object to this class to build up the _adapters
+        # ensure that all of the relations' have their '-' turned into a '_' to
+        # ensure that everything is consistent in the class.
+        self._adapters = {}
+        for cls in reversed(self.__class__.mro()):
+            self._adapters.update(
+                {k.replace('-', '_'): v
+                 for k, v in six.iteritems(
+                     getattr(cls, 'relation_adapters', {}))})
+        # now we have to add in any customisations to those adapters
+        for relation, properties in six.iteritems(_custom_adapter_properties):
+            relation = relation.replace('-', '_')
+            try:
+                cls = self._adapters[relation]
+            except KeyError:
+                cls = OpenStackRelationAdapter
+            self._adapters[relation] = make_default_relation_adapter(
+                cls, relation, properties)
         for relation in relations:
             relation_name = relation.relation_name.replace('-', '_')
             try:
@@ -692,6 +880,13 @@ class OpenStackRelationAdapters(object):
                 relation_value = OpenStackRelationAdapter(relation)
             setattr(self, relation_name, relation_value)
             self._relations.append(relation_name)
+
+    @property
+    def charm_instance(self):
+        """Return the reference to the charm_instance or return None"""
+        if self._charm_instance_weakref:
+            return self._charm_instance_weakref()
+        return None
 
     def __iter__(self):
         """
@@ -703,22 +898,25 @@ class OpenStackRelationAdapters(object):
 
 class OpenStackAPIRelationAdapters(OpenStackRelationAdapters):
 
-    _adapters = {
+    relation_adapters = {
         'amqp': RabbitMQRelationAdapter,
         'shared_db': DatabaseRelationAdapter,
         'cluster': PeerHARelationAdapter,
     }
 
-    def __init__(self, relations, options=None, options_instance=None):
+    def __init__(self, relations, options=None, options_instance=None,
+                 charm_instance=None):
         """
         :param relations: List of instances of relation classes
         :param options: Configuration class to use (DEPRECATED)
         :param options_instance: Instance of Configuration class to use
+        :param charm_instance: an instance of the charm class
         """
         super(OpenStackAPIRelationAdapters, self).__init__(
             relations,
             options=options,
-            options_instance=options_instance)
+            options_instance=options_instance,
+            charm_instance=charm_instance)
         # LY: The cluster interface only gets initialised if there are more
         # than one unit in a cluster, however, a cluster of one unit is valid
         # for the Openstack API charms. So, create and populate the 'cluster'

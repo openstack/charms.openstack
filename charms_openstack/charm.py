@@ -21,6 +21,7 @@ from __future__ import absolute_import
 import base64
 import collections
 import contextlib
+import functools
 import itertools
 import os
 import random
@@ -37,10 +38,12 @@ import charmhelpers.contrib.openstack.utils as os_utils
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charmhelpers.core.templating
+import charmhelpers.core.unitdata as unitdata
 import charmhelpers.fetch
 import charms.reactive as reactive
 
 import charms_openstack.ip as os_ip
+import charms_openstack.adapters as os_adapters
 
 
 # _releases{} is a dictionary of release -> class that is instantiated
@@ -80,6 +83,261 @@ CIDR_KEY = "vip_cidr"
 IFACE_KEY = "vip_iface"
 APACHE_SSL_VHOST = '/etc/apache2/sites-available/openstack_https_frontend.conf'
 
+OPENSTACK_RELEASE_KEY = 'charmers.openstack-release-version'
+
+# handler support for default handlers
+
+# The default handlers that charms.openstack provides.
+ALLOWED_DEFAULT_HANDLERS = [
+    'charm.installed',
+    'amqp.connected',
+    'shared-db.connected',
+    'identity-service.connected',
+    'identity-service.available',
+    'config.changed',
+    'charm.default-select-release',
+    'update-status',
+]
+
+# Where to store the default handler functions for each default state
+_default_handler_map = {}
+
+
+def use_defaults(*defaults):
+    """Activate the default functionality for various handlers
+
+    This is to provide default functionality for common operations for
+    openstack charms.
+    """
+    for state in defaults:
+        if state in ALLOWED_DEFAULT_HANDLERS:
+            if state in _default_handler_map:
+                # Initialise the default handler for this state
+                _default_handler_map[state]()
+            else:
+                raise RuntimeError(
+                    "State '{}' is allowed, but has no handler???"
+                    .format(state))
+        else:
+            raise RuntimeError("Default handler for '{}' doesn't exist"
+                               .format(state))
+
+
+def _map_default_handler(state):
+    """Decorator to map a default handler to a state -- just makes adding
+    handlers a bit easier.
+
+    :param state: the state that the handler is for.
+    :raises RuntimeError: if the state doesn't exist in
+        ALLOWED_DEFAULT_HANDLERS
+    """
+    def wrapper(f):
+        if state in _default_handler_map:
+            raise RuntimeError(
+                "State '{}' can't have more than one default handler"
+                .format(state))
+        if state not in ALLOWED_DEFAULT_HANDLERS:
+            raise RuntimeError(
+                "State '{} doesn't have a default handler????".format(state))
+        _default_handler_map[state] = f
+        return f
+    return wrapper
+
+
+@_map_default_handler('charm.installed')
+def make_default_install_handler():
+
+    @reactive.when_not('charm.installed')
+    def default_install():
+        """Provide a default install handler
+
+        The instance automagically becomes the derived OpenStackCharm instance.
+        The kv() key charmers.openstack-release-version' is used to cache the
+        release being used for this charm.  It is determined by the
+        default_select_release() function below, unless this is overriden by
+        the charm author
+        """
+        unitdata.kv().unset(OPENSTACK_RELEASE_KEY)
+        OpenStackCharm.singleton.install()
+        reactive.set_state('charm.installed')
+
+
+@_map_default_handler('charm.default-select-release')
+def make_default_select_release_handler():
+    """This handler is a bit more unusual, as it just sets the release selector
+    using the @register_os_release_selector decorator
+    """
+
+    @register_os_release_selector
+    def default_select_release():
+        """Determine the release based on the python-keystonemiddleware that is
+        installed.
+
+        Note that this function caches the release after the first install so
+        that it doesn't need to keep going and getting it from the package
+        information.
+        """
+        release_version = unitdata.kv().get(OPENSTACK_RELEASE_KEY, None)
+        if release_version is None:
+            release_version = os_utils.os_release('python-keystonemiddleware')
+            unitdata.kv().set(OPENSTACK_RELEASE_KEY, release_version)
+        return release_version
+
+
+@_map_default_handler('amqp.connected')
+def make_default_amqp_connection_handler():
+
+    @reactive.when('amqp.connected')
+    def default_amqp_connection(amqp):
+        """Handle the default amqp connection.
+
+        This requires that the charm implements get_amqp_credentials() to
+        provide a tuple of the (user, vhost) for the amqp server
+        """
+        instance = OpenStackCharm.singleton
+        user, vhost = instance.get_amqp_credentials()
+        amqp.request_access(username=user, vhost=vhost)
+        instance.assess_status()
+
+
+@_map_default_handler('shared-db.connected')
+def make_default_setup_database_handler():
+
+    @reactive.when('shared-db.connected')
+    def default_setup_database(database):
+        """Handle the default database connection setup
+
+        This requires that the charm implements get_database_setup() to provide
+        a list of dictionaries;
+        [{'database': ..., 'username': ..., 'hostname': ..., 'prefix': ...}]
+
+        The prefix can be missing: it defaults to None.
+        """
+        instance = OpenStackCharm.singleton
+        for db in instance.get_database_setup():
+            database.configure(**db)
+        instance.assess_status()
+
+
+@_map_default_handler('identity-service.connected')
+def make_default_setup_endpoint_connection():
+
+    @reactive.when('identity-service.connected')
+    def default_setup_endpoint_connection(keystone):
+        """When the keystone interface connects, register this unit into the
+        catalog.  This is the default handler, and calls on the charm class to
+        provide the endpoint information.  If multiple endpoints are needed,
+        then a custom endpoint handler will be needed.
+        """
+        instance = OpenStackCharm.singleton
+        keystone.register_endpoints(instance.service_type,
+                                    instance.region,
+                                    instance.public_url,
+                                    instance.internal_url,
+                                    instance.admin_url)
+        instance.assess_status()
+
+
+@_map_default_handler('identity-service.available')
+def make_setup_endpoint_available_handler():
+
+    @reactive.when('identity-service.available')
+    def default_setup_endpoint_available(keystone):
+        """When the identity-service interface is available, this default
+        handler switches on the SSL support.
+        """
+        instance = OpenStackCharm.singleton
+        instance.configure_ssl(keystone)
+        instance.assess_status()
+
+
+@_map_default_handler('config.changed')
+def make_default_config_changed_handler():
+
+    @reactive.when('config.changed')
+    def default_config_changed():
+        """Default handler for config.changed state from reactive.  Just see if
+        our status has changed.  This is just to clear any errors that may have
+        got stuck due to missing async handlers, etc.
+        """
+        OpenStackCharm.singleton.assess_status()
+
+
+def default_render_configs(*interfaces):
+    """Default renderer for configurations.  Really just a proxy for
+    OpenstackCharm.singleton.render_configs(..) with a call to update the
+    workload status afterwards.
+
+    :params *interfaces: the list of interfaces to provide to the
+        render_configs() function
+    """
+    instance = OpenStackCharm.singleton
+    instance.render_configs(interfaces)
+    instance.assess_status()
+
+
+@_map_default_handler('update-status')
+def make_default_update_status_handler():
+
+    @reactive.when('update-status')
+    def default_update_status():
+        """Default handler for update-status state.
+        Just call update status.
+        """
+        OpenStackCharm.singleton.assess_status()
+
+
+# End of default handlers
+
+def optional_interfaces(args, *interfaces):
+    """Return a tuple with possible optional interfaces
+
+    :param args: a list of reactive interfaces
+    :param *interfaces: list of strings representing possible reactive
+        interfaces.
+    :returns: [list of reactive interfaces]
+    """
+    return args + tuple(ri for ri in (reactive.RelationBase.from_state(i)
+                                      for i in interfaces)
+                        if ri is not None)
+
+
+# Note that we are breaking the camalcase rule as this is acting as a
+# decoarator and a context manager, neither of which are expecting a 'class'
+class provide_charm_instance(object):
+    """Be a decoarator and a context manager at the same time to be able to
+    easily provide the charm instance to some code that needs it.
+
+    Allows the charm author to either write:
+
+        @provide_charm_instance
+        def some_handler(charm_instance, *args):
+            charm_instance.method_call(*args)
+
+    or:
+
+        with provide_charm_instance() as charm_instance:
+            charm_instance.some_method()
+    """
+
+    def __init__(self, f=None):
+        self.f = f
+        if f:
+            functools.update_wrapper(self, f)
+
+    def __call__(self, *args, **kwargs):
+        return self.f(OpenStackCharm.singleton, *args, **kwargs)
+
+    def __enter__(self):
+        """with statement as gets the charm instance"""
+        return OpenStackCharm.singleton
+
+    def __exit__(self, *_):
+        # Never bother with the exception
+        return False
+
+
+# Start of charm definitions
 
 def get_charm_instance(release=None, *args, **kwargs):
     """Get an instance of the charm based on the release (or use the
@@ -102,20 +360,22 @@ def get_charm_instance(release=None, *args, **kwargs):
     if release is None:
         # take the latest version of the charm if no release is passed.
         cls = _releases[known_releases[-1]]
-    elif release < known_releases[0]:
-        raise RuntimeError(
-            "Release {} is not supported by this charm. Earliest support is "
-            "{} release".format(release, known_releases[0]))
     else:
         # check that the release is a valid release
         if release not in KNOWN_RELEASES:
             raise RuntimeError(
                 "Release {} is not a known OpenStack release?".format(release))
-        # try to find the release that is supported.
-        for known_release in reversed(known_releases):
-            if release >= known_release:
-                cls = _releases[known_release]
-                break
+        release_index = KNOWN_RELEASES.index(release)
+        if release_index < KNOWN_RELEASES.index(known_releases[0]):
+            raise RuntimeError(
+                "Release {} is not supported by this charm. Earliest support "
+                "is {} release".format(release, known_releases[0]))
+        else:
+            # try to find the release that is supported.
+            for known_release in reversed(known_releases):
+                if release_index >= KNOWN_RELEASES.index(known_release):
+                    cls = _releases[known_release]
+                    break
     if cls is None:
         raise RuntimeError("Release {} is not supported".format(release))
     return cls(release=release, *args, **kwargs)
@@ -270,7 +530,12 @@ class OpenStackCharm(object):
     services = []
 
     # The adapters class that this charm uses to adapt interfaces.
-    adapters_class = None
+    # If None, then it defaults to OpenstackRelationsAdapter
+    adapters_class = os_adapters.OpenStackRelationAdapters
+
+    # The configuration base class to use for the charm
+    # If None, then the default ConfigurationAdapter is used.
+    configuration_class = os_adapters.ConfigurationAdapter
 
     ha_resources = []
     adapters_class = None
@@ -291,13 +556,14 @@ class OpenStackCharm(object):
 
         :param interfaces: list of interface instances for the charm.
         :param config: the config for the charm (optionally None for
-        automatically using config())
+            automatically using config())
         """
         self.config = config or hookenv.config()
         self.release = release
         self.adapters_instance = None
         if interfaces and self.adapters_class:
-            self.adapters_instance = self.adapters_class(interfaces)
+            self.adapters_instance = self.adapters_class(interfaces,
+                                                         charm_instance=self)
 
     @property
     def all_packages(self):
@@ -467,7 +733,8 @@ class OpenStackCharm(object):
             configs = self.full_restart_map.keys()
         self.render_configs(
             configs,
-            adapters_instance=self.adapters_class(interfaces))
+            adapters_instance=self.adapters_class(interfaces,
+                                                  charm_instance=self))
 
     def restart_all(self):
         """Restart all the services configured in the self.services[]
@@ -581,7 +848,7 @@ class OpenStackCharm(object):
         available_states = reactive.bus.get_states().keys()
         status = None
         messages = []
-        for relation, states in states_to_check.items():
+        for relation, states in six.iteritems(states_to_check):
             for state, err_status, err_msg in states:
                 if state not in available_states:
                     messages.append(err_msg)
@@ -715,7 +982,7 @@ class OpenStackCharm(object):
             return None
 
         vers_map = os_utils.OPENSTACK_CODENAMES
-        for version, cname in vers_map.items():
+        for version, cname in six.iteritems(vers_map):
             if cname == codename:
                 return version
 
@@ -790,7 +1057,60 @@ class OpenStackCharm(object):
             hookenv.log("Deferring DB sync to leader", level=hookenv.INFO)
 
 
-class HAOpenStackCharm(OpenStackCharm):
+class OpenStackAPICharm(OpenStackCharm):
+    """The base class for API OS charms -- this just bakes in the default
+    configuration and adapter classes.
+    """
+    abstract_class = True
+
+    # The adapters class that this charm uses to adapt interfaces.
+    # If None, then it defaults to OpenstackRelationAdapters
+    adapters_class = os_adapters.OpenStackAPIRelationAdapters
+
+    # The configuration base class to use for the charm
+    # If None, then the default ConfigurationAdapter is used.
+    configuration_class = os_adapters.APIConfigurationAdapter
+
+    def get_amqp_credentials(self):
+        """Provide the default amqp username and vhost as a tuple.
+
+        This needs to be overriden in a derived class to provide the username
+        and vhost to the amqp interface IF the default amqp handlers are being
+        used.
+        :returns (username, host): two strings to send to the amqp provider.
+        """
+        raise RuntimeError(
+            "get_amqp_credentials() needs to be overriden in the derived "
+            "class")
+
+    def get_database_setup(self):
+        """Provide the default database credentials as a list of 3-tuples
+
+        This is used when using the default handlers for the shared-db service
+        and provides the (db, db_user, ip) for each database as a list.
+
+        returns a structure of:
+        [
+            {'database': <database>,
+             'username': <username>,
+             'hostname': <hostname of this unit>
+             'prefix': <the optional prefix for the database>, },
+        ]
+
+        This allows multiple databases to be setup.
+
+        If more complex database setup is required, then the default
+        setup_database() will need to be ignored, and a custom function
+        written.
+
+        :returns [{'database': ...}, ...]: credentials for multiple databases
+        """
+        raise RuntimeError(
+            "get_database_setup() needs to be overriden in the derived "
+            "class")
+
+
+class HAOpenStackCharm(OpenStackAPICharm):
 
     abstract_class = True
 
@@ -1064,8 +1384,8 @@ class HAOpenStackCharm(OpenStackCharm):
 
     def configure_ca(self, ca_cert, update_certs=True):
         """Write Certificate Authority certificate"""
-        cert_file = \
-            '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt'
+        cert_file = (
+            '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt')
         if ca_cert:
             with self.update_central_cacerts([cert_file], update_certs):
                 with open(cert_file, 'w') as crt:
