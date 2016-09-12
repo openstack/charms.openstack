@@ -1,0 +1,17 @@
+{
+    "neutron-device-map:physicalNetwork": {
+        "name": "{{ network }}",
+        "device": [
+            {
+                "interface": [
+                    {
+                        "macAddress": "{{ mac }}",
+                        "interface-name": "{{ interface }}"
+                    }
+                ],
+                "device-name": "{{ host }}",
+                "device-type": "vhostuser"
+            }
+        ]
+    }
+}

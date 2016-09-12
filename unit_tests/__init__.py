@@ -21,6 +21,7 @@ charmhelpers = mock.MagicMock()
 sys.modules['apt_pkg'] = apt_pkg
 sys.modules['charmhelpers'] = charmhelpers
 sys.modules['charmhelpers.core'] = charmhelpers.core
+sys.modules['charmhelpers.core.decorators'] = charmhelpers.core.decorators
 sys.modules['charmhelpers.core.hookenv'] = charmhelpers.core.hookenv
 sys.modules['charmhelpers.core.host'] = charmhelpers.core.host
 sys.modules['charmhelpers.core.templating'] = charmhelpers.core.templating
@@ -39,3 +40,23 @@ sys.modules['charmhelpers.cli'] = charmhelpers.cli
 sys.modules['charmhelpers.contrib.hahelpers'] = charmhelpers.contrib.hahelpers
 sys.modules['charmhelpers.contrib.hahelpers.cluster'] = (
     charmhelpers.contrib.hahelpers.cluster)
+
+
+def _fake_retry(num_retries, base_delay=0, exc_type=Exception):
+    def _retry_on_exception_inner_1(f):
+        def _retry_on_exception_inner_2(*args, **kwargs):
+            return f(*args, **kwargs)
+        return _retry_on_exception_inner_2
+    return _retry_on_exception_inner_1
+
+mock.patch(
+    'charmhelpers.core.decorators.retry_on_exception',
+    _fake_retry).start()
+
+
+def _fake_cached(f):
+    return f
+
+mock.patch(
+    'charmhelpers.core.hookenv.cached',
+    _fake_cached).start()
