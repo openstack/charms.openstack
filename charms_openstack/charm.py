@@ -731,10 +731,17 @@ class OpenStackCharm(object):
         """
         if not configs:
             configs = self.full_restart_map.keys()
-        self.render_configs(
-            configs,
-            adapters_instance=self.adapters_class(interfaces,
-                                                  charm_instance=self))
+        # Maintain compatability with exisiting adapter classes which have
+        # not implemented the charm_instance arg Bug #1623917
+        try:
+            self.render_configs(
+                configs,
+                adapters_instance=self.adapters_class(interfaces,
+                                                      charm_instance=self))
+        except TypeError:
+            self.render_configs(
+                configs,
+                adapters_instance=self.adapters_class(interfaces))
 
     def restart_all(self):
         """Restart all the services configured in the self.services[]

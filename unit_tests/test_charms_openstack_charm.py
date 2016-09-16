@@ -1198,6 +1198,57 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         for call in self.render.call_args_list:
             self.assertTrue(call[1]['context'])
 
+    def test_render_configs_singleton_render_with_old_style_interfaces(self):
+        # Test for fix to Bug #1623917
+        self.patch_object(chm.charmhelpers.core.templating, 'render')
+        self.patch_object(chm.os_templating,
+                          'get_loader',
+                          return_value='my-loader')
+
+        class OldSkoolAdapter(object):
+            def __init__(self, interfaces):
+                pass
+        self.patch_object(self.target.singleton, 'adapters_class')
+        self.adapters_class.side_effect = OldSkoolAdapter
+
+        self.target.singleton.render_with_interfaces(
+            ['interface1', 'interface2'])
+
+        adapter_calls = [
+            mock.call(
+                ['interface1', 'interface2'],
+                charm_instance=self.target.singleton),
+            mock.call(
+                ['interface1', 'interface2'])]
+        self.adapters_class.assert_has_calls(adapter_calls)
+
+        calls = [
+            mock.call(
+                source='path1',
+                template_loader='my-loader',
+                target='path1',
+                context=mock.ANY),
+            mock.call(
+                source='path2',
+                template_loader='my-loader',
+                target='path2',
+                context=mock.ANY),
+            mock.call(
+                source='path3',
+                template_loader='my-loader',
+                target='path3',
+                context=mock.ANY),
+            mock.call(
+                source='path4',
+                template_loader='my-loader',
+                target='path4',
+                context=mock.ANY),
+        ]
+        self.render.assert_has_calls(calls, any_order=True)
+        # Assert that None was not passed to render via the context kwarg
+        for call in self.render.call_args_list:
+            self.assertTrue(call[1]['context'])
+
     def test_assess_status_active(self):
         self.patch_object(chm.hookenv, 'status_set')
         # disable all of the check functions
