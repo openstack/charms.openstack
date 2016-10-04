@@ -675,11 +675,22 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
 class FakePeerHARelationAdapter(object):
 
     def __init__(self, relation=None, relation_name=None):
-        pass
+        self.hadict = {
+            'cluster_hosts': {'my': 'map'}}
+
+    def __getitem__(self, arg):
+        return self.hadict[arg]
 
     @property
     def single_mode_map(self):
-        return {'cluster_hosts': {'my': 'map'}}
+        return self.hadict
+
+
+class FakePeerHARelationAdapter2(FakePeerHARelationAdapter):
+
+    @property
+    def single_mode_map(self):
+        return None
 
 
 class TestOpenStackRelationAdapters(unittest.TestCase):
@@ -916,4 +927,24 @@ class TestCustomOpenStackAPIRelationAdapters(unittest.TestCase):
             self.assertEqual(b.my_name.us, 'this-us')
             self.assertEqual(b.options.instancearg, 'instancearg1')
             self.assertEqual(b.options.customarg, 'customarg1')
-            self.assertEqual(a.cluster['cluster_hosts'], {'my': 'map'})
+            self.assertEqual(b.cluster['cluster_hosts'], {'my': 'map'})
+
+    def test_add_cluster(self):
+        test_config = {
+            'one': 1,
+            'two': 2,
+            'three': 3,
+            'that-one': 4
+        }
+        with mock.patch.object(adapters.hookenv, 'related_units',
+                               return_value=[]), \
+                mock.patch.object(adapters.hookenv,
+                                  'config',
+                                  new=lambda: test_config), \
+                mock.patch.object(adapters.reactive.RelationBase,
+                                  'from_state',
+                                  new=FakePeerHARelationAdapter), \
+                mock.patch.object(adapters, 'PeerHARelationAdapter',
+                                  new=FakePeerHARelationAdapter2):
+            b = MyOpenStackAPIRelationAdapters([])
+            self.assertEqual(b.cluster['cluster_hosts'], {'my': 'map'})
