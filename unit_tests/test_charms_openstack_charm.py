@@ -997,6 +997,7 @@ class MyOpenStackCharm(chm.OpenStackCharm):
     release = 'icehouse'
     name = 'my-charm'
     packages = ['p1', 'p2', 'p3', 'package-to-filter']
+    version_package = 'p2'
     api_ports = {
         'service1': {
             chm.os_ip.PUBLIC: 1,
@@ -1118,6 +1119,30 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                           return_value='my-ip-address')
         self.assertEqual(self.target.internal_url, 'my-ip-address:3579')
         self.canonical_url.assert_called_once_with(chm.os_ip.INTERNAL)
+
+    def test_application_version_unspecified(self):
+        self.patch_object(chm.os_utils, 'os_release')
+        self.patch_object(chm, 'get_upstream_version',
+                          return_value='1.2.3')
+        self.target.version_package = None
+        self.assertEqual(self.target.application_version, '1.2.3')
+        self.get_upstream_version.assert_called_once_with('p1')
+
+    def test_application_version_package(self):
+        self.patch_object(chm.os_utils, 'os_release')
+        self.patch_object(chm, 'get_upstream_version',
+                          return_value='1.2.3')
+        self.assertEqual(self.target.application_version, '1.2.3')
+        self.get_upstream_version.assert_called_once_with('p2')
+
+    def test_application_version_dfs(self):
+        self.patch_object(chm.os_utils, 'os_release',
+                          return_value='mitaka')
+        self.patch_object(chm, 'get_upstream_version',
+                          return_value=None)
+        self.assertEqual(self.target.application_version, 'mitaka')
+        self.get_upstream_version.assert_called_once_with('p2')
+        self.os_release.assert_called_once_with('p2')
 
     def test_render_all_configs(self):
         self.patch_target('render_configs')
@@ -1251,6 +1276,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_assess_status_active(self):
         self.patch_object(chm.hookenv, 'status_set')
+        self.patch_object(chm.hookenv, 'application_version_set')
         # disable all of the check functions
         self.patch_target('check_if_paused', return_value=(None, None))
         self.patch_target('check_interfaces', return_value=(None, None))
@@ -1259,6 +1285,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('check_services_running', return_value=(None, None))
         self.target.assess_status()
         self.status_set.assert_called_once_with('active', 'Unit is ready')
+        self.application_version_set.assert_called_once_with(mock.ANY)
         # check all the check functions got called
         self.check_if_paused.assert_called_once_with()
         self.check_interfaces.assert_called_once_with()
@@ -1267,11 +1294,13 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_assess_status_paused(self):
         self.patch_object(chm.hookenv, 'status_set')
+        self.patch_object(chm.hookenv, 'application_version_set')
         # patch out _ows_check_if_paused
         self.patch_object(chm.os_utils, '_ows_check_if_paused',
                           return_value=('paused', '123'))
         self.target.assess_status()
         self.status_set.assert_called_once_with('paused', '123')
+        self.application_version_set.assert_called_once_with(mock.ANY)
         self._ows_check_if_paused.assert_called_once_with(
             services=self.target.services,
             ports=[1, 2, 3, 1234, 2468, 3579])

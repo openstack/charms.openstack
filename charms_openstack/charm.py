@@ -39,7 +39,7 @@ import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charmhelpers.core.templating
 import charmhelpers.core.unitdata as unitdata
-import charmhelpers.fetch
+import charmhelpers.fetch as fetch
 import charms.reactive as reactive
 
 import charms_openstack.ip as os_ip
@@ -502,6 +502,10 @@ class OpenStackCharm(object):
     # List of packages to install
     packages = []
 
+    # Package to determine application version from
+    # defaults to first in packages if not provided
+    version_package = None
+
     # Dictionary mapping services to ports for public, admin and
     # internal endpoints
     api_ports = {}
@@ -589,11 +593,11 @@ class OpenStackCharm(object):
         """Install packages related to this charm based on
         contents of self.packages attribute.
         """
-        packages = charmhelpers.fetch.filter_installed_packages(
+        packages = fetch.filter_installed_packages(
             self.all_packages)
         if packages:
             hookenv.status_set('maintenance', 'Installing packages')
-            charmhelpers.fetch.apt_install(packages, fatal=True)
+            fetch.apt_install(packages, fatal=True)
         self.set_state('{}-installed'.format(self.name))
         hookenv.status_set('maintenance',
                            'Installation complete - awaiting next status')
@@ -628,7 +632,7 @@ class OpenStackCharm(object):
         updates the packages list on the unit.
         """
         os_utils.configure_installation_source(self.config['openstack-origin'])
-        charmhelpers.fetch.apt_update(fatal=True)
+        fetch.apt_update(fatal=True)
 
     @property
     def region(self):
@@ -662,6 +666,20 @@ class OpenStackCharm(object):
         return "{}:{}".format(os_ip.canonical_url(os_ip.INTERNAL),
                               self.api_port(self.default_service,
                                             os_ip.INTERNAL))
+
+    @property
+    def application_version(self):
+        """Return the current version of the application being deployed by
+        the charm, as indicated by the version_package attribute
+        """
+        if not self.version_package:
+            self.version_package = self.packages[0]
+        version = get_upstream_version(
+            self.version_package
+        )
+        if not version:
+            version = os_utils.os_release(self.version_package)
+        return version
 
     @contextlib.contextmanager
     def restart_on_change(self):
@@ -788,8 +806,10 @@ class OpenStackCharm(object):
         override :meth:`ports_to_check()` and return an empty list.
 
         SIDE EFFECT: this function calls status_set(state, message) to set the
-        workload status in juju.
+        workload status in juju and calls application_version_set(vers) to set
+        the application version in juju.
         """
+        hookenv.application_version_set(self.application_version)
         for f in [self.check_if_paused,
                   self.check_interfaces,
                   self.custom_assess_status_check,
@@ -945,7 +965,7 @@ class OpenStackCharm(object):
         :param fatal: bool Raise exception if pkg not installed
         :returns: str OpenStack version name corresponding to package
         """
-        cache = charmhelpers.fetch.apt_cache()
+        cache = fetch.apt_cache()
 
         try:
             pkg = cache[package]
@@ -1030,17 +1050,17 @@ class OpenStackCharm(object):
         hookenv.log('Performing OpenStack upgrade to %s.' % (new_os_rel))
 
         os_utils.configure_installation_source(new_src)
-        charmhelpers.fetch.apt_update()
+        fetch.apt_update()
 
         dpkg_opts = [
             '--option', 'Dpkg::Options::=--force-confnew',
             '--option', 'Dpkg::Options::=--force-confdef',
         ]
-        charmhelpers.fetch.apt_upgrade(
+        fetch.apt_upgrade(
             options=dpkg_opts,
             fatal=True,
             dist=True)
-        charmhelpers.fetch.apt_install(
+        fetch.apt_install(
             packages=self.all_packages,
             options=dpkg_opts,
             fatal=True)
@@ -1415,3 +1435,25 @@ class HAOpenStackCharm(OpenStackAPICharm):
                 cluster.set_address(
                     os_ip.ADDRESS_MAP[addr_type]['binding'],
                     laddr)
+
+
+# TODO: drop once charmhelpers releases a new version
+#       with this function in the fetch helper (> 0.9.1)
+def get_upstream_version(package):
+    """Determine upstream version based on installed package
+
+    @returns None (if not installed) or the upstream version
+    """
+    import apt_pkg
+    cache = ch_host.apt_cache()
+    try:
+        pkg = cache[package]
+    except:
+        # the package is unknown to the current apt cache.
+        return None
+
+    if not pkg.current_ver:
+        # package is known, but no version is currently installed.
+        return None
+
+    return apt_pkg.upstream_version(pkg.current_ver.ver_str)
