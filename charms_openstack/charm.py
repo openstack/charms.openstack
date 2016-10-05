@@ -1445,7 +1445,7 @@ def get_upstream_version(package):
     @returns None (if not installed) or the upstream version
     """
     import apt_pkg
-    cache = ch_host.apt_cache()
+    cache = fetch.apt_cache()
     try:
         pkg = cache[package]
     except:
