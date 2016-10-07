@@ -389,9 +389,9 @@ class TestDefaults(BaseOpenStackCharmTest):
 
     def test_default_update_status_handler(self):
         self.assertIn('update-status', chm._default_handler_map)
-        self.patch_object(chm.reactive, 'when')
+        self.patch_object(chm.reactive, 'hook')
         h = self.mock_decorator_gen()
-        self.when.side_effect = h.decorator
+        self.hook.side_effect = h.decorator
         # call the default handler installer function, and check its map.
         f = chm._default_handler_map['update-status']
         f()

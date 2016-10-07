@@ -113,11 +113,13 @@ class TestRegisteredHooks(PatchHelper):
             'default_config_changed': ('config.changed', ),
             'default_setup_endpoint_available': (
                 'identity-service.available', ),
-            'default_update_status': ('update-status', ),
         },
         'when_not': {
             'default_install': ('charm.installed', ),
-        }
+        },
+        'hook': {
+            'default_update_status': ('update-status', ),
+        },
     }
 
     @staticmethod

@@ -279,7 +279,7 @@ def default_render_configs(*interfaces):
 @_map_default_handler('update-status')
 def make_default_update_status_handler():
 
-    @reactive.when('update-status')
+    @reactive.hook('update-status')
     def default_update_status():
         """Default handler for update-status state.
         Just call update status.
