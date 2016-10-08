@@ -135,7 +135,7 @@ class TestFunctions(BaseOpenStackCharmTest):
     def test_get_default_release(self):
         # TODO this may be the wrong logic.  Assume latest release if no
         # release is passed?
-        self.assertTrue(isinstance(chm.get_charm_instance(), self.C3))
+        self.assertIsInstance(chm.get_charm_instance(), self.C3)
 
 
 class TestRegisterOSReleaseSelector(unittest.TestCase):
@@ -1045,13 +1045,13 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         # e.g. MyNextOpenStackCharm
         s = self.target.singleton
         self.assertEqual(s.__class__.release, 'mitaka')
-        self.assertTrue(isinstance(s, MyOpenStackCharm))
+        self.assertIsInstance(s, MyOpenStackCharm)
         # should also be the second one, as it's the latest
-        self.assertTrue(isinstance(s, MyNextOpenStackCharm))
-        self.assertTrue(isinstance(MyOpenStackCharm.singleton,
-                                   MyOpenStackCharm))
-        self.assertTrue(isinstance(chm.OpenStackCharm.singleton,
-                                   MyOpenStackCharm))
+        self.assertIsInstance(s, MyNextOpenStackCharm)
+        self.assertIsInstance(MyOpenStackCharm.singleton,
+                              MyOpenStackCharm)
+        self.assertIsInstance(chm.OpenStackCharm.singleton,
+                              MyOpenStackCharm)
         self.assertEqual(s, chm.OpenStackCharm.singleton)
         # Note that get_charm_instance() returns NEW instance each time.
         self.assertNotEqual(s, chm.get_charm_instance())
