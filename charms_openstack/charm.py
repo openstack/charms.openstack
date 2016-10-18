@@ -1098,6 +1098,13 @@ class OpenStackAPICharm(OpenStackCharm):
     # If None, then the default ConfigurationAdapter is used.
     configuration_class = os_adapters.APIConfigurationAdapter
 
+    def install(self):
+        """Install packages related to this charm based on
+        contents of self.packages attribute.
+        """
+        self.configure_source()
+        super(OpenStackAPICharm, self).install()
+
     def get_amqp_credentials(self):
         """Provide the default amqp username and vhost as a tuple.
 

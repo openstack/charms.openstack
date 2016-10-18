@@ -633,6 +633,19 @@ class TestOpenStackAPICharm(BaseOpenStackCharmTest):
         super(TestOpenStackAPICharm, self).setUp(chm.OpenStackAPICharm,
                                                  TEST_CONFIG)
 
+    def test_install(self):
+        # Test set_state and configure_source are called
+        self.patch_target('set_state')
+        self.patch_target('configure_source')
+        self.patch_object(chm.charmhelpers.fetch,
+                          'filter_installed_packages',
+                          name='fip',
+                          return_value=None)
+        self.target.install()
+        self.target.set_state.assert_called_once_with('charmname-installed')
+        self.target.configure_source.assert_called_once_with()
+        self.fip.assert_called_once_with([])
+
     def test_get_amqp_credentials(self):
         # verify that the instance throws an error if not overriden
         with self.assertRaises(RuntimeError):
