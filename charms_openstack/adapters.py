@@ -691,7 +691,9 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
         """
         info = {}
-        ip = getattr(self, 'vip', self.local_address)
+        # Bug #1640393. Return self.local_address if vip is undefined, None or
+        #               an empty string.
+        ip = getattr(self, 'vip', None) or self.local_address
         proto = 'https' if self.apache_enabled else 'http'
         if self.port_map:
             for service in self.port_map.keys():

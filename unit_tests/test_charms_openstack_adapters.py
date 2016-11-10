@@ -458,6 +458,33 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             self.assertEqual(c.haproxy_host, '0.0.0.0')
             self.assertEqual(c.service_name, 'svc1')
 
+    def test_external_endpoints(self):
+        test_config = {
+            'prefer-ipv6': False,
+            'vip': None,
+        }
+        with mock.patch.object(adapters.hookenv, 'config',
+                               new=lambda: test_config), \
+                mock.patch.object(adapters.ch_utils, 'get_host_ip',
+                                  return_value='10.0.0.10'), \
+                mock.patch.object(adapters.APIConfigurationAdapter,
+                                  'get_network_addresses'), \
+                mock.patch.object(adapters.hookenv, 'local_unit',
+                                  return_value='my-unit/0'):
+            c = adapters.APIConfigurationAdapter(port_map=self.api_ports)
+            self.assertEqual(
+                c.external_endpoints, {
+                    'svc1': {
+                        'proto': 'https',
+                        'ip': '10.0.0.10',
+                        'port': 9001,
+                        'url': 'https://10.0.0.10:9001'},
+                    'svc2': {
+                        'proto': 'https',
+                        'ip': '10.0.0.10',
+                        'port': 9002,
+                        'url': 'https://10.0.0.10:9002'}})
+
     def test_ipv6_mode(self):
         test_config = {
             'prefer-ipv6': True,
