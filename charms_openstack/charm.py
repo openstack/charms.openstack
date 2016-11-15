@@ -260,7 +260,9 @@ def make_default_config_changed_handler():
         our status has changed.  This is just to clear any errors that may have
         got stuck due to missing async handlers, etc.
         """
-        OpenStackCharm.singleton.assess_status()
+        instance = OpenStackCharm.singleton
+        instance.config_changed()
+        instance.assess_status()
 
 
 def default_render_configs(*interfaces):
@@ -564,10 +566,40 @@ class OpenStackCharm(object):
         """
         self.config = config or hookenv.config()
         self.release = release
-        self.adapters_instance = None
-        if interfaces and self.adapters_class:
-            self.adapters_instance = self.adapters_class(interfaces,
-                                                         charm_instance=self)
+        self.__adapters_instance = None
+        self.__interfaces = interfaces or []
+        self.__options = None
+
+    @property
+    def adapters_instance(self):
+        """Lazily return the adapters_interface which is constructable from the
+        self.__interfaces and if the self.adapters_class exists
+
+        Note by DEFAULT self.adapters_class is set; this would only be None
+        if a derived class wanted to switch off this functionality!
+
+        :returns: the adapters_instance or None if there is not
+            self.adapters_class
+        """
+        if self.__adapters_instance is None and self.adapters_class:
+            self.__adapters_instance = self.adapters_class(
+                self.__interfaces, charm_instance=self)
+        return self.__adapters_instance
+
+    @property
+    def options(self):
+        """Lazily return the options for the charm when this is first called
+
+        We want the fancy options here too that's normally on the adapters
+        class as it means the charm get access to computed options as well.
+
+        :returns: an options instance based on the configuration_class
+        """
+        if self.__options is None:
+            self.__options = os_adapters.make_default_options(
+                base_cls=getattr(self, 'configuration_class', None),
+                charm_instance=self)
+        return self.__options
 
     @property
     def all_packages(self):
@@ -598,6 +630,7 @@ class OpenStackCharm(object):
         if packages:
             hookenv.status_set('maintenance', 'Installing packages')
             fetch.apt_install(packages, fatal=True)
+        # AJK: we set this as charms can use it to detect installed state
         self.set_state('{}-installed'.format(self.name))
         hookenv.status_set('maintenance',
                            'Installation complete - awaiting next status')
@@ -613,6 +646,27 @@ class OpenStackCharm(object):
     def get_state(self, state):
         """proxy for charms.reactive.bus.get_state()"""
         return reactive.bus.get_state(state)
+
+    def get_adapter(self, state, adapters_instance=None):
+        """Get the adaptered interface for a state or None if the state doesn't
+        yet exist.
+
+        Uses the self.adapters_instance to get the adapter if the passed
+        adapters_instance is None, which should be fine for almost every
+        possible usage.
+
+        :param state: <string> of the state to get an adapter for.
+        :param adapters_instance: Class which has make_adapter() method
+        :returns: None if the state doesn't exist, or the adapter
+        """
+        interface = reactive.RelationBase.from_state(state)
+        if interface is None:
+            return None
+        adapters_instance = adapters_instance or self.adapters_instance
+        if adapters_instance is None:
+            adapters_instance = self.adapters_class([], charm_instance=self)
+        _, adapter = adapters_instance.make_adapter(interface)
+        return adapter
 
     def api_port(self, service, endpoint_type=os_ip.PUBLIC):
         """Return the API port for a particular endpoint type from the
@@ -713,7 +767,9 @@ class OpenStackCharm(object):
         the restart_the_services() method.
 
         If adapters_instance is None then the self.adapters_instance is used
-        that was setup in the __init__() method.
+        that was setup in the __init__() method.  Note, if no interfaces were
+        passed (the default) then there will be no interfaces for this
+        function!
 
         :param adapters_instance: [optional] the adapters_instance to use.
         """
@@ -725,7 +781,13 @@ class OpenStackCharm(object):
         configs.
 
         If adapters_instance is None then the self.adapters_instance is used
-        that was setup in the __init__() method.
+        that was setup in the __init__() method.  Note, if no interfaces were
+        passed (the default) then there will be no interfaces.
+
+        TODO: need to work out how to make this function more useful - at the
+        moment, with a default setup, this function is only useful to
+        render_with_interfaces() which constructs a new adapters_instance
+        anyway.
 
         :param configs: list of strings, the names of the configuration files.
         :param adapters_instance: [optional] the adapters_instance to use.
@@ -783,6 +845,13 @@ class OpenStackCharm(object):
             # render_domain_config needs a working system
             self.restart_all()
 
+    def config_changed(self):
+        """A Nop that can be overridden in the derived charm class.
+        If the default 'config.changed' state handler is used, then this will
+        be called as a result of that state.
+        """
+        pass
+
     def assess_status(self):
         """Assess the status of the unit and set the status and a useful
         message as appropriate.
@@ -791,9 +860,9 @@ class OpenStackCharm(object):
 
          1. Check if the unit has been paused (using
             os_utils.is_unit_paused_set().
-         2. Check if the interfaces are all present (using the states that are
+         2. Do a custom_assess_status_check() check.
+         3. Check if the interfaces are all present (using the states that are
             set by each interface as it comes 'live'.
-         3. Do a custom_assess_status_check() check.
          4. Check that services that should be running are running.
 
         Each sub-function determins what checks are taking place.
@@ -811,8 +880,8 @@ class OpenStackCharm(object):
         """
         hookenv.application_version_set(self.application_version)
         for f in [self.check_if_paused,
-                  self.check_interfaces,
                   self.custom_assess_status_check,
+                  self.check_interfaces,
                   self.check_services_running]:
             state, message = f()
             if state is not None:
@@ -1151,7 +1220,6 @@ class HAOpenStackCharm(OpenStackAPICharm):
     def __init__(self, **kwargs):
         super(HAOpenStackCharm, self).__init__(**kwargs)
         self.set_haproxy_stat_password()
-        self.set_config_defined_certs_and_keys()
 
     @property
     def apache_vhost_file(self):
@@ -1354,19 +1422,26 @@ class HAOpenStackCharm(OpenStackAPICharm):
         else:
             return []
 
-    def set_config_defined_certs_and_keys(self):
-        """Set class attributes for user defined ssl options
+    def _get_b64decode_for(self, param):
+        config_value = self.config.get(param)
+        if config_value:
+            return base64.b64decode(config_value)
+        return None
 
-        Inspect user defined SSL config and set
-        config_defined_{ssl_key, ssl_cert, ssl_ca}
-        """
-        for ssl_param in ['ssl_key', 'ssl_cert', 'ssl_ca']:
-            key = 'config_defined_{}'.format(ssl_param)
-            if self.config.get(ssl_param):
-                setattr(self, key,
-                        base64.b64decode(self.config.get(ssl_param)))
-            else:
-                setattr(self, key, None)
+    @property
+    @hookenv.cached
+    def config_defined_ssl_key(self):
+        return self._get_b64decode_for('ssl_key')
+
+    @property
+    @hookenv.cached
+    def config_defined_ssl_cert(self):
+        return self._get_b64decode_for('ssl_cert')
+
+    @property
+    @hookenv.cached
+    def config_defined_ssl_ca(self):
+        return self._get_b64decode_for('ssl_ca')
 
     @property
     def rabbit_client_cert_dir(self):

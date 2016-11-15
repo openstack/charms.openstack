@@ -222,5 +222,6 @@ class TestRegisteredHooks(PatchHelper):
                 # check that function is in patterns
                 self.assertIn(f, p.keys())
                 # check that the lists are equal
-                l = [a['args'][0] for a in args]
-                self.assertEqual(l, sorted(p[f]))
+                l = args[0]['args']
+                self.assertEqual(sorted(l), sorted(p[f]),
+                                 "for function '{}'".format(f))

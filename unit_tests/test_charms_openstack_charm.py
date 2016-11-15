@@ -642,7 +642,7 @@ class TestOpenStackAPICharm(BaseOpenStackCharmTest):
                           name='fip',
                           return_value=None)
         self.target.install()
-        self.target.set_state.assert_called_once_with('charmname-installed')
+        # self.target.set_state.assert_called_once_with('charmname-installed')
         self.target.configure_source.assert_called_once_with()
         self.fip.assert_called_once_with([])
 
@@ -820,15 +820,11 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             ['admin_addr', 'internal_addr', 'privaddr', 'public_addr'])
 
     def test_get_certs_and_keys(self):
-        self.patch_target(
-            'config_defined_ssl_cert',
-            new=b'cert')
-        self.patch_target(
-            'config_defined_ssl_key',
-            new=b'key')
-        self.patch_target(
-            'config_defined_ssl_ca',
-            new=b'ca')
+        config = {
+            'ssl_key': base64.b64encode(b'key'),
+            'ssl_cert': base64.b64encode(b'cert'),
+            'ssl_ca': base64.b64encode(b'ca')}
+        self.patch_target('config', new=config)
         self.assertEqual(
             self.target.get_certs_and_keys(),
             [{'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': None}])
@@ -883,13 +879,13 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             self.target.get_certs_and_keys(keystone_interface=KSInterface()),
             expect)
 
-    def test_set_config_defined_certs_and_keys(self):
+    def test_config_defined_certs_and_keys(self):
+        # test that the cached parameters do what we expect
         config = {
             'ssl_key': base64.b64encode(b'confkey'),
             'ssl_cert': base64.b64encode(b'confcert'),
             'ssl_ca': base64.b64encode(b'confca')}
         self.patch_target('config', new=config)
-        self.target.set_config_defined_certs_and_keys()
         self.assertEqual(self.target.config_defined_ssl_key, b'confkey')
         self.assertEqual(self.target.config_defined_ssl_cert, b'confcert')
         self.assertEqual(self.target.config_defined_ssl_ca, b'confca')
@@ -1087,7 +1083,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_install(self):
         # tests that the packages are filtered before installation
-        self.patch_target('set_state')
+        # self.patch_target('set_state')
         self.patch_object(chm.charmhelpers.fetch,
                           'filter_installed_packages',
                           return_value=None,
@@ -1096,7 +1092,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm.hookenv, 'status_set')
         self.patch_object(chm.hookenv, 'apt_install')
         self.target.install()
-        self.target.set_state.assert_called_once_with('my-charm-installed')
+        # TODO: remove next commented line as we don't set this state anymore
+        # self.target.set_state.assert_called_once_with('my-charm-installed')
         self.fip.assert_called_once_with(self.target.packages)
         self.status_set.assert_has_calls([
             mock.call('maintenance', 'Installing packages'),

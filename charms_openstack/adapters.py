@@ -15,6 +15,7 @@
 """Adapter classes and utilities for use with Reactive interfaces"""
 from __future__ import absolute_import
 
+import itertools
 import re
 import weakref
 
@@ -403,6 +404,22 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
         return self.get_uri()
 
 
+def make_default_options(base_cls=None, charm_instance=None):
+    """Create a default, customised ConfigurationAdapter, or derived class
+    (based on the base_cls) using any custom properties that might have been
+    made.
+
+    If base_cls is None, the the default ConfigurationAdapter will be used.
+
+    :param base_cls: a ConfigurationAdapter or derived class
+    :param charm_instance: the charm instance to plug into the options.
+    """
+    return make_default_configuration_adapter_class(
+        base_cls=base_cls,
+        custom_properties=_custom_config_properties)(
+            charm_instance=charm_instance)
+
+
 def make_default_configuration_adapter_class(base_cls=None,
                                              custom_properties=None):
     """Create a default configuration adapter, using the base type specified
@@ -508,19 +525,34 @@ class APIConfigurationAdapter(ConfigurationAdapter):
             self.service_name = self.charm_instance.name
         else:
             self.service_name = None
-        self.network_addresses = self.get_network_addresses()
+        self.__network_addresses = None
+
+    @property
+    def network_addresses(self):
+        """Return the network_addresses as a property for a consuming template.
+
+        See APIConfigurationAdapter.get_network_addresses() for detail on the
+        return type.
+        """
+        # cache and lazy resolve the network addresses - also helps with unit
+        # testing
+        if self.__network_addresses is None:
+            self.__network_addresses = self.get_network_addresses()
+        return self.__network_addresses
 
     @property
     def external_ports(self):
         """Return ports the service will be accessed on
 
+        The self.port_map is a dictionary of dictionarys, where the ports are
+        two levels deep (the leaves).  This returns a set() of those ports.
+
         @return set of ports service can be accessed on
         """
-        ext_ports = set()
-        for svc in self.port_map.keys():
-            for net_type in self.port_map[svc].keys():
-                ext_ports.add(self.port_map[svc][net_type])
-        return ext_ports
+        # the map take the first list of dictionaries to extract the 2nd level
+        # of values.
+        return set(itertools.chain(*map(lambda x: x.values(),
+                                        self.port_map.values())))
 
     @property
     def ipv6_mode(self):
@@ -836,7 +868,7 @@ class OpenStackRelationAdapters(object):
         self._charm_instance_weakref = None
         if charm_instance is not None:
             self._charm_instance_weakref = weakref.ref(charm_instance)
-        self._relations = []
+        self._relations = set()
         if options is not None:
             hookenv.log("The 'options' argument is deprecated please use "
                         "options_instance instead.", level=hookenv.WARNING)
@@ -848,15 +880,12 @@ class OpenStackRelationAdapters(object):
             # APIConfigurationAdapter is needed as a base, then it must be
             # passed as an instance on the options_instance First pull the
             # configuration class from the charm instance (if it's available).
-            base_cls = ConfigurationAdapter
+            base_cls = None
             if self.charm_instance:
                 base_cls = getattr(self.charm_instance, 'configuration_class',
                                    base_cls)
-            self.options = make_default_configuration_adapter_class(
-                base_cls=base_cls,
-                custom_properties=_custom_config_properties)(
-                    charm_instance=self.charm_instance)
-        self._relations.append('options')
+            self.options = make_default_options(base_cls, self.charm_instance)
+        self._relations.add('options')
         # walk the mro() from object to this class to build up the _adapters
         # ensure that all of the relations' have their '-' turned into a '_' to
         # ensure that everything is consistent in the class.
@@ -875,14 +904,7 @@ class OpenStackRelationAdapters(object):
                 cls = OpenStackRelationAdapter
             self._adapters[relation] = make_default_relation_adapter(
                 cls, relation, properties)
-        for relation in relations:
-            relation_name = relation.relation_name.replace('-', '_')
-            try:
-                relation_value = self._adapters[relation_name](relation)
-            except KeyError:
-                relation_value = OpenStackRelationAdapter(relation)
-            setattr(self, relation_name, relation_value)
-            self._relations.append(relation_name)
+        self.add_relations(relations)
 
     @property
     def charm_instance(self):
@@ -897,6 +919,39 @@ class OpenStackRelationAdapters(object):
         """
         for relation in self._relations:
             yield relation, getattr(self, relation)
+
+    def add_relations(self, relations):
+        """Add the relations to this adapters instance for use as a context.
+
+        :params relations: list of RAW reactive relation instances.
+        """
+        for relation in relations:
+            self.add_relation(relation)
+
+    def add_relation(self, relation):
+        """Add the relation to this adapters instance for use as a context.
+
+        :param relation: a RAW reactive relation instance
+        """
+        adapter_name, adapter = self.make_adapter(relation)
+        setattr(self, adapter_name, adapter)
+        self._relations.add(adapter_name)
+
+    def make_adapter(self, relation):
+        """Make an adapter from a reactive relation.
+        This returns the relation_name and the adapter instance based on the
+        registered custom adapter classes and any customised properties on
+        those adapter classes.
+
+        :param relation: a RelationBase derived reactive relation
+        :returns (string, OpenstackRelationAdapter-derived): see above.
+        """
+        relation_name = relation.relation_name.replace('-', '_')
+        try:
+            adapter = self._adapters[relation_name](relation)
+        except KeyError:
+            adapter = OpenStackRelationAdapter(relation)
+        return relation_name, adapter
 
 
 class OpenStackAPIRelationAdapters(OpenStackRelationAdapters):
@@ -920,19 +975,38 @@ class OpenStackAPIRelationAdapters(OpenStackRelationAdapters):
             options=options,
             options_instance=options_instance,
             charm_instance=charm_instance)
-        # LY: The cluster interface only gets initialised if there are more
-        # than one unit in a cluster, however, a cluster of one unit is valid
-        # for the Openstack API charms. So, create and populate the 'cluster'
-        # namespace with data for a single unit if there are no peers.
+        if 'cluster' not in self._relations:
+            # cluster has not been passed through already, so try to resolve it
+            # automatically when it is accessed.
+            self.__resolved_cluster = None
+            # add a property for the cluster to resolve it
+            self._relations.add('cluster')
+            setattr(self.__class__, 'cluster',
+                    property(lambda x: x.__cluster()))
+
+    def __cluster(self):
+        """The cluster relations is auto added onto adapters instance"""
+        if not self.__resolved_cluster:
+            self.__resolved_cluster = self.__resolve_cluster()
+        return self.__resolved_cluster
+
+    def __resolve_cluster(self):
+        """ Resolve what the cluster adapter is.
+
+        LY: The cluster interface only gets initialised if there are more
+        than one unit in a cluster, however, a cluster of one unit is valid
+        for the Openstack API charms. So, create and populate the 'cluster'
+        namespace with data for a single unit if there are no peers.
+
+        :returns: cluster adapter or None
+        """
         smm = PeerHARelationAdapter(relation_name='cluster').single_mode_map
         if smm:
-            setattr(self, 'cluster', smm)
-            self._relations.append('cluster')
-        elif 'cluster' not in self._relations:
+            return smm
+        else:
             # LY: Automatically add the cluster relation if it exists and
             # has not been passed through.
             cluster_rel = reactive.RelationBase.from_state('cluster.connected')
             if cluster_rel:
-                cluster = PeerHARelationAdapter(relation=cluster_rel)
-                setattr(self, 'cluster', cluster)
-                self._relations.append('cluster')
+                return PeerHARelationAdapter(relation=cluster_rel)
+        return None

@@ -741,12 +741,13 @@ class TestOpenStackRelationAdapters(unittest.TestCase):
             a = adapters.OpenStackRelationAdapters([amqp, shared_db, mine])
             self.assertEqual(a.amqp.private_address, 'private-address')
             self.assertEqual(a.my_name.this, 'this')
-            items = list(a)
-            self.assertEqual(items[0][0], 'options')
-#            self.assertEqual(items[1][0], 'cluster')
-            self.assertEqual(items[1][0], 'amqp')
-            self.assertEqual(items[2][0], 'shared_db')
-            self.assertEqual(items[3][0], 'my_name')
+            # pick the keys off the __iter__() for the adapters instance
+            items = [x[0] for x in list(a)]
+            self.assertTrue('options' in items)
+            # self.assertTrue('cluster' in items)
+            self.assertTrue('amqp' in items)
+            self.assertTrue('shared_db' in items)
+            self.assertTrue('my_name' in items)
 
     def test_set_charm_instance(self):
 
