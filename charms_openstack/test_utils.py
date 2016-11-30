@@ -74,7 +74,7 @@ class PatchHelper(unittest.TestCase):
         started = mocked.start()
         self._patches[name] = mocked
         self._patches_start[name] = started
-        setattr(self, attr, started)
+        setattr(self, name, started)
 
     def patch_release(self, release):
         """Patch the unitdata.kv.get() function to always return the release
@@ -221,7 +221,10 @@ class TestRegisteredHooks(PatchHelper):
             for f, args in t.items():
                 # check that function is in patterns
                 self.assertIn(f, p.keys())
-                # check that the lists are equal
-                l = args[0]['args']
+                # check that the lists are equal - this is made out of the
+                # list of dictionaries: args = [{..., 'args': (..)}, {}, ...]
+                # this flatten's the list-of-dicts['args'] to a flat tuple
+                l = tuple(itertools.chain.from_iterable(
+                    [a['args'] for a in args]))
                 self.assertEqual(sorted(l), sorted(p[f]),
                                  "for function '{}'".format(f))
