@@ -495,6 +495,7 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
                           'filter_installed_packages',
                           name='fip',
                           return_value=None)
+        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
         self.target.install()
         self.target.set_state.assert_called_once_with('charmname-installed')
         self.fip.assert_called_once_with([])
@@ -641,6 +642,7 @@ class TestOpenStackAPICharm(BaseOpenStackCharmTest):
                           'filter_installed_packages',
                           name='fip',
                           return_value=None)
+        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
         self.target.install()
         # self.target.set_state.assert_called_once_with('charmname-installed')
         self.target.configure_source.assert_called_once_with()
@@ -1091,6 +1093,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.fip.side_effect = lambda x: ['p1', 'p2']
         self.patch_object(chm.hookenv, 'status_set')
         self.patch_object(chm.hookenv, 'apt_install')
+        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
         self.target.install()
         # TODO: remove next commented line as we don't set this state anymore
         # self.target.set_state.assert_called_once_with('my-charm-installed')
@@ -1108,6 +1111,51 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             self.target.api_port('service3')
         with self.assertRaises(KeyError):
             self.target.api_port('service2', chm.os_ip.INTERNAL)
+
+    def test_update_api_ports(self):
+        self.patch_object(chm.hookenv, 'open_port')
+        self.patch_object(chm.hookenv, 'close_port')
+        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
+        self.target.api_ports = {
+            'api': {
+                'public': 1,
+                'internal': 2,
+                'admin': 3,
+            },
+        }
+        test_ports = [4, 5, 6]
+        self.target.update_api_ports(test_ports)
+        calls = [mock.call(4), mock.call(5), mock.call(6)]
+        self.open_port.assert_has_calls(calls)
+        self.open_port.reset_mock()
+        self.target.update_api_ports()
+        calls = [mock.call(1), mock.call(2), mock.call(3)]
+        self.open_port.assert_has_calls(calls)
+        self.close_port.assert_not_called()
+        # now check that it doesn't open ports already open and closes ports
+        # that should be closed
+        self.open_port.reset_mock()
+        self.close_port.reset_mock()
+        self.check_output.return_value = "1/tcp\n2/tcp\n3/udp\n4/tcp\n"
+        # port 3 should be opened, port 4 should be closed.
+        open_calls = [mock.call(3)]
+        close_calls = [mock.call(4)]
+        self.target.update_api_ports()
+        self.open_port.asset_has_calls(open_calls)
+        self.close_port.assert_has_calls(close_calls)
+
+    def test_opened_ports(self):
+        self.patch_object(chm.subprocess, 'check_output')
+        self.check_output.return_value = '\n'
+        self.assertEqual([], self.target.opened_ports())
+        self.check_output.return_value = '1/tcp\n2/tcp\n3/udp\n4/tcp\n5/udp\n'
+        self.assertEqual(['1', '2', '4'], self.target.opened_ports())
+        self.assertEqual(['1', '2', '4'],
+                         self.target.opened_ports(protocol='TCP'))
+        self.assertEqual(['3', '5'], self.target.opened_ports(protocol='udp'))
+        self.assertEqual(['1/tcp', '2/tcp', '3/udp', '4/tcp', '5/udp'],
+                         self.target.opened_ports(protocol=None))
+        self.assertEqual([], self.target.opened_ports(protocol='other'))
 
     def test_public_url(self):
         self.patch_object(chm.os_ip,
