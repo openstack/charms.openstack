@@ -271,7 +271,8 @@ statuses are supported:
    condition.
  * paused - (Not yet availble) - the unit has been put into the paused state.
 
-The default is for charms to support workload status, and the default installation method sets the status to maintenance with an install message.
+The default is for charms to support workload status, and the default
+installation method sets the status to maintenance with an install message.
 
 If the charm is not going to support workload status, _and this is not
 recommended_, then the charm author will need to override the `install()`

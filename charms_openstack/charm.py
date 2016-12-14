@@ -76,6 +76,7 @@ KNOWN_RELEASES = [
     'liberty',
     'mitaka',
     'newton',
+    'ocata',
 ]
 
 VIP_KEY = "vip"
@@ -97,6 +98,7 @@ ALLOWED_DEFAULT_HANDLERS = [
     'config.changed',
     'charm.default-select-release',
     'update-status',
+    'upgrade-charm',
 ]
 
 # Where to store the default handler functions for each default state
@@ -263,6 +265,17 @@ def make_default_config_changed_handler():
         instance = OpenStackCharm.singleton
         instance.config_changed()
         instance.assess_status()
+
+
+@_map_default_handler('upgrade-charm')
+def make_default_upgrade_charm_handler():
+
+    @reactive.hook('update-charm')
+    def default_upgrade_charm():
+        """Default handler for the 'upgrade-charm' hook.
+        This calls the charm.singleton.upgrade_charm() function as a default.
+        """
+        OpenStackCharm.singleton.upgrade_charm()
 
 
 def default_render_configs(*interfaces):
@@ -632,6 +645,7 @@ class OpenStackCharm(object):
             fetch.apt_install(packages, fatal=True)
         # AJK: we set this as charms can use it to detect installed state
         self.set_state('{}-installed'.format(self.name))
+        self.update_api_ports()
         hookenv.status_set('maintenance',
                            'Installation complete - awaiting next status')
 
@@ -648,7 +662,7 @@ class OpenStackCharm(object):
         return reactive.bus.get_state(state)
 
     def get_adapter(self, state, adapters_instance=None):
-        """Get the adaptered interface for a state or None if the state doesn't
+        """Get the adapted interface for a state or None if the state doesn't
         yet exist.
 
         Uses the self.adapters_instance to get the adapter if the passed
@@ -677,6 +691,53 @@ class OpenStackCharm(object):
         :returns: port (int)
         """
         return self.api_ports[service][endpoint_type]
+
+    def update_api_ports(self, ports=None):
+        """Update the ports list supplied (or the default ports defined in the
+        classes' api_ports member) using the juju helper.
+
+        It takes the opened-ports from Juju, checks them against the ports
+        provided.  If a port is already open, then it doesn't try to open it,
+        if it is closed, but should be open, then it opens it, and vice-versa.
+
+        :param ports: List of api port numbers or None.
+        """
+        ports = list(map(int, (
+            ports or self._default_port_list(self.api_ports or {}))))
+        current_ports = list(map(int, self.opened_ports()))
+        ports_to_open = set(ports).difference(current_ports)
+        ports_to_close = set(current_ports).difference(ports)
+        for p in ports_to_open:
+            hookenv.open_port(p)
+        for p in ports_to_close:
+            hookenv.close_port(p)
+
+    @staticmethod
+    def opened_ports(protocol="tcp"):
+        """Return a list of ports according to the protocol provided
+        Open a service network port
+
+        If protocol is intentionally set to None, then the list will be the
+        list returnted by the Juju opened-ports command.
+
+        :param (OPTIONAL) protocol: the protocol to check, TCP/UDP or None
+        :returns: List of ports open, according to the protocol
+        """
+        _args = ['opened-ports']
+        if protocol:
+            protocol = protocol.lower()
+        else:
+            protocol = ''
+        lines = [l for l in subprocess.check_output(_args).split('\n') if l]
+        ports = []
+        for line in lines:
+            p, p_type = line.split('/')
+            if protocol:
+                if protocol == p_type.lower():
+                    ports.append(p)
+            else:
+                ports.append(line)
+        return ports
 
     def configure_source(self):
         """Configure installation source using the config item
@@ -1001,6 +1062,15 @@ class OpenStackCharm(object):
             services=self.services,
             ports=self.ports_to_check(self.api_ports))
 
+    def upgrade_charm(self):
+        """Called (at least) by the default handler (if that is used).  This
+        version just checks that the ports that are open should be open and
+        that the ports that are closed should be closed.  If the charm upgrade
+        alters the ports then update_api_ports() function will adjust the ports
+        as needed.
+        """
+        self.update_api_ports()
+
     def ports_to_check(self, ports):
         """Return a flattened, sorted, unique list of ports from self.api_ports
 
@@ -1010,7 +1080,15 @@ class OpenStackCharm(object):
         :param ports: {key: {subkey: value}}
         :returns: [value1, value2, ...]
         """
-        # NB self.api_ports = {key: {space: value}}
+        return self._default_port_list(ports)
+
+    def _default_port_list(self, ports):
+        """Return a flattened, sorted, unique list of ports from self.api_ports
+
+        :param ports: {key: {subkey: value}}
+        :return: [value1, value2, ...]
+        """
+        # NB api_ports = {key: {space: value}}
         # The chain .. map  flattens all the values into a single list
         return sorted(set(itertools.chain(*map(lambda x: x.values(),
                                                ports.values()))))
