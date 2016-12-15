@@ -728,7 +728,7 @@ class OpenStackCharm(object):
             protocol = protocol.lower()
         else:
             protocol = ''
-        lines = [l for l in subprocess.check_output(_args).split('\n') if l]
+        lines = [l for l in subprocess.check_output(_args).split() if l]
         ports = []
         for line in lines:
             p, p_type = line.split('/')
