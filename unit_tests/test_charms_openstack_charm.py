@@ -495,7 +495,7 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
                           'filter_installed_packages',
                           name='fip',
                           return_value=None)
-        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
         self.target.install()
         self.target.set_state.assert_called_once_with('charmname-installed')
         self.fip.assert_called_once_with([])
@@ -642,7 +642,7 @@ class TestOpenStackAPICharm(BaseOpenStackCharmTest):
                           'filter_installed_packages',
                           name='fip',
                           return_value=None)
-        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
         self.target.install()
         # self.target.set_state.assert_called_once_with('charmname-installed')
         self.target.configure_source.assert_called_once_with()
@@ -1093,7 +1093,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.fip.side_effect = lambda x: ['p1', 'p2']
         self.patch_object(chm.hookenv, 'status_set')
         self.patch_object(chm.hookenv, 'apt_install')
-        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
         self.target.install()
         # TODO: remove next commented line as we don't set this state anymore
         # self.target.set_state.assert_called_once_with('my-charm-installed')
@@ -1115,7 +1115,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
     def test_update_api_ports(self):
         self.patch_object(chm.hookenv, 'open_port')
         self.patch_object(chm.hookenv, 'close_port')
-        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
         self.target.api_ports = {
             'api': {
                 'public': 1,
@@ -1136,7 +1136,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         # that should be closed
         self.open_port.reset_mock()
         self.close_port.reset_mock()
-        self.check_output.return_value = "1/tcp\n2/tcp\n3/udp\n4/tcp\n"
+        self.check_output.return_value = b"1/tcp\n2/tcp\n3/udp\n4/tcp\n"
         # port 3 should be opened, port 4 should be closed.
         open_calls = [mock.call(3)]
         close_calls = [mock.call(4)]
@@ -1146,9 +1146,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_opened_ports(self):
         self.patch_object(chm.subprocess, 'check_output')
-        self.check_output.return_value = '\n'
+        self.check_output.return_value = b'\n'
         self.assertEqual([], self.target.opened_ports())
-        self.check_output.return_value = '1/tcp\n2/tcp\n3/udp\n4/tcp\n5/udp\n'
+        self.check_output.return_value = b'1/tcp\n2/tcp\n3/udp\n4/tcp\n5/udp\n'
         self.assertEqual(['1', '2', '4'], self.target.opened_ports())
         self.assertEqual(['1', '2', '4'],
                          self.target.opened_ports(protocol='TCP'))
