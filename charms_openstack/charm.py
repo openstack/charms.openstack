@@ -42,8 +42,9 @@ import charmhelpers.core.unitdata as unitdata
 import charmhelpers.fetch as fetch
 import charms.reactive as reactive
 
-import charms_openstack.ip as os_ip
 import charms_openstack.adapters as os_adapters
+import charms_openstack.ip as os_ip
+import charms_openstack.os_release_data as os_release_data
 
 
 # _releases{} is a dictionary of release -> class that is instantiated
@@ -62,22 +63,6 @@ _singleton = None
 # release and commutes it to another release or just returns a release.
 # This is to enable the defining code to define which release is used.
 _release_selector_function = None
-
-# List of releases that OpenStackCharm based charms know about
-KNOWN_RELEASES = [
-    'diablo',
-    'essex',
-    'folsom',
-    'grizzly',
-    'havana',
-    'icehouse',
-    'juno',
-    'kilo',
-    'liberty',
-    'mitaka',
-    'newton',
-    'ocata',
-]
 
 VIP_KEY = "vip"
 CIDR_KEY = "vip_cidr"
@@ -377,18 +362,20 @@ def get_charm_instance(release=None, *args, **kwargs):
         cls = _releases[known_releases[-1]]
     else:
         # check that the release is a valid release
-        if release not in KNOWN_RELEASES:
+        if release not in os_release_data.KNOWN_RELEASES:
             raise RuntimeError(
                 "Release {} is not a known OpenStack release?".format(release))
-        release_index = KNOWN_RELEASES.index(release)
-        if release_index < KNOWN_RELEASES.index(known_releases[0]):
+        release_index = os_release_data.KNOWN_RELEASES.index(release)
+        if (release_index <
+                os_release_data.KNOWN_RELEASES.index(known_releases[0])):
             raise RuntimeError(
                 "Release {} is not supported by this charm. Earliest support "
                 "is {} release".format(release, known_releases[0]))
         else:
             # try to find the release that is supported.
             for known_release in reversed(known_releases):
-                if release_index >= KNOWN_RELEASES.index(known_release):
+                if (release_index >=
+                        os_release_data.KNOWN_RELEASES.index(known_release)):
                     cls = _releases[known_release]
                     break
     if cls is None:
@@ -458,7 +445,7 @@ class OpenStackCharmMeta(type):
             return
         if 'release' in members.keys():
             release = members['release']
-            if release not in KNOWN_RELEASES:
+            if release not in os_release_data.KNOWN_RELEASES:
                 raise RuntimeError(
                     "Release {} is not a known OpenStack release"
                     .format(release))
@@ -559,6 +546,7 @@ class OpenStackCharm(object):
     ha_resources = []
     adapters_class = None
     HAPROXY_CONF = '/etc/haproxy/haproxy.cfg'
+    MEMCACHE_CONF = '/etc/memcached.conf'
     package_codenames = {}
 
     @property
@@ -728,7 +716,9 @@ class OpenStackCharm(object):
             protocol = protocol.lower()
         else:
             protocol = ''
-        lines = [l for l in subprocess.check_output(_args).split() if l]
+        lines = [l for l in
+                 subprocess.check_output(_args).decode('UTF-8').split()
+                 if l]
         ports = []
         for line in lines:
             p, p_type = line.split('/')
@@ -1245,12 +1235,47 @@ class OpenStackAPICharm(OpenStackCharm):
     # If None, then the default ConfigurationAdapter is used.
     configuration_class = os_adapters.APIConfigurationAdapter
 
+    def upgrade_charm(self):
+        """Setup token cache in case previous charm version did not."""
+        self.setup_token_cache()
+        super(OpenStackAPICharm, self).upgrade_charm()
+
     def install(self):
         """Install packages related to this charm based on
         contents of self.packages attribute.
         """
         self.configure_source()
         super(OpenStackAPICharm, self).install()
+
+    def setup_token_cache(self):
+        """Check if a token cache package is needed and install it if it is"""
+        if fetch.filter_installed_packages(self.token_cache_pkgs()):
+            self.install()
+
+    def enable_memcache(self, release=None):
+        """Determine if memcache should be enabled on the local unit
+
+        @param release: release of OpenStack currently deployed
+        @returns boolean Whether memcache should be enabled
+        """
+        if not release:
+            release = os_utils.get_os_codename_install_source(
+                self.config['openstack-origin'])
+        if release not in os_release_data.KNOWN_RELEASES:
+            return ValueError("Unkown release {}".format(release))
+        return (os_release_data.KNOWN_RELEASES.index(release) >=
+                os_release_data.KNOWN_RELEASES.index('mitaka'))
+
+    def token_cache_pkgs(self, release=None):
+        """Determine additional packages needed for token caching
+
+        @param release: release of OpenStack currently deployed
+        @returns List of package to enable token caching
+        """
+        packages = []
+        if self.enable_memcache(release=release):
+            packages.extend(['memcached', 'python-memcache'])
+        return packages
 
     def get_amqp_credentials(self):
         """Provide the default amqp username and vhost as a tuple.
@@ -1289,6 +1314,30 @@ class OpenStackAPICharm(OpenStackCharm):
         raise RuntimeError(
             "get_database_setup() needs to be overriden in the derived "
             "class")
+
+    @property
+    def all_packages(self):
+        """List of packages to be installed
+
+        @return ['pkg1', 'pkg2', ...]
+        """
+        return (super(OpenStackAPICharm, self).all_packages +
+                self.token_cache_pkgs())
+
+    @property
+    def full_restart_map(self):
+        """Map of services to be restarted if a file changes
+
+        @return {
+                    'file1': ['svc1', 'svc3'],
+                    'file2': ['svc2', 'svc3'],
+                    ...
+                }
+        """
+        _restart_map = super(OpenStackAPICharm, self).full_restart_map.copy()
+        if self.enable_memcache():
+            _restart_map[self.MEMCACHE_CONF] = ['memcached']
+        return _restart_map
 
 
 class HAOpenStackCharm(OpenStackAPICharm):
@@ -1332,7 +1381,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
 
         @return ['pkg1', 'pkg2', ...]
         """
-        _packages = self.packages[:]
+        _packages = super(HAOpenStackCharm, self).all_packages
         if self.haproxy_enabled():
             _packages.append('haproxy')
         if self.apache_enabled():
@@ -1349,7 +1398,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
                     ...
                 }
         """
-        _restart_map = self.restart_map.copy()
+        _restart_map = super(HAOpenStackCharm, self).full_restart_map
         if self.haproxy_enabled():
             _restart_map[self.HAPROXY_CONF] = ['haproxy']
         if self.apache_enabled():

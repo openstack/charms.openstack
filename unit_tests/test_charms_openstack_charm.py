@@ -495,7 +495,7 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
                           'filter_installed_packages',
                           name='fip',
                           return_value=None)
-        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
         self.target.install()
         self.target.set_state.assert_called_once_with('charmname-installed')
         self.fip.assert_called_once_with([])
@@ -634,19 +634,60 @@ class TestOpenStackAPICharm(BaseOpenStackCharmTest):
         super(TestOpenStackAPICharm, self).setUp(chm.OpenStackAPICharm,
                                                  TEST_CONFIG)
 
+    def test_upgrade_charm(self):
+        self.patch_target('setup_token_cache')
+        self.patch_target('update_api_ports')
+        self.target.upgrade_charm()
+        self.target.setup_token_cache.assert_called_once_with()
+
     def test_install(self):
         # Test set_state and configure_source are called
         self.patch_target('set_state')
         self.patch_target('configure_source')
+        self.patch_target('enable_memcache', return_value=False)
         self.patch_object(chm.charmhelpers.fetch,
                           'filter_installed_packages',
                           name='fip',
                           return_value=None)
-        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
         self.target.install()
         # self.target.set_state.assert_called_once_with('charmname-installed')
         self.target.configure_source.assert_called_once_with()
         self.fip.assert_called_once_with([])
+
+    def test_setup_token_cache(self):
+        self.patch_target('token_cache_pkgs')
+        self.patch_target('install')
+        self.patch_object(chm.charmhelpers.fetch,
+                          'filter_installed_packages',
+                          name='fip',
+                          return_value=['memcached'])
+        self.target.setup_token_cache()
+        self.install.assert_called_once_with()
+        self.fip.return_value = []
+        self.install.reset_mock()
+        self.target.setup_token_cache()
+        self.assertFalse(self.install.called)
+
+    def test_enable_memcache(self):
+        self.assertFalse(self.target.enable_memcache(release='liberty'))
+        self.assertTrue(self.target.enable_memcache(release='newton'))
+        self.patch_target('config', new={'openstack-origin': 'distro'})
+        self.patch_object(chm.os_utils,
+                          'get_os_codename_install_source',
+                          name='gocis')
+        self.gocis.return_value = 'liberty'
+        self.assertFalse(self.target.enable_memcache())
+        self.gocis.return_value = 'newton'
+        self.assertTrue(self.target.enable_memcache())
+
+    def test_token_cache_pkgs(self):
+        self.patch_target('enable_memcache')
+        self.enable_memcache.return_value = True
+        self.assertEqual(self.target.token_cache_pkgs(), ['memcached',
+                                                          'python-memcache'])
+        self.enable_memcache.return_value = False
+        self.assertEqual(self.target.token_cache_pkgs(), [])
 
     def test_get_amqp_credentials(self):
         # verify that the instance throws an error if not overriden
@@ -658,6 +699,29 @@ class TestOpenStackAPICharm(BaseOpenStackCharmTest):
         with self.assertRaises(RuntimeError):
             self.target.get_database_setup()
 
+    def test_all_packages(self):
+        self.patch_target('enable_memcache')
+        self.patch_target('packages', new=['pkg1', 'pkg2'])
+        self.enable_memcache.return_value = True
+        self.assertEqual(self.target.all_packages,
+                         ['pkg1', 'pkg2', 'memcached', 'python-memcache'])
+        self.enable_memcache.return_value = False
+        self.assertEqual(self.target.all_packages, ['pkg1', 'pkg2'])
+
+    def test_full_restart_map(self):
+        self.patch_target('enable_memcache')
+        base_restart_map = {
+            'conf1': ['svc1'],
+            'conf2': ['svc1']}
+        self.patch_target('restart_map', new=base_restart_map)
+        self.enable_memcache.return_value = True
+        self.assertEqual(self.target.full_restart_map,
+                         {'conf1': ['svc1'],
+                          'conf2': ['svc1'],
+                          '/etc/memcached.conf': ['memcached']})
+        self.enable_memcache.return_value = False
+        self.assertEqual(self.target.full_restart_map, base_restart_map)
+
 
 class TestHAOpenStackCharm(BaseOpenStackCharmTest):
     # Note that this only tests the OpenStackCharm() class, which has not very
@@ -667,6 +731,45 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
     def setUp(self):
         super(TestHAOpenStackCharm, self).setUp(chm.HAOpenStackCharm,
                                                 TEST_CONFIG)
+
+    def test_all_packages(self):
+        self.patch_target('packages', new=['pkg1'])
+        self.patch_target('token_cache_pkgs', return_value=[])
+        self.patch_target('haproxy_enabled', return_value=False)
+        self.patch_target('apache_enabled', return_value=False)
+        self.assertEqual(['pkg1'], self.target.all_packages)
+        self.token_cache_pkgs.return_value = ['memcache']
+        self.haproxy_enabled.return_value = True
+        self.apache_enabled.return_value = True
+        self.assertEqual(['pkg1', 'memcache', 'haproxy', 'apache2'],
+                         self.target.all_packages)
+
+    def test_full_restart_map_disabled(self):
+        base_restart_map = {
+            'conf1': ['svc1'],
+            'conf2': ['svc1']}
+        self.patch_target('restart_map', new=base_restart_map)
+        self.patch_target('enable_memcache', return_value=False)
+        self.patch_target('haproxy_enabled', return_value=False)
+        self.patch_target('apache_enabled', return_value=False)
+        self.assertEqual(base_restart_map, self.target.full_restart_map)
+
+    def test_full_restart_map_enabled(self):
+        base_restart_map = {
+            'conf1': ['svc1'],
+            'conf2': ['svc1']}
+        self.patch_target('restart_map', new=base_restart_map)
+        self.patch_target('enable_memcache', return_value=True)
+        self.patch_target('haproxy_enabled', return_value=True)
+        self.patch_target('apache_enabled', return_value=True)
+        self.assertEqual(
+            self.target.full_restart_map,
+            {'/etc/apache2/sites-available/openstack_https_frontend.conf':
+             ['apache2'],
+             '/etc/haproxy/haproxy.cfg': ['haproxy'],
+             '/etc/memcached.conf': ['memcached'],
+             'conf1': ['svc1'],
+             'conf2': ['svc1']})
 
     def test_haproxy_enabled(self):
         self.patch_target('ha_resources', new=['haproxy'])
@@ -744,13 +847,18 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.set_state.assert_called_once_with('haproxy.stat.password',
                                                mock.ANY)
 
-    def test_hacharm_all_packages(self):
+    def test_hacharm_all_packages_enabled(self):
+        self.patch_target('enable_memcache', return_value=False)
         self.patch_target('haproxy_enabled', return_value=True)
         self.assertTrue('haproxy' in self.target.all_packages)
+
+    def test_hacharm_all_packages_disabled(self):
+        self.patch_target('enable_memcache', return_value=False)
         self.patch_target('haproxy_enabled', return_value=False)
         self.assertFalse('haproxy' in self.target.all_packages)
 
     def test_hacharm_full_restart_map(self):
+        self.patch_target('enable_memcache', return_value=False)
         self.patch_target('haproxy_enabled', return_value=True)
         self.assertTrue(
             self.target.full_restart_map.get(
@@ -1093,7 +1201,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.fip.side_effect = lambda x: ['p1', 'p2']
         self.patch_object(chm.hookenv, 'status_set')
         self.patch_object(chm.hookenv, 'apt_install')
-        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
         self.target.install()
         # TODO: remove next commented line as we don't set this state anymore
         # self.target.set_state.assert_called_once_with('my-charm-installed')
@@ -1115,7 +1223,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
     def test_update_api_ports(self):
         self.patch_object(chm.hookenv, 'open_port')
         self.patch_object(chm.hookenv, 'close_port')
-        self.patch_object(chm.subprocess, 'check_output', return_value='\n')
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
         self.target.api_ports = {
             'api': {
                 'public': 1,
@@ -1136,7 +1244,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         # that should be closed
         self.open_port.reset_mock()
         self.close_port.reset_mock()
-        self.check_output.return_value = "1/tcp\n2/tcp\n3/udp\n4/tcp\n"
+        self.check_output.return_value = b"1/tcp\n2/tcp\n3/udp\n4/tcp\n"
         # port 3 should be opened, port 4 should be closed.
         open_calls = [mock.call(3)]
         close_calls = [mock.call(4)]
@@ -1146,9 +1254,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_opened_ports(self):
         self.patch_object(chm.subprocess, 'check_output')
-        self.check_output.return_value = '\n'
+        self.check_output.return_value = b'\n'
         self.assertEqual([], self.target.opened_ports())
-        self.check_output.return_value = '1/tcp\n2/tcp\n3/udp\n4/tcp\n5/udp\n'
+        self.check_output.return_value = b'1/tcp\n2/tcp\n3/udp\n4/tcp\n5/udp\n'
         self.assertEqual(['1', '2', '4'], self.target.opened_ports())
         self.assertEqual(['1', '2', '4'],
                          self.target.opened_ports(protocol='TCP'))
