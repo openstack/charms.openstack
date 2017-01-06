@@ -698,6 +698,43 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             c = adapters.APIConfigurationAdapter()
             self.assertEqual(c.determine_service_port(80), 70)
 
+    def test_use_memcache(self):
+        test_config = {'openstack-origin': 'distro'}
+        with mock.patch.object(adapters.hookenv, 'config',
+                               new=lambda: test_config):
+            with mock.patch.object(adapters.ch_utils,
+                                   'get_os_codename_install_source',
+                                   return_value='liberty'):
+                c = adapters.APIConfigurationAdapter()
+                self.assertFalse(c.use_memcache)
+            with mock.patch.object(adapters.ch_utils,
+                                   'get_os_codename_install_source',
+                                   return_value='newton'):
+                c = adapters.APIConfigurationAdapter()
+                self.assertTrue(c.use_memcache)
+
+    def test_memcache_server(self):
+        with mock.patch.object(adapters.ch_host, 'lsb_release',
+                               return_value={'DISTRIB_RELEASE': '14.04'}):
+            c = adapters.APIConfigurationAdapter()
+            self.assertEqual(c.memcache_server, 'ip6-localhost')
+        with mock.patch.object(adapters.ch_host, 'lsb_release',
+                               return_value={'DISTRIB_RELEASE': '16.04'}):
+            c = adapters.APIConfigurationAdapter()
+            self.assertEqual(c.memcache_server, '::1')
+
+    def test_memcache_host(self):
+        self.assertEqual(adapters.APIConfigurationAdapter().memcache_host,
+                         '[::1]')
+
+    def test_memcache_port(self):
+        self.assertEqual(adapters.APIConfigurationAdapter().memcache_port,
+                         '11211')
+
+    def test_memcache_url(self):
+        self.assertEqual(adapters.APIConfigurationAdapter().memcache_url,
+                         'inet6:[::1]:11211')
+
 
 class FakePeerHARelationAdapter(object):
 
