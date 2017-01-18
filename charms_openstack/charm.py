@@ -544,7 +544,6 @@ class OpenStackCharm(object):
     configuration_class = os_adapters.ConfigurationAdapter
 
     ha_resources = []
-    adapters_class = None
     HAPROXY_CONF = '/etc/haproxy/haproxy.cfg'
     MEMCACHE_CONF = '/etc/memcached.conf'
     package_codenames = {}

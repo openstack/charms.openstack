@@ -454,7 +454,9 @@ class TestOpenStackCharm__init__(BaseOpenStackCharmTest):
     def test_empty_init_args(self):
         target = chm.OpenStackCharm()
         self.assertIsNone(target.release)
-        self.assertIsNone(target.adapters_instance)
+        # we expect target.adapters_instance to not be None as
+        # target.adapters_class is not None as a default
+        self.assertIsNotNone(target.adapters_instance)
         # from mocked hookenv.config()
         self.assertEqual(target.config, TEST_CONFIG)
 
