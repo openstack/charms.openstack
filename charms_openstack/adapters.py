@@ -29,7 +29,6 @@ import charmhelpers.contrib.openstack.utils as ch_utils
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charms_openstack.ip as os_ip
-import charms_openstack.os_release_data as os_release_data
 
 ADDRESS_TYPES = os_ip.ADDRESS_MAP.keys()
 
@@ -807,10 +806,10 @@ class APIConfigurationAdapter(ConfigurationAdapter):
     def use_memcache(self):
         release = ch_utils.get_os_codename_install_source(
             self.openstack_origin)
-        if release not in os_release_data.KNOWN_RELEASES:
+        if release not in ch_utils.OPENSTACK_RELEASES:
             return ValueError("Unkown release {}".format(release))
-        return (os_release_data.KNOWN_RELEASES.index(release) >=
-                os_release_data.KNOWN_RELEASES.index('mitaka'))
+        return (ch_utils.OPENSTACK_RELEASES.index(release) >=
+                ch_utils.OPENSTACK_RELEASES.index('mitaka'))
 
     @property
     def memcache_server(self):

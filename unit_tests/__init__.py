@@ -41,6 +41,25 @@ sys.modules['charmhelpers.contrib.hahelpers'] = charmhelpers.contrib.hahelpers
 sys.modules['charmhelpers.contrib.hahelpers.cluster'] = (
     charmhelpers.contrib.hahelpers.cluster)
 
+# mock in the openstack releases so that the tests can run
+# Note that these don't need to be maintained UNLESS new functionality is for
+# later OpenStack releases.
+charmhelpers.contrib.openstack.utils.OPENSTACK_RELEASES = (
+    'diablo',
+    'essex',
+    'folsom',
+    'grizzly',
+    'havana',
+    'icehouse',
+    'juno',
+    'kilo',
+    'liberty',
+    'mitaka',
+    'newton',
+    'ocata',
+    'pike',
+)
+
 
 def _fake_retry(num_retries, base_delay=0, exc_type=Exception):
     def _retry_on_exception_inner_1(f):

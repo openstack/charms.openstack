@@ -44,7 +44,6 @@ import charms.reactive as reactive
 
 import charms_openstack.adapters as os_adapters
 import charms_openstack.ip as os_ip
-import charms_openstack.os_release_data as os_release_data
 
 
 # _releases{} is a dictionary of release -> class that is instantiated
@@ -362,12 +361,12 @@ def get_charm_instance(release=None, *args, **kwargs):
         cls = _releases[known_releases[-1]]
     else:
         # check that the release is a valid release
-        if release not in os_release_data.KNOWN_RELEASES:
+        if release not in os_utils.OPENSTACK_RELEASES:
             raise RuntimeError(
                 "Release {} is not a known OpenStack release?".format(release))
-        release_index = os_release_data.KNOWN_RELEASES.index(release)
+        release_index = os_utils.OPENSTACK_RELEASES.index(release)
         if (release_index <
-                os_release_data.KNOWN_RELEASES.index(known_releases[0])):
+                os_utils.OPENSTACK_RELEASES.index(known_releases[0])):
             raise RuntimeError(
                 "Release {} is not supported by this charm. Earliest support "
                 "is {} release".format(release, known_releases[0]))
@@ -375,7 +374,7 @@ def get_charm_instance(release=None, *args, **kwargs):
             # try to find the release that is supported.
             for known_release in reversed(known_releases):
                 if (release_index >=
-                        os_release_data.KNOWN_RELEASES.index(known_release)):
+                        os_utils.OPENSTACK_RELEASES.index(known_release)):
                     cls = _releases[known_release]
                     break
     if cls is None:
@@ -445,7 +444,7 @@ class OpenStackCharmMeta(type):
             return
         if 'release' in members.keys():
             release = members['release']
-            if release not in os_release_data.KNOWN_RELEASES:
+            if release not in os_utils.OPENSTACK_RELEASES:
                 raise RuntimeError(
                     "Release {} is not a known OpenStack release"
                     .format(release))
@@ -1260,10 +1259,10 @@ class OpenStackAPICharm(OpenStackCharm):
         if not release:
             release = os_utils.get_os_codename_install_source(
                 self.config['openstack-origin'])
-        if release not in os_release_data.KNOWN_RELEASES:
+        if release not in os_utils.OPENSTACK_RELEASES:
             return ValueError("Unkown release {}".format(release))
-        return (os_release_data.KNOWN_RELEASES.index(release) >=
-                os_release_data.KNOWN_RELEASES.index('mitaka'))
+        return (os_utils.OPENSTACK_RELEASES.index(release) >=
+                os_utils.OPENSTACK_RELEASES.index('mitaka'))
 
     def token_cache_pkgs(self, release=None):
         """Determine additional packages needed for token caching
