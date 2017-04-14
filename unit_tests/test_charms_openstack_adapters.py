@@ -26,6 +26,8 @@ import mock
 
 import charms_openstack.adapters as adapters
 
+from charmhelpers.contrib.openstack import context
+
 
 class TestCustomProperties(unittest.TestCase):
 
@@ -405,6 +407,16 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             'public': 9003,
             'internal': 9002,
         }}
+
+    def test_worker_config(self):
+        worker_config = {'processes': 1.0, 'admin_processes': 0.75,
+                         'public_processes': 0.25}
+        __call__mock = mock.Mock(return_value=worker_config)
+        context.WSGIWorkerConfigContext.return_value = __call__mock
+        wc = adapters.APIConfigurationAdapter().worker_config
+        self.assertEqual(wc['processes'], 1.0)
+        self.assertEqual(wc['admin_processes'], 0.75)
+        self.assertEqual(wc['public_processes'], 0.25)
 
     def test_class(self):
         test_config = {
