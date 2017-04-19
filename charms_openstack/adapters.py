@@ -26,7 +26,6 @@ import charms.reactive.bus
 import charmhelpers.contrib.hahelpers.cluster as ch_cluster
 import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.utils as ch_utils
-import charmhelpers.contrib.openstack.context as ch_context
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charms_openstack.ip as os_ip
@@ -488,7 +487,7 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
     def __init__(self, port_map=None, service_name=None, charm_instance=None):
         """
-        Note passing port_map and service_name is deprecated, but supported for
+        Note passing port_map and service_name is deprecated, but supporte for
         backwards compatibility.  The port_map and service_name can be got from
         the self.charm_instance weak reference.
         :param  port_map: Map containing service names and the ports used e.g.
@@ -529,14 +528,6 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         else:
             self.service_name = None
         self.__network_addresses = None
-
-    @property
-    def worker_config(self):
-        """Return the worker configuration used service templates"""
-        return {
-            k: v for k, v in ch_context.WSGIWorkerConfigContext()().items()
-            if k in ('processes',
-                     'admin_processes', 'public_processes')}
 
     @property
     def network_addresses(self):
