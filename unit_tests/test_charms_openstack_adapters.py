@@ -698,42 +698,115 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             c = adapters.APIConfigurationAdapter()
             self.assertEqual(c.determine_service_port(80), 70)
 
+    def test_memcache_ctx(self):
+
+        class MockCharmInstance(object):
+            api_ports = {}
+            name = 'hello'
+
+            def __init__(self, release):
+                self.release = release
+
+        mch_result = False
+
+        class MCHR(object):
+            class_thing = None
+
+            def __init__(self, thing):
+                self.thing = thing
+                self.__class__.class_thing = self
+
+            def __gt__(self, other):
+                return mch_result
+
+        mpo = mock.patch.object
+        with mpo(adapters.ch_host, 'lsb_release') as lsb_r, \
+                mpo(adapters.ch_host, 'CompareHostReleases', new=MCHR), \
+                mpo(adapters.ch_ip, 'is_ipv6_disabled') as is_ipv6_disabled:
+
+            # first no memcache
+            mci = MockCharmInstance('liberty')
+            c = adapters.APIConfigurationAdapter(charm_instance=mci)
+            self.assertEquals(c.memcache['use_memcache'], False)
+
+            # next switch on memcache
+            mci = MockCharmInstance('mitaka')
+            # start with ipv6 disabled and ubuntu release is trusty
+            lsb_r.return_value = {'DISTRIB_CODENAME': 'trusty'}
+            is_ipv6_disabled.return_value = True
+            c = adapters.APIConfigurationAdapter(charm_instance=mci)
+            self.assertEquals(c.memcache['use_memcache'], True)
+            self.assertEquals(MCHR.class_thing.thing, 'trusty')
+            self.assertEquals(c.memcache['memcache_server'], 'localhost')
+            self.assertEquals(c.memcache['memcache_server_formatted'],
+                              '127.0.0.1')
+            self.assertEquals(c.memcache['memcache_port'], '11211')
+            self.assertEquals(c.memcache['memcache_url'],
+                              '127.0.0.1:11211')
+            # make us later than trusty
+            mch_result = True
+            self.assertEquals(c.memcache['memcache_server'], '127.0.0.1')
+
+            # now do ipv6 not disabled.
+            mch_result = False
+            is_ipv6_disabled.return_value = False
+            c = adapters.APIConfigurationAdapter(charm_instance=mci)
+            self.assertEquals(c.memcache['use_memcache'], True)
+            self.assertEquals(MCHR.class_thing.thing, 'trusty')
+            self.assertEquals(c.memcache['memcache_server'], 'ip6-localhost')
+            self.assertEquals(c.memcache['memcache_server_formatted'], '[::1]')
+            self.assertEquals(c.memcache['memcache_port'], '11211')
+            self.assertEquals(c.memcache['memcache_url'], 'inet6:[::1]:11211')
+            # make us later than trusty
+            mch_result = True
+            self.assertEquals(c.memcache['memcache_server'], '::1')
+
     def test_use_memcache(self):
-        test_config = {'openstack-origin': 'distro'}
-        with mock.patch.object(adapters.hookenv, 'config',
-                               new=lambda: test_config):
-            with mock.patch.object(adapters.ch_utils,
-                                   'get_os_codename_install_source',
-                                   return_value='liberty'):
-                c = adapters.APIConfigurationAdapter()
-                self.assertFalse(c.use_memcache)
-            with mock.patch.object(adapters.ch_utils,
-                                   'get_os_codename_install_source',
-                                   return_value='newton'):
-                c = adapters.APIConfigurationAdapter()
-                self.assertTrue(c.use_memcache)
+        with mock.patch.object(adapters.APIConfigurationAdapter, 'memcache',
+                               new_callable=mock.PropertyMock) as memcache:
+            memcache.return_value = {}
+            c = adapters.APIConfigurationAdapter()
+            self.assertEquals(c.use_memcache, False)
+            memcache.return_value = {'use_memcache': False}
+            self.assertEquals(c.use_memcache, False)
+            memcache.return_value = {'use_memcache': True}
+            self.assertEquals(c.use_memcache, True)
 
     def test_memcache_server(self):
-        with mock.patch.object(adapters.ch_host, 'lsb_release',
-                               return_value={'DISTRIB_RELEASE': '14.04'}):
+        with mock.patch.object(adapters.APIConfigurationAdapter, 'memcache',
+                               new_callable=mock.PropertyMock) as memcache:
+            memcache.return_value = {}
             c = adapters.APIConfigurationAdapter()
-            self.assertEqual(c.memcache_server, 'ip6-localhost')
-        with mock.patch.object(adapters.ch_host, 'lsb_release',
-                               return_value={'DISTRIB_RELEASE': '16.04'}):
-            c = adapters.APIConfigurationAdapter()
-            self.assertEqual(c.memcache_server, '::1')
+            self.assertEquals(c.memcache_server, '')
+            memcache.return_value = {'memcache_server': 'hello'}
+            self.assertEquals(c.memcache_server, 'hello')
 
     def test_memcache_host(self):
-        self.assertEqual(adapters.APIConfigurationAdapter().memcache_host,
-                         '[::1]')
+        with mock.patch.object(adapters.APIConfigurationAdapter, 'memcache',
+                               new_callable=mock.PropertyMock) as memcache:
+            memcache.return_value = {}
+            c = adapters.APIConfigurationAdapter()
+            self.assertEquals(c.memcache_host, '')
+            memcache.return_value = {'memcache_server_formatted': 'hello'}
+            self.assertEquals(c.memcache_host, 'hello')
 
     def test_memcache_port(self):
-        self.assertEqual(adapters.APIConfigurationAdapter().memcache_port,
-                         '11211')
+        with mock.patch.object(adapters.APIConfigurationAdapter, 'memcache',
+                               new_callable=mock.PropertyMock) as memcache:
+            memcache.return_value = {}
+            c = adapters.APIConfigurationAdapter()
+            self.assertEquals(c.memcache_port, '')
+            memcache.return_value = {'memcache_port': 'hello'}
+            self.assertEquals(c.memcache_port, 'hello')
 
     def test_memcache_url(self):
-        self.assertEqual(adapters.APIConfigurationAdapter().memcache_url,
-                         'inet6:[::1]:11211')
+        with mock.patch.object(adapters.APIConfigurationAdapter, 'memcache',
+                               new_callable=mock.PropertyMock) as memcache:
+            memcache.return_value = {}
+            c = adapters.APIConfigurationAdapter()
+            self.assertEquals(c.memcache_url, '')
+            memcache.return_value = {'memcache_url': 'hello'}
+            self.assertEquals(c.memcache_url, 'hello')
 
 
 class FakePeerHARelationAdapter(object):

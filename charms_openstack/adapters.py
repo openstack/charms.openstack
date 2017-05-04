@@ -801,32 +801,60 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
     @property
     def use_memcache(self):
-        release = ch_utils.get_os_codename_install_source(
-            self.openstack_origin)
-        if release not in ch_utils.OPENSTACK_RELEASES:
-            return ValueError("Unkown release {}".format(release))
-        return (ch_utils.OPENSTACK_RELEASES.index(release) >=
-                ch_utils.OPENSTACK_RELEASES.index('mitaka'))
+        return self.memcache.get('use_memcache', False)
 
     @property
     def memcache_server(self):
-        if ch_host.lsb_release()['DISTRIB_RELEASE'] > '14.04':
-            memcache_server = '::1'
-        else:
-            memcache_server = 'ip6-localhost'
-        return memcache_server
+        return self.memcache.get('memcache_server', '')
 
     @property
     def memcache_host(self):
-        return '[::1]'
+        return self.memcache.get('memcache_server_formatted', '')
 
     @property
     def memcache_port(self):
-        return '11211'
+        return self.memcache.get('memcache_port', '')
 
     @property
     def memcache_url(self):
-        return 'inet6:{}:{}'.format(self.memcache_host, self.memcache_port)
+        return self.memcache.get('memcache_url', '')
+
+    @property
+    @hookenv.cached
+    def memcache(self):
+        ctxt = {}
+        ctxt['use_memcache'] = False
+        if self.charm_instance:
+            if (ch_utils.OPENSTACK_RELEASES.index(
+                    self.charm_instance.release) >=
+                    ch_utils.OPENSTACK_RELEASES.index('mitaka')):
+                ctxt['use_memcache'] = True
+
+        if ctxt['use_memcache']:
+            # Trusty version of memcached does not support ::1 as a listen
+            # address so use host file entry instead
+            release = ch_host.lsb_release()['DISTRIB_CODENAME'].lower()
+            if ch_ip.is_ipv6_disabled():
+                if ch_host.CompareHostReleases(release) > 'trusty':
+                    ctxt['memcache_server'] = '127.0.0.1'
+                else:
+                    ctxt['memcache_server'] = 'localhost'
+                ctxt['memcache_server_formatted'] = '127.0.0.1'
+                ctxt['memcache_port'] = '11211'
+                ctxt['memcache_url'] = '{}:{}'.format(
+                    ctxt['memcache_server_formatted'],
+                    ctxt['memcache_port'])
+            else:
+                if ch_host.CompareHostReleases(release) > 'trusty':
+                    ctxt['memcache_server'] = '::1'
+                else:
+                    ctxt['memcache_server'] = 'ip6-localhost'
+                ctxt['memcache_server_formatted'] = '[::1]'
+                ctxt['memcache_port'] = '11211'
+                ctxt['memcache_url'] = 'inet6:{}:{}'.format(
+                    ctxt['memcache_server_formatted'],
+                    ctxt['memcache_port'])
+        return ctxt
 
 
 def make_default_relation_adapter(base_cls, relation, properties):
