@@ -1442,6 +1442,18 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         for call in self.render.call_args_list:
             self.assertTrue(call[1]['context'])
 
+    def test_deferred_assess_status(self):
+        self.patch_object(chm.hookenv, 'atexit')
+        s = self.target.singleton
+        self.patch_target('_assess_status')
+        s.assess_status()
+        self._assess_status.assert_not_called()
+        self.atexit.assert_called_once_with(mock.ANY)
+        self.atexit.reset_mock()
+        s.assess_status()
+        self.atexit.assert_not_called()
+        self._assess_status.assert_not_called()
+
     def test_assess_status_active(self):
         self.patch_object(chm.hookenv, 'status_set')
         self.patch_object(chm.hookenv, 'application_version_set')
@@ -1451,7 +1463,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('custom_assess_status_check',
                           return_value=(None, None))
         self.patch_target('check_services_running', return_value=(None, None))
-        self.target.assess_status()
+        self.target._assess_status()
         self.status_set.assert_called_once_with('active', 'Unit is ready')
         self.application_version_set.assert_called_once_with(mock.ANY)
         # check all the check functions got called
@@ -1466,7 +1478,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         # patch out _ows_check_if_paused
         self.patch_object(chm.os_utils, '_ows_check_if_paused',
                           return_value=('paused', '123'))
-        self.target.assess_status()
+        self.target._assess_status()
         self.status_set.assert_called_once_with('paused', '123')
         self.application_version_set.assert_called_once_with(mock.ANY)
         self._ows_check_if_paused.assert_called_once_with(
@@ -1525,7 +1537,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.assertEqual(self.target.check_interfaces(),
                          ('blocked', "'rel1' incomplete, 'rel2' missing"))
         # check that the assess_status give the same result
-        self.target.assess_status()
+        self.target._assess_status()
         self.status_set.assert_called_once_with(
             'blocked', "'rel1' incomplete, 'rel2' missing")
 

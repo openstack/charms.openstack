@@ -568,6 +568,7 @@ class OpenStackCharm(object):
         self.__adapters_instance = None
         self.__interfaces = interfaces or []
         self.__options = None
+        self.__run_assess_status = False
 
     @property
     def adapters_instance(self):
@@ -901,7 +902,7 @@ class OpenStackCharm(object):
         """
         pass
 
-    def assess_status(self):
+    def _assess_status(self):
         """Assess the status of the unit and set the status and a useful
         message as appropriate.
 
@@ -938,6 +939,20 @@ class OpenStackCharm(object):
                 return
         # No state was particularly set, so assume the unit is active
         hookenv.status_set('active', 'Unit is ready')
+
+    def assess_status(self):
+        """This is a deferring version of _assess_status that only runs during
+        exit. This method can be called multiple times, but it will ensure that
+        the _assess_status() is only called once at the end of the charm after
+        all handlers have completed.
+        """
+        if not self.__run_assess_status:
+            self.__run_assess_status = True
+
+            def atexit_assess_status():
+                hookenv.log("Running _assess_status()", level=hookenv.DEBUG)
+                self._assess_status()
+            hookenv.atexit(atexit_assess_status)
 
     def custom_assess_status_check(self):
         """Override this function in a derived class if there are any other

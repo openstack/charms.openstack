@@ -282,14 +282,22 @@ state, and override the `assess_status()` method to a NOP.
 The `assess_status()` method on `OpenStackCharm` provides a helper to enable
 the charm author to provide workload status.  By default:
 
+ * The actual assessment of status is deferred until the all of the reactive
+   handlers have had a chance to execute (according to their conditions), just
+   before the charm hook exits.  The real `assess_status()` method is actually
+   `_assess_status()` and the `assess_status()` method simply sets up an
+   `atexit()` hook to defer the operation.  This means that you can call
+   `assess_status()` multiple times BUT it will actually only be invoked at the
+   end of the charm hook execution.  If you _need_ to actually run
+   assess_status() at the point in the handler, then call `_assess_status()`.
  * The install method provides the maintenance status.
  * The `layer-openstack` layer provides a hook for `update-status` which
    calls the `assess_status()` function on the charm class.
- * The `assess_status()` method uses various attributes of the class to provide
+ * The `_assess_status()` method uses various attributes of the class to provide
    a default mechanism for assessing the workload status of the charm/unit.
 
 The latter is extremely useful for determining the workload status. The
-`assess_status()` method does the following checks:
+`_assess_status()` method does the following checks:
 
  1. The unit checks if it is paused. (Not yet available as a feature).
  2. The unit checks the relations to see if they are connected and available.
@@ -340,7 +348,7 @@ class. The return value from the method is:
 
 ### Not checking services are running
 
-By default, the `assess_status()` method checks that the services declared in
+By default, the `_assess_status()` method checks that the services declared in
 the class attribute `services` (list of strings) are checked to ensure that
 they are running.  Additionally, the ports declared in the class attribute
 `api_ports` are also checked for being _listened on_.
