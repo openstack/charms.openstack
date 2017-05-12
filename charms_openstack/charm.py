@@ -15,9 +15,6 @@
 # OpenStackCharm() - base class for build OpenStack charms from for the
 # reactive framework.
 
-# need/want absolute imports for the package imports to work properly
-from __future__ import absolute_import
-
 import base64
 import collections
 import contextlib
@@ -30,7 +27,6 @@ import string
 import subprocess
 
 import apt_pkg as apt
-import six
 
 import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.templating as os_templating
@@ -478,8 +474,7 @@ class OpenStackCharmMeta(type):
         return _singleton
 
 
-@six.add_metaclass(OpenStackCharmMeta)
-class OpenStackCharm(object):
+class OpenStackCharm(object, metaclass=OpenStackCharmMeta):
     """
     Base class for all OpenStack Charm classes;
     encapulates general OpenStack charm payload operations
@@ -1008,7 +1003,7 @@ class OpenStackCharm(object):
         available_states = reactive.bus.get_states().keys()
         status = None
         messages = []
-        for relation, states in six.iteritems(states_to_check):
+        for relation, states in states_to_check.items():
             for state, err_status, err_msg in states:
                 if state not in available_states:
                     messages.append(err_msg)
@@ -1159,7 +1154,7 @@ class OpenStackCharm(object):
             return None
 
         vers_map = os_utils.OPENSTACK_CODENAMES
-        for version, cname in six.iteritems(vers_map):
+        for version, cname in vers_map.items():
             if cname == codename:
                 return version
 

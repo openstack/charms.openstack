@@ -18,13 +18,7 @@
 import contextlib
 import io
 import mock
-import six
 import unittest
-
-if not six.PY3:
-    builtin_open = '__builtin__.open'
-else:
-    builtin_open = 'builtins.open'
 
 
 @contextlib.contextmanager
@@ -41,7 +35,7 @@ def patch_open():
         mock_open(*args, **kwargs)
         yield mock_file
 
-    with mock.patch(builtin_open, stub_open):
+    with mock.patch('builtins.open', stub_open):
         yield mock_open, mock_file
 
 

@@ -19,8 +19,6 @@ import itertools
 import re
 import weakref
 
-import six
-
 import charms.reactive as reactive
 import charms.reactive.bus
 import charmhelpers.contrib.hahelpers.cluster as ch_cluster
@@ -437,7 +435,7 @@ def make_default_configuration_adapter_class(base_cls=None,
     if not custom_properties:
         return base_cls
     # turns the functions into properties on the class
-    properties = {n: property(f) for n, f in six.iteritems(custom_properties)}
+    properties = {n: property(f) for n, f in custom_properties.items()}
     # build a custom class with the custom properties
     return type('DefaultConfigurationAdapter', (base_cls, ), properties)
 
@@ -466,8 +464,7 @@ class ConfigurationAdapter(object):
         if charm_instance is not None:
             self._charm_instance_weakref = weakref.ref(charm_instance)
         # copy over (statically) the items of the charms Juju configuration
-        _config = hookenv.config()
-        for k, v in six.iteritems(_config):
+        for k, v in hookenv.config().items():
             k = k.replace('-', '_')
             setattr(self, k, v)
 
@@ -850,7 +847,7 @@ def make_default_relation_adapter(base_cls, relation, properties):
     if not properties:
         return base_cls
     # convert the functions into properties
-    props = {n: property(f) for n, f in six.iteritems(properties)}
+    props = {n: property(f) for n, f in properties.items()}
     # turn 'my-Something_interface' into 'MySomethingInterface'
     # future proof incase other chars come in which can't be in an Python Class
     # name.
@@ -923,10 +920,9 @@ class OpenStackRelationAdapters(object):
         for cls in reversed(self.__class__.mro()):
             self._adapters.update(
                 {k.replace('-', '_'): v
-                 for k, v in six.iteritems(
-                     getattr(cls, 'relation_adapters', {}))})
+                 for k, v in getattr(cls, 'relation_adapters', {}).items()})
         # now we have to add in any customisations to those adapters
-        for relation, properties in six.iteritems(_custom_adapter_properties):
+        for relation, properties in _custom_adapter_properties.items():
             relation = relation.replace('-', '_')
             try:
                 cls = self._adapters[relation]
