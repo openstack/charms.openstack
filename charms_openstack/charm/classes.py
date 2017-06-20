@@ -80,9 +80,6 @@ class OpenStackCharm(BaseOpenStackCharm,
     # The list of services that this charm manages
     services = []
 
-    ha_resources = []
-    HAPROXY_CONF = '/etc/haproxy/haproxy.cfg'
-    MEMCACHE_CONF = '/etc/memcached.conf'
     # package_codenames = {}
 
     @property
@@ -138,6 +135,8 @@ class OpenStackAPICharm(OpenStackCharm):
     configuration and adapter classes.
     """
     abstract_class = True
+
+    MEMCACHE_CONF = '/etc/memcached.conf'
 
     # The adapters class that this charm uses to adapt interfaces.
     # If None, then it defaults to OpenstackRelationAdapters
@@ -255,6 +254,9 @@ class OpenStackAPICharm(OpenStackCharm):
 class HAOpenStackCharm(OpenStackAPICharm):
 
     abstract_class = True
+
+    HAPROXY_CONF = '/etc/haproxy/haproxy.cfg'
+    ha_resources = []
 
     def __init__(self, **kwargs):
         super(HAOpenStackCharm, self).__init__(**kwargs)

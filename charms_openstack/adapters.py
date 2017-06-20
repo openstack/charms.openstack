@@ -15,6 +15,7 @@
 """Adapter classes and utilities for use with Reactive interfaces"""
 from __future__ import absolute_import
 
+import collections
 import itertools
 import re
 import weakref
@@ -222,7 +223,10 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         self.api_config_adapter = APIConfigurationAdapter()
         self.local_address = self.api_config_adapter.local_address
         self.local_unit_name = self.api_config_adapter.local_unit_name
-        self.cluster_hosts = {}
+        # Note(AJK) - bug #1698814 - cluster_hosts needs to be ordered so that
+        # re-writes with no changed data don't cause a restart (dictionaries
+        # are 'randomly' ordered)
+        self.cluster_hosts = collections.OrderedDict()
         if relation:
             self.add_network_split_addresses()
             self.add_default_addresses()
@@ -300,7 +304,8 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
                 netmask = ch_ip.get_netmask_for_address(laddr)
                 _cluster_hosts[laddr] = {
                     'network': "{}/{}".format(laddr, netmask),
-                    'backends': {self.local_unit_name: laddr}}
+                    'backends': collections.OrderedDict(
+                        [(self.local_unit_name, laddr)])}
         return _cluster_hosts
 
     def local_default_addresses(self):
@@ -317,7 +322,8 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         _local_map = {
             self.local_address: {
                 'network': "{}/{}".format(self.local_address, netmask),
-                'backends': {self.local_unit_name: self.local_address}}}
+                'backends': collections.OrderedDict(
+                    [(self.local_unit_name, self.local_address)])}}
         return _local_map
 
     def add_network_split_addresses(self):
@@ -618,9 +624,10 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
         @return {'svc1': ['portA', 'portB'], 'svc2': ['portC', 'portD'], ...}
         """
-        service_ports = {}
+        # Note(AJK) - ensure that service ports is always in the same order
+        service_ports = collections.OrderedDict()
         if self.port_map:
-            for service in self.port_map.keys():
+            for service in sorted(self.port_map.keys()):
                 port_types = sorted(list(self.port_map[service].keys()))
                 for port_type in port_types:
                     listen_port = self.port_map[service][port_type]
