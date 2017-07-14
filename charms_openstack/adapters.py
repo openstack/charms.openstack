@@ -491,12 +491,12 @@ class APIConfigurationAdapter(ConfigurationAdapter):
                         'svc1': {
                         'admin': 9001,
                         'public': 9001,
-                        'internal': 9001,
+                        'int': 9001,
                     },
                         'svc2': {
                         'admin': 9002,
                         'public': 9002,
-                        'internal': 9002,
+                        'int': 9002,
                     },
                 }
         :param service_name: Name of service being deployed
@@ -721,17 +721,14 @@ class APIConfigurationAdapter(ConfigurationAdapter):
 
         """
         info = {}
-        # Bug #1640393. Return self.local_address if vip is undefined, None or
-        #               an empty string.
-        ip = getattr(self, 'vip', None) or self.local_address
         proto = 'https' if self.apache_enabled else 'http'
         if self.port_map:
             for service in self.port_map.keys():
                 key = service.replace('-', '_')
                 info[key] = {
                     'proto': proto,
-                    'ip': ip,
-                    'port': self.port_map[service]['admin']}
+                    'ip': os_ip.resolve_address(os_ip.ADMIN),
+                    'port': self.port_map[service][os_ip.ADMIN]}
                 info[key]['url'] = '{proto}://{ip}:{port}'.format(**info[key])
         return info
 
