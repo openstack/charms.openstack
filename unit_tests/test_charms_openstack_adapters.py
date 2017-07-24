@@ -790,6 +790,87 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             memcache.return_value = {'memcache_url': 'hello'}
             self.assertEquals(c.memcache_url, 'hello')
 
+    def test_workers(self):
+        class FakeWorkerConfigContext(object):
+            def __call__(self):
+                return {"workers": 8}
+
+        with mock.patch.object(adapters.ch_context, 'WorkerConfigContext',
+                               new=FakeWorkerConfigContext):
+            c = adapters.APIConfigurationAdapter()
+            self.assertEquals(c.workers, 8)
+
+    def test_wsgi_worker_context(self):
+        class ChInstance1(object):
+            name = 'test-name'
+            wsgi_script = 'test-script'
+            api_ports = {}
+
+        class ChInstance2(object):
+            name = 'test-name'
+            wsgi_script = 'test-script'
+            wsgi_admin_script = 'test-admin-script'
+            wsgi_public_script = 'test-public-script'
+            wsgi_process_weight = 0.5
+            wsgi_admin_process_weight = 0.1
+            wsgi_public_process_weight = 0.4
+            api_ports = {}
+
+        class ChInstance3(object):
+            name = 'test-name'
+            wsgi_script = None
+            wsgi_admin_script = 'test-admin-script'
+            wsgi_public_script = 'test-public-script'
+            wsgi_process_weight = None
+            wsgi_admin_process_weight = 0.1
+            wsgi_public_process_weight = 0.4
+            api_ports = {}
+
+        class FakeWSGIWorkerConfigContext():
+            copy_kwargs = None
+
+            def __init__(self, **kwargs):
+                self.__class__.copy_kwargs = kwargs.copy()
+
+            def __call__(self):
+                return "T"
+
+        with mock.patch.object(adapters.ch_context, 'WSGIWorkerConfigContext',
+                               new=FakeWSGIWorkerConfigContext):
+            # start with no charm instance to get default values
+            c = adapters.APIConfigurationAdapter()
+            self.assertEquals(c.wsgi_worker_context, "T")
+            self.assertEquals(FakeWSGIWorkerConfigContext.copy_kwargs, {})
+            # start with a minimal charm_instance
+            instance = ChInstance1()
+            c = adapters.APIConfigurationAdapter(charm_instance=instance)
+            self.assertEquals(c.wsgi_worker_context, "T")
+            self.assertEquals(FakeWSGIWorkerConfigContext.copy_kwargs,
+                              {'name': 'test-name', 'script': 'test-script'})
+            # And then, all the options set:
+            instance = ChInstance2()
+            c = adapters.APIConfigurationAdapter(charm_instance=instance)
+            self.assertEquals(c.wsgi_worker_context, "T")
+            self.assertEquals(FakeWSGIWorkerConfigContext.copy_kwargs,
+                              {'name': 'test-name',
+                               'script': 'test-script',
+                               'admin_script': 'test-admin-script',
+                               'public_script': 'test-public-script',
+                               'process_weight': 0.5,
+                               'admin_process_weight': 0.1,
+                               'public_process_weight': 0.4})
+            # and finally, with some of the options set to None, to test
+            # filtering
+            instance = ChInstance3()
+            c = adapters.APIConfigurationAdapter(charm_instance=instance)
+            self.assertEquals(c.wsgi_worker_context, "T")
+            self.assertEquals(FakeWSGIWorkerConfigContext.copy_kwargs,
+                              {'name': 'test-name',
+                               'admin_script': 'test-admin-script',
+                               'public_script': 'test-public-script',
+                               'admin_process_weight': 0.1,
+                               'public_process_weight': 0.4})
+
 
 class FakePeerHARelationAdapter(object):
 

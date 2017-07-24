@@ -24,6 +24,7 @@ import charms.reactive as reactive
 import charms.reactive.bus
 import charmhelpers.contrib.hahelpers.cluster as ch_cluster
 import charmhelpers.contrib.network.ip as ch_ip
+import charmhelpers.contrib.openstack.context as ch_context
 import charmhelpers.contrib.openstack.utils as ch_utils
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
@@ -859,6 +860,63 @@ class APIConfigurationAdapter(ConfigurationAdapter):
                     ctxt['memcache_server_formatted'],
                     ctxt['memcache_port'])
         return ctxt
+
+    @property
+    @hookenv.cached
+    def workers(self):
+        """Return the a number of workers that depends on the
+        config('worker_muliplier') and the number of cpus.   This function uses
+        the charmhelpers.contrib.openstack.context.WorkerConfigContext() to do
+        the heavy lifting so that any changes in charmhelpers propagate to this
+        function
+
+        :returns: <int> the number of workers to apply to a configuration file.
+        """
+        return ch_context.WorkerConfigContext()()["workers"]
+
+    @property
+    @hookenv.cached
+    def wsgi_worker_context(self):
+        """Return a WSGIWorkerConfigContext dictionary.
+
+        This is used to configure a WSGI worker.  The charm_instance class can
+        define some attributes (or properties - anything getattr(...) will work
+        against for:
+
+            wsgi_script: a script/name to pass to the WSGIW... constructor
+            wsgi_admin_script: a script/name to pass to the WSGIW...
+                constructor
+            wsgi_public_script: a script/name to pass to the WSGIW...
+                constructor
+            wsgi_process_weight: an float between 0.0 and 1.0 to split the
+                share of all workers between main, admin and public workers.
+            wsgi_admin_process_weight: an float between 0.0 and 1.0 to split
+                the share of all workers between main, admin and public workers
+            wsgi_public_process_weight: an float between 0.0 and 1.0 to split
+                the share of all workers between main, admin and public workers
+
+            The sum of the process weights should equal 1 to make sense.
+
+        :returns: WSGIWorkerConfigContext dictionary.
+        """
+        charm_instance = self.charm_instance or {}
+        kwargs = dict(
+            name=getattr(charm_instance, 'name', None),
+            script=getattr(charm_instance, 'wsgi_script', None),
+            admin_script=getattr(charm_instance, 'wsgi_admin_script', None),
+            public_script=getattr(charm_instance, 'wsgi_public_script', None),
+            process_weight=getattr(
+                charm_instance, 'wsgi_process_weight', None),
+            admin_process_weight=getattr(
+                charm_instance, 'wsgi_admin_process_weight', None),
+            public_process_weight=getattr(
+                charm_instance, 'wsgi_public_process_weight', None),
+        )
+        # filtering the kwargs of Nones allows the default arguments on
+        # WSGIWorkerConfigContext.__init__(...) to be used.
+        filtered_kwargs = dict((k, v) for k, v in kwargs.items()
+                               if v is not None)
+        return ch_context.WSGIWorkerConfigContext(**filtered_kwargs)()
 
 
 def make_default_relation_adapter(base_cls, relation, properties):
