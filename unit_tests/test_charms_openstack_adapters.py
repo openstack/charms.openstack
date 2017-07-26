@@ -459,18 +459,8 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             self.assertEqual(c.service_name, 'svc1')
 
     def test_external_endpoints(self):
-        test_config = {
-            'prefer-ipv6': False,
-            'vip': None,
-        }
-        with mock.patch.object(adapters.hookenv, 'config',
-                               new=lambda: test_config), \
-                mock.patch.object(adapters.ch_utils, 'get_host_ip',
-                                  return_value='10.0.0.10'), \
-                mock.patch.object(adapters.APIConfigurationAdapter,
-                                  'get_network_addresses'), \
-                mock.patch.object(adapters.hookenv, 'local_unit',
-                                  return_value='my-unit/0'):
+        with mock.patch.object(adapters.os_ip, 'resolve_address',
+                               return_value="10.0.0.10"):
             c = adapters.APIConfigurationAdapter(port_map=self.api_ports)
             self.assertEqual(
                 c.external_endpoints, {
@@ -553,12 +543,6 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             def local_address(self):
                 return '10.0.0.10'
 
-        test_config = {
-            'prefer-ipv6': False,
-            'vip': '10.10.10.10',
-            'private-address': 'privaddr',
-        }
-
         def _determine_apache_port(port, singlenode_mode=None):
             return port - 10
 
@@ -567,10 +551,8 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
                 mock.patch.object(adapters.APIConfigurationAdapter,
                                   'determine_service_port',
                                   side_effect=_determine_apache_port), \
-                mock.patch.object(adapters.APIConfigurationAdapter,
-                                  'get_network_addresses'), \
-                mock.patch.object(adapters.hookenv, 'config',
-                                  new=lambda: test_config):
+                mock.patch.object(adapters.os_ip, 'resolve_address',
+                                  return_value="10.10.10.10"):
             with mock.patch.object(adapters.APIConfigurationAdapter,
                                    'apache_enabled',
                                    new=False):
