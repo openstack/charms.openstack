@@ -370,7 +370,7 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
     @property
     def host(self):
         """
-        Hostname that should be used to access RabbitMQ.
+        Hostname that should be used to access a database.
         """
         return self.relation.db_host()
 
