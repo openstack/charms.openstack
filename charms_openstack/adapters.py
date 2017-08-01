@@ -484,14 +484,14 @@ class ConfigurationAdapter(object):
 
 class APIConfigurationAdapter(ConfigurationAdapter):
     """This configuration adapter extends the base class and adds properties
-    common accross most OpenstackAPI services
+    common across most OpenstackAPI services.
     """
 
     def __init__(self, port_map=None, service_name=None, charm_instance=None):
         """
-        Note passing port_map and service_name is deprecated, but supporte for
-        backwards compatibility.  The port_map and service_name can be got from
-        the self.charm_instance weak reference.
+        Note passing port_map and service_name is deprecated, but supported for
+        backwards compatibility.  The port_map and service_name can be obtained
+        from the self.charm_instance weak reference.
         :param  port_map: Map containing service names and the ports used e.g.
                 port_map = {
                         'svc1': {
@@ -548,8 +548,8 @@ class APIConfigurationAdapter(ConfigurationAdapter):
     def external_ports(self):
         """Return ports the service will be accessed on
 
-        The self.port_map is a dictionary of dictionarys, where the ports are
-        two levels deep (the leaves).  This returns a set() of those ports.
+        The self.port_map is a dictionary of dictionaries, where the ports are
+        two levels deep (the leaves). This returns a set() of those ports.
 
         @return set of ports service can be accessed on
         """
