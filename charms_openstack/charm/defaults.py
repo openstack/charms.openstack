@@ -1,5 +1,4 @@
 import charmhelpers.contrib.openstack.utils as os_utils
-import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.unitdata as unitdata
 import charms.reactive as reactive
 
@@ -69,20 +68,12 @@ def _map_default_handler(state):
 
 @_map_default_handler('charm.installed')
 def make_default_install_handler():
-
-    @reactive.when_not('charm.installed')
-    def default_install():
-        """Provide a default install handler
-
-        The instance automagically becomes the derived OpenStackCharm instance.
-        The kv() key charmers.openstack-release-version' is used to cache the
-        release being used for this charm.  It is determined by the
-        default_select_release() function below, unless this is overriden by
-        the charm author
-        """
-        unitdata.kv().unset(OPENSTACK_RELEASE_KEY)
-        OpenStackCharm.singleton.install()
-        reactive.set_state('charm.installed')
+    """Set the default charm.installed state so that the default handler in
+    layer-openstack can run.
+    Convoluted, because charms.reactive will only run handlers in the reactive
+    or hooks directory.
+    """
+    reactive.set_state('charms.openstack.do-default-charm.installed')
 
 
 @_map_default_handler('charm.default-select-release')
@@ -109,94 +100,64 @@ def make_default_select_release_handler():
 
 @_map_default_handler('amqp.connected')
 def make_default_amqp_connection_handler():
-
-    @reactive.when('amqp.connected')
-    def default_amqp_connection(amqp):
-        """Handle the default amqp connection.
-
-        This requires that the charm implements get_amqp_credentials() to
-        provide a tuple of the (user, vhost) for the amqp server
-        """
-        instance = OpenStackCharm.singleton
-        user, vhost = instance.get_amqp_credentials()
-        amqp.request_access(username=user, vhost=vhost)
-        instance.assess_status()
+    """Set the default amqp.connected state so that the default handler in
+    layer-openstack can run.
+    Convoluted, because charms.reactive will only run handlers in the reactive
+    or hooks directory.
+    """
+    reactive.set_state('charms.openstack.do-default-amqp.connected')
 
 
 @_map_default_handler('shared-db.connected')
 def make_default_setup_database_handler():
-
-    @reactive.when('shared-db.connected')
-    def default_setup_database(database):
-        """Handle the default database connection setup
-
-        This requires that the charm implements get_database_setup() to provide
-        a list of dictionaries;
-        [{'database': ..., 'username': ..., 'hostname': ..., 'prefix': ...}]
-
-        The prefix can be missing: it defaults to None.
-        """
-        instance = OpenStackCharm.singleton
-        for db in instance.get_database_setup():
-            database.configure(**db)
-        instance.assess_status()
+    """Set the default shared-db.connected state so that the default handler in
+    layer-openstack can run.
+    Convoluted, because charms.reactive will only run handlers in the reactive
+    or hooks directory.
+    """
+    reactive.set_state('charms.openstack.do-default-shared-db.connected')
 
 
 @_map_default_handler('identity-service.connected')
 def make_default_setup_endpoint_connection():
-
-    @reactive.when('identity-service.connected')
-    def default_setup_endpoint_connection(keystone):
-        """When the keystone interface connects, register this unit into the
-        catalog.  This is the default handler, and calls on the charm class to
-        provide the endpoint information.  If multiple endpoints are needed,
-        then a custom endpoint handler will be needed.
-        """
-        instance = OpenStackCharm.singleton
-        keystone.register_endpoints(instance.service_type,
-                                    instance.region,
-                                    instance.public_url,
-                                    instance.internal_url,
-                                    instance.admin_url)
-        instance.assess_status()
+    """Set the default identity-service.connected state so that the default
+    handler in layer-openstack can run.
+    Convoluted, because charms.reactive will only run handlers in the reactive
+    or hooks directory.
+    """
+    reactive.set_state(
+        'charms.openstack.do-default-identity-service.connected')
 
 
 @_map_default_handler('identity-service.available')
 def make_setup_endpoint_available_handler():
-
-    @reactive.when('identity-service.available')
-    def default_setup_endpoint_available(keystone):
-        """When the identity-service interface is available, this default
-        handler switches on the SSL support.
-        """
-        instance = OpenStackCharm.singleton
-        instance.configure_ssl(keystone)
-        instance.assess_status()
+    """Set the default identity-service.available state so that the default
+    handler in layer-openstack can run.
+    Convoluted, because charms.reactive will only run handlers in the reactive
+    or hooks directory.
+    """
+    reactive.set_state(
+        'charms.openstack.do-default-identity-service.available')
 
 
 @_map_default_handler('config.changed')
 def make_default_config_changed_handler():
-
-    @reactive.when('config.changed')
-    def default_config_changed():
-        """Default handler for config.changed state from reactive.  Just see if
-        our status has changed.  This is just to clear any errors that may have
-        got stuck due to missing async handlers, etc.
-        """
-        instance = OpenStackCharm.singleton
-        instance.config_changed()
-        instance.assess_status()
+    """Set the default config.changed state so that the default handler in
+    layer-openstack can run.
+    Convoluted, because charms.reactive will only run handlers in the reactive
+    or hooks directory.
+    """
+    reactive.set_state('charms.openstack.do-default-config.changed')
 
 
 @_map_default_handler('upgrade-charm')
 def make_default_upgrade_charm_handler():
-
-    @reactive.hook('upgrade-charm')
-    def default_upgrade_charm():
-        """Default handler for the 'upgrade-charm' hook.
-        This calls the charm.singleton.upgrade_charm() function as a default.
-        """
-        OpenStackCharm.singleton.upgrade_charm()
+    """Set the default upgrade-charm state so that the default handler in
+    layer-openstack can run.
+    Convoluted, because charms.reactive will only run handlers in the reactive
+    or hooks directory.
+    """
+    reactive.set_state('charms.openstack.do-default-upgrade-charm')
 
 
 def default_render_configs(*interfaces):
@@ -214,12 +175,9 @@ def default_render_configs(*interfaces):
 
 @_map_default_handler('update-status')
 def make_default_update_status_handler():
-
-    @reactive.hook('update-status')
-    def default_update_status():
-        """Default handler for update-status state.
-        Just call update status.
-        """
-        instance = OpenStackCharm.singleton
-        hookenv.application_version_set(instance.application_version)
-        instance.assess_status()
+    """Set the default upgrade-status state so that the default handler in
+    layer-openstack can run.
+    Convoluted, because charms.reactive will only run handlers in the reactive
+    or hooks directory.
+    """
+    reactive.set_state('charms.openstack.do-default-update-status')
