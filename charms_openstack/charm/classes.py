@@ -17,7 +17,10 @@ from charms_openstack.charm.core import (
     BaseOpenStackCharmActions,
     BaseOpenStackCharmAssessStatus,
 )
-from charms_openstack.charm.utils import get_upstream_version
+from charms_openstack.charm.utils import (
+    get_upstream_version,
+    is_data_changed,
+)
 import charms_openstack.adapters as os_adapters
 import charms_openstack.ip as os_ip
 
@@ -507,22 +510,30 @@ class HAOpenStackCharm(OpenStackAPICharm):
     def configure_ssl(self, keystone_interface=None):
         """Configure SSL certificates and keys
 
+        NOTE(AJK): This function tries to minimise the work it does,
+        particularly with writing files and restarting apache.
+
         @param keystone_interface KeystoneRequires class
         """
-        keystone_interface = (reactive.RelationBase.from_state(
-            'identity-service.available.ssl') or
-            reactive.RelationBase.from_state(
-                'identity-service.available.ssl_legacy'))
+        keystone_interface = (
+            reactive.RelationBase
+            .from_state('identity-service.available.ssl') or
+            reactive.RelationBase
+            .from_state('identity-service.available.ssl_legacy'))
         ssl_objects = self.get_certs_and_keys(
             keystone_interface=keystone_interface)
-        if ssl_objects:
-            for ssl in ssl_objects:
-                self.configure_cert(ssl['cert'], ssl['key'], cn=ssl['cn'])
-                self.configure_ca(ssl['ca'])
-            self.set_state('ssl.enabled', True)
-            self.configure_apache()
-        else:
-            self.set_state('ssl.enabled', False)
+        with is_data_changed('configure_ssl.ssl_objects',
+                             ssl_objects) as changed:
+            if ssl_objects:
+                if changed:
+                    for ssl in ssl_objects:
+                        self.configure_cert(
+                            ssl['cert'], ssl['key'], cn=ssl['cn'])
+                        self.configure_ca(ssl['ca'])
+                    self.configure_apache()
+                self.set_state('ssl.enabled', True)
+            else:
+                self.set_state('ssl.enabled', False)
         amqp_ssl = reactive.RelationBase.from_state('amqp.available.ssl')
         if amqp_ssl:
             self.configure_rabbit_cert(amqp_ssl)
@@ -563,10 +574,23 @@ class HAOpenStackCharm(OpenStackAPICharm):
         subprocess.check_call(['update-ca-certificates', '--fresh'])
 
     def update_peers(self, cluster):
-        for addr_type in os_ip.ADDRESS_MAP.keys():
+        """Update peers in the cluster about the addresses that this unit
+        holds.
+
+        NOTE(AJK): This uses the helper is_data_changed() to track whether this
+        has already been done, and doesn't re-advertise the changes if nothing
+        has changed.
+
+        @param cluster: the interface object for the cluster relation
+        """
+        laddrs = []
+        for addr_type in sorted(os_ip.ADDRESS_MAP.keys()):
             cidr = self.config.get(os_ip.ADDRESS_MAP[addr_type]['config'])
             laddr = ch_ip.get_address_in_network(cidr)
-            if laddr:
-                cluster.set_address(
-                    os_ip.ADDRESS_MAP[addr_type]['binding'],
-                    laddr)
+            laddrs.append((addr_type, laddr))
+        with is_data_changed('update_peers.laddrs', laddrs) as changed:
+            if changed:
+                for (addr_type, laddr) in laddrs:
+                    cluster.set_address(
+                        os_ip.ADDRESS_MAP[addr_type]['binding'],
+                        laddr)
