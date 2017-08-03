@@ -146,6 +146,18 @@ class OpenStackAPICharm(OpenStackCharm):
     # If None, then the default ConfigurationAdapter is used.
     configuration_class = os_adapters.APIConfigurationAdapter
 
+    # These can be overriden in the derived charm class to allow specialism of
+    # config files.  These values are read in the APIConfigurationAdapter and
+    # used to furnish the dictionary provided from the property
+    # 'wsgi_worker_context'.  e.g. config.wsgi_worker_context.processes would
+    # be the number of processes for the main API wsgi worker.
+    wsgi_script = None
+    wsgi_admin_script = None
+    wsgi_public_script = None
+    wsgi_process_weight = None  # use the default from charm-helpers
+    wsgi_admin_process_weight = None  # use the default from charm-helpers
+    wsgi_public_process_weight = None  # use the default from charm-helpers
+
     def upgrade_charm(self):
         """Setup token cache in case previous charm version did not."""
         self.setup_token_cache()

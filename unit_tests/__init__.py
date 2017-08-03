@@ -32,6 +32,8 @@ sys.modules['charmhelpers.contrib.openstack.utils'] = (
     charmhelpers.contrib.openstack.utils)
 sys.modules['charmhelpers.contrib.openstack.templating'] = (
     charmhelpers.contrib.openstack.templating)
+sys.modules['charmhelpers.contrib.openstack.context'] = (
+    charmhelpers.contrib.openstack.context)
 sys.modules['charmhelpers.contrib.network'] = charmhelpers.contrib.network
 sys.modules['charmhelpers.contrib.network.ip'] = (
     charmhelpers.contrib.network.ip)
