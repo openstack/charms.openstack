@@ -52,13 +52,14 @@ class BaseTestCase(unittest.TestCase):
         self._patches = None
         self._patches_start = None
 
-    def patch_object(self, obj, attr, return_value=None, name=None, new=None):
+    def patch_object(self, obj, attr, return_value=None, name=None, new=None,
+                     **kwargs):
         if name is None:
             name = attr
         if new is not None:
-            mocked = mock.patch.object(obj, attr, new=new)
+            mocked = mock.patch.object(obj, attr, new=new, **kwargs)
         else:
-            mocked = mock.patch.object(obj, attr)
+            mocked = mock.patch.object(obj, attr, **kwargs)
         self._patches[name] = mocked
         started = mocked.start()
         if new is None:

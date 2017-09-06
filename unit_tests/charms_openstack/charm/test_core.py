@@ -151,11 +151,19 @@ class TestProvideCharmInstance(utils.BaseTestCase):
             self.assertEqual(charm, 'the-charm')
 
 
+class AssessStatusCharm(MyOpenStackCharm):
+    release = 'juno'
+
+    @property
+    def application_version(self):
+        return None
+
+
 class TestBaseOpenStackCharmAssessStatus(BaseOpenStackCharmTest):
 
     def setUp(self):
         def make_open_stack_charm():
-            return MyOpenStackCharm(['interface1', 'interface2'])
+            return AssessStatusCharm(['interface1', 'interface2'])
 
         super().setUp(make_open_stack_charm, TEST_CONFIG)
 
@@ -180,8 +188,13 @@ class TestBaseOpenStackCharmAssessStatus(BaseOpenStackCharmTest):
         self.patch_target('custom_assess_status_check',
                           return_value=(None, None))
         self.patch_target('check_services_running', return_value=(None, None))
-        self.target._assess_status()
+        self.patch_object(chm_core.hookenv, 'application_version_set')
+        with mock.patch.object(AssessStatusCharm, 'application_version',
+                               new_callable=mock.PropertyMock,
+                               return_value="abc"):
+            self.target._assess_status()
         self.status_set.assert_called_once_with('active', 'Unit is ready')
+        self.application_version_set.assert_called_once_with("abc")
         # check all the check functions got called
         self.check_if_paused.assert_called_once_with()
         self.check_interfaces.assert_called_once_with()

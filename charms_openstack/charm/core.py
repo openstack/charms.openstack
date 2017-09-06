@@ -772,6 +772,12 @@ class BaseOpenStackCharmAssessStatus(object):
         SIDE EFFECT: this function calls status_set(state, message) to set the
         workload status in juju.
         """
+        # set the application version when we set the status (always)
+        # NOTE(tinwood) this is not, strictly speaking, good code organisation,
+        # as the 'application_version' property is in the classes.py file.
+        # However, as this is ALWAYS a mixin on that class, we can get away
+        # with this.
+        hookenv.application_version_set(self.application_version)
         for f in [self.check_if_paused,
                   self.custom_assess_status_check,
                   self.check_interfaces,

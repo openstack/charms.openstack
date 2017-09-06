@@ -31,6 +31,7 @@ class BaseOpenStackCharmTest(unit_tests.utils.BaseTestCase):
         chm_core._singleton = None
         super().tearDown()
 
-    def patch_target(self, attr, return_value=None, name=None, new=None):
+    def patch_target(self, attr, return_value=None, name=None, new=None,
+                     **kwargs):
         # uses BaseTestCase.patch_object() to patch targer.
-        self.patch_object(self.target, attr, return_value, name, new)
+        self.patch_object(self.target, attr, return_value, name, new, **kwargs)
