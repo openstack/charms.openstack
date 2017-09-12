@@ -38,7 +38,7 @@ class TestHelpers(BaseTestCase):
                 raise Exception()
         except:
             pass
-        self.assertEquals(hash, store.get('charms.openstack.data_changed.bar'))
+        self.assertEqual(hash, store.get('charms.openstack.data_changed.bar'))
         # check that raising an exception AND having the flag set causes a
         # change
         try:
@@ -48,5 +48,5 @@ class TestHelpers(BaseTestCase):
                 raise Exception()
         except:
             pass
-        self.assertNotEquals(hash,
-                             store.get('charms.openstack.data_changed.bar'))
+        self.assertNotEqual(hash,
+                            store.get('charms.openstack.data_changed.bar'))

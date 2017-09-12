@@ -709,7 +709,7 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             # first no memcache
             mci = MockCharmInstance('liberty')
             c = adapters.APIConfigurationAdapter(charm_instance=mci)
-            self.assertEquals(c.memcache['use_memcache'], False)
+            self.assertEqual(c.memcache['use_memcache'], False)
 
             # next switch on memcache
             mci = MockCharmInstance('mitaka')
@@ -717,78 +717,78 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             lsb_r.return_value = {'DISTRIB_CODENAME': 'trusty'}
             is_ipv6_disabled.return_value = True
             c = adapters.APIConfigurationAdapter(charm_instance=mci)
-            self.assertEquals(c.memcache['use_memcache'], True)
-            self.assertEquals(MCHR.class_thing.thing, 'trusty')
-            self.assertEquals(c.memcache['memcache_server'], 'localhost')
-            self.assertEquals(c.memcache['memcache_server_formatted'],
-                              '127.0.0.1')
-            self.assertEquals(c.memcache['memcache_port'], '11211')
-            self.assertEquals(c.memcache['memcache_url'],
-                              '127.0.0.1:11211')
+            self.assertEqual(c.memcache['use_memcache'], True)
+            self.assertEqual(MCHR.class_thing.thing, 'trusty')
+            self.assertEqual(c.memcache['memcache_server'], 'localhost')
+            self.assertEqual(c.memcache['memcache_server_formatted'],
+                             '127.0.0.1')
+            self.assertEqual(c.memcache['memcache_port'], '11211')
+            self.assertEqual(c.memcache['memcache_url'],
+                             '127.0.0.1:11211')
             # make us later than trusty
             mch_result = True
-            self.assertEquals(c.memcache['memcache_server'], '127.0.0.1')
+            self.assertEqual(c.memcache['memcache_server'], '127.0.0.1')
 
             # now do ipv6 not disabled.
             mch_result = False
             is_ipv6_disabled.return_value = False
             c = adapters.APIConfigurationAdapter(charm_instance=mci)
-            self.assertEquals(c.memcache['use_memcache'], True)
-            self.assertEquals(MCHR.class_thing.thing, 'trusty')
-            self.assertEquals(c.memcache['memcache_server'], 'ip6-localhost')
-            self.assertEquals(c.memcache['memcache_server_formatted'], '[::1]')
-            self.assertEquals(c.memcache['memcache_port'], '11211')
-            self.assertEquals(c.memcache['memcache_url'], 'inet6:[::1]:11211')
+            self.assertEqual(c.memcache['use_memcache'], True)
+            self.assertEqual(MCHR.class_thing.thing, 'trusty')
+            self.assertEqual(c.memcache['memcache_server'], 'ip6-localhost')
+            self.assertEqual(c.memcache['memcache_server_formatted'], '[::1]')
+            self.assertEqual(c.memcache['memcache_port'], '11211')
+            self.assertEqual(c.memcache['memcache_url'], 'inet6:[::1]:11211')
             # make us later than trusty
             mch_result = True
-            self.assertEquals(c.memcache['memcache_server'], '::1')
+            self.assertEqual(c.memcache['memcache_server'], '::1')
 
     def test_use_memcache(self):
         with mock.patch.object(adapters.APIConfigurationAdapter, 'memcache',
                                new_callable=mock.PropertyMock) as memcache:
             memcache.return_value = {}
             c = adapters.APIConfigurationAdapter()
-            self.assertEquals(c.use_memcache, False)
+            self.assertEqual(c.use_memcache, False)
             memcache.return_value = {'use_memcache': False}
-            self.assertEquals(c.use_memcache, False)
+            self.assertEqual(c.use_memcache, False)
             memcache.return_value = {'use_memcache': True}
-            self.assertEquals(c.use_memcache, True)
+            self.assertEqual(c.use_memcache, True)
 
     def test_memcache_server(self):
         with mock.patch.object(adapters.APIConfigurationAdapter, 'memcache',
                                new_callable=mock.PropertyMock) as memcache:
             memcache.return_value = {}
             c = adapters.APIConfigurationAdapter()
-            self.assertEquals(c.memcache_server, '')
+            self.assertEqual(c.memcache_server, '')
             memcache.return_value = {'memcache_server': 'hello'}
-            self.assertEquals(c.memcache_server, 'hello')
+            self.assertEqual(c.memcache_server, 'hello')
 
     def test_memcache_host(self):
         with mock.patch.object(adapters.APIConfigurationAdapter, 'memcache',
                                new_callable=mock.PropertyMock) as memcache:
             memcache.return_value = {}
             c = adapters.APIConfigurationAdapter()
-            self.assertEquals(c.memcache_host, '')
+            self.assertEqual(c.memcache_host, '')
             memcache.return_value = {'memcache_server_formatted': 'hello'}
-            self.assertEquals(c.memcache_host, 'hello')
+            self.assertEqual(c.memcache_host, 'hello')
 
     def test_memcache_port(self):
         with mock.patch.object(adapters.APIConfigurationAdapter, 'memcache',
                                new_callable=mock.PropertyMock) as memcache:
             memcache.return_value = {}
             c = adapters.APIConfigurationAdapter()
-            self.assertEquals(c.memcache_port, '')
+            self.assertEqual(c.memcache_port, '')
             memcache.return_value = {'memcache_port': 'hello'}
-            self.assertEquals(c.memcache_port, 'hello')
+            self.assertEqual(c.memcache_port, 'hello')
 
     def test_memcache_url(self):
         with mock.patch.object(adapters.APIConfigurationAdapter, 'memcache',
                                new_callable=mock.PropertyMock) as memcache:
             memcache.return_value = {}
             c = adapters.APIConfigurationAdapter()
-            self.assertEquals(c.memcache_url, '')
+            self.assertEqual(c.memcache_url, '')
             memcache.return_value = {'memcache_url': 'hello'}
-            self.assertEquals(c.memcache_url, 'hello')
+            self.assertEqual(c.memcache_url, 'hello')
 
     def test_workers(self):
         class FakeWorkerConfigContext(object):
@@ -798,7 +798,7 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
         with mock.patch.object(adapters.ch_context, 'WorkerConfigContext',
                                new=FakeWorkerConfigContext):
             c = adapters.APIConfigurationAdapter()
-            self.assertEquals(c.workers, 8)
+            self.assertEqual(c.workers, 8)
 
     def test_wsgi_worker_context(self):
         class ChInstance1(object):
@@ -839,37 +839,37 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
                                new=FakeWSGIWorkerConfigContext):
             # start with no charm instance to get default values
             c = adapters.APIConfigurationAdapter()
-            self.assertEquals(c.wsgi_worker_context, "T")
-            self.assertEquals(FakeWSGIWorkerConfigContext.copy_kwargs, {})
+            self.assertEqual(c.wsgi_worker_context, "T")
+            self.assertEqual(FakeWSGIWorkerConfigContext.copy_kwargs, {})
             # start with a minimal charm_instance
             instance = ChInstance1()
             c = adapters.APIConfigurationAdapter(charm_instance=instance)
-            self.assertEquals(c.wsgi_worker_context, "T")
-            self.assertEquals(FakeWSGIWorkerConfigContext.copy_kwargs,
-                              {'name': 'test-name', 'script': 'test-script'})
+            self.assertEqual(c.wsgi_worker_context, "T")
+            self.assertEqual(FakeWSGIWorkerConfigContext.copy_kwargs,
+                             {'name': 'test-name', 'script': 'test-script'})
             # And then, all the options set:
             instance = ChInstance2()
             c = adapters.APIConfigurationAdapter(charm_instance=instance)
-            self.assertEquals(c.wsgi_worker_context, "T")
-            self.assertEquals(FakeWSGIWorkerConfigContext.copy_kwargs,
-                              {'name': 'test-name',
-                               'script': 'test-script',
-                               'admin_script': 'test-admin-script',
-                               'public_script': 'test-public-script',
-                               'process_weight': 0.5,
-                               'admin_process_weight': 0.1,
-                               'public_process_weight': 0.4})
+            self.assertEqual(c.wsgi_worker_context, "T")
+            self.assertEqual(FakeWSGIWorkerConfigContext.copy_kwargs,
+                             {'name': 'test-name',
+                              'script': 'test-script',
+                              'admin_script': 'test-admin-script',
+                              'public_script': 'test-public-script',
+                              'process_weight': 0.5,
+                              'admin_process_weight': 0.1,
+                              'public_process_weight': 0.4})
             # and finally, with some of the options set to None, to test
             # filtering
             instance = ChInstance3()
             c = adapters.APIConfigurationAdapter(charm_instance=instance)
-            self.assertEquals(c.wsgi_worker_context, "T")
-            self.assertEquals(FakeWSGIWorkerConfigContext.copy_kwargs,
-                              {'name': 'test-name',
-                               'admin_script': 'test-admin-script',
-                               'public_script': 'test-public-script',
-                               'admin_process_weight': 0.1,
-                               'public_process_weight': 0.4})
+            self.assertEqual(c.wsgi_worker_context, "T")
+            self.assertEqual(FakeWSGIWorkerConfigContext.copy_kwargs,
+                             {'name': 'test-name',
+                              'admin_script': 'test-admin-script',
+                              'public_script': 'test-public-script',
+                              'admin_process_weight': 0.1,
+                              'public_process_weight': 0.4})
 
 
 class FakePeerHARelationAdapter(object):
