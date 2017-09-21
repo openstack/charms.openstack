@@ -460,7 +460,8 @@ class HAOpenStackCharm(OpenStackAPICharm):
             return [{
                 'key': self.config_defined_ssl_key.decode('utf-8'),
                 'cert': self.config_defined_ssl_cert.decode('utf-8'),
-                'ca': self.config_defined_ssl_ca.decode('utf-8'),
+                'ca': (self.config_defined_ssl_ca.decode('utf-8')
+                       if self.config_defined_ssl_ca else None),
                 'cn': None}]
         elif keystone_interface:
             keys_and_certs = []
