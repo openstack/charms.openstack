@@ -291,12 +291,14 @@ class HAOpenStackCharm(OpenStackAPICharm):
         Enable Apache vhost for SSL termination if vhost exists and it is not
         curently enabled
         """
-        if os.path.exists(self.apache_vhost_file):
-            check_enabled = subprocess.call(
-                ['a2query', '-s', 'openstack_https_frontend'])
-            if check_enabled != 0:
-                subprocess.check_call(['a2ensite', 'openstack_https_frontend'])
-                ch_host.service_reload('apache2', restart_on_failure=True)
+        if not os.path.exists(self.apache_vhost_file):
+            open(self.apache_vhost_file, 'a').close()
+
+        check_enabled = subprocess.call(
+            ['a2query', '-s', 'openstack_https_frontend'])
+        if check_enabled:
+            subprocess.check_call(['a2ensite', 'openstack_https_frontend'])
+            ch_host.service_reload('apache2', restart_on_failure=True)
 
     def configure_apache(self):
         if self.apache_enabled():
@@ -338,7 +340,8 @@ class HAOpenStackCharm(OpenStackAPICharm):
         """Determine if apache is being used
 
         @return True if apache is being used"""
-        return self.get_state('ssl.enabled')
+        return (self.get_state('ssl.enabled') or
+                self.get_state('ssl.requested'))
 
     def haproxy_enabled(self):
         """Determine if haproxy is fronting the services
@@ -528,10 +531,12 @@ class HAOpenStackCharm(OpenStackAPICharm):
             if ssl_objects:
                 if changed:
                     for ssl in ssl_objects:
+                        self.set_state('ssl.requested', True)
                         self.configure_cert(
                             ssl['cert'], ssl['key'], cn=ssl['cn'])
                         self.configure_ca(ssl['ca'])
                     self.configure_apache()
+                    self.remove_state('ssl.requested')
                 self.set_state('ssl.enabled', True)
             else:
                 self.set_state('ssl.enabled', False)

@@ -4,3 +4,4 @@
 charm.openstack.egg-info
 .ropeproject
 .eggs
+.stestr

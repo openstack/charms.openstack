@@ -657,6 +657,13 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm.reactive.bus, 'set_state')
         self.patch_object(chm.reactive.RelationBase, 'from_state',
                           return_value=None)
+        self.patch_object(chm_core.charmhelpers.fetch,
+                          'filter_installed_packages',
+                          name='fip',
+                          return_value=['apache2'])
+        self.patch_object(chm_core.charmhelpers.fetch,
+                          'apt_install',
+                          name='apt_install')
         self.target.configure_ssl()
         cert_calls = [
             mock.call('cert1', 'key1', cn='cn1'),
@@ -664,10 +671,13 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         ca_calls = [
             mock.call('ca1'),
             mock.call('ca2')]
+        set_state_calls = [
+            mock.call('ssl.requested', True),
+            mock.call('ssl.enabled', True)]
         self.configure_cert.assert_has_calls(cert_calls)
         self.configure_ca.assert_has_calls(ca_calls)
         self.configure_apache.assert_called_once_with()
-        self.set_state.assert_called_once_with('ssl.enabled', True)
+        self.set_state.assert_has_calls(set_state_calls)
 
     def test_configure_ssl_off(self):
         self.patch_target('get_certs_and_keys', return_value=[])
