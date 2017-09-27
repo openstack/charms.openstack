@@ -36,6 +36,12 @@ _singleton = None
 # This is to enable the defining code to define which release is used.
 _release_selector_function = None
 
+# `_package_type_selector_function` holds a function that optionally takes a
+# package type and commutes it to another package type or just returns a
+# package type. This is to enable the defining code to define which
+# package type is used.
+_package_type_selector_function = None
+
 
 def optional_interfaces(args, *interfaces):
     """Return a tuple with possible optional interfaces
@@ -85,7 +91,7 @@ class provide_charm_instance(object):
         return False
 
 
-def get_charm_instance(release=None, *args, **kwargs):
+def get_charm_instance(release=None, package_type='deb', *args, **kwargs):
     """Get an instance of the charm based on the release (or use the
     default if release is None).
 
@@ -96,17 +102,18 @@ def get_charm_instance(release=None, *args, **kwargs):
     Note that it passes args and kwargs to the class __init__() method.
 
     :param release: lc string representing release wanted.
+    :param package_type: string representing the package type required
     :returns: BaseOpenStackCharm() derived class according to cls.releases
     """
     if len(_releases.keys()) == 0:
         raise RuntimeError(
             "No derived BaseOpenStackCharm() classes registered")
-    # Note that this relies on OS releases being in alphabetica order
+    # Note that this relies on OS releases being in alphabetical order
     known_releases = sorted(_releases.keys())
     cls = None
     if release is None:
         # take the latest version of the charm if no release is passed.
-        cls = _releases[known_releases[-1]]
+        cls = _releases[known_releases[-1]][package_type]
     else:
         # check that the release is a valid release
         if release not in os_utils.OPENSTACK_RELEASES:
@@ -122,8 +129,9 @@ def get_charm_instance(release=None, *args, **kwargs):
             # try to find the release that is supported.
             for known_release in reversed(known_releases):
                 if (release_index >=
-                        os_utils.OPENSTACK_RELEASES.index(known_release)):
-                    cls = _releases[known_release]
+                        os_utils.OPENSTACK_RELEASES.index(known_release) and
+                        package_type in _releases[known_release]):
+                    cls = _releases[known_release][package_type]
                     break
     if cls is None:
         raise RuntimeError("Release {} is not supported".format(release))
@@ -152,6 +160,57 @@ def register_os_release_selector(f):
             "Only a single release_selector_function is supported."
             " Called with {}".format(f.__name__))
     return f
+
+
+def register_package_type_selector(f):
+    """Register a function that determines what the package type is for the
+    invocation run.  This allows the charm to define HOW the package type is
+    determined.
+
+    Usage:
+
+        @register_package_type_selector
+        def my_package_type_selector():
+            return package_type_chooser()
+
+    The function should return a string which is 'snap' or 'deb'.
+    """
+    global _package_type_selector_function
+    if _package_type_selector_function is None:
+        # we can only do this once in a system invocation.
+        _package_type_selector_function = f
+    else:
+        raise RuntimeError(
+            "Only a single package_type_selector_function is supported."
+            " Called with {}".format(f.__name__))
+    return f
+
+
+# TODO(jamespage): move to snap charmhelper
+def get_snap_version(snap, fatal=True):
+    """Determine version for an installed snap.
+
+    :param package: str Snap name to lookup (ie. in snap list)
+    :param fatal: bool Raise exception if snap not installed
+    :returns: str version of snap installed
+    """
+    cmd = ['snap', 'list', snap]
+    try:
+        out = subprocess.check_output(cmd).decode('UTF-8')
+    except subprocess.CalledProcessError:
+        if not fatal:
+            return None
+        # the snap is unknown to snapd
+        e = ('Could not determine version of snap: {} as it\'s'
+             ' not installed'.format(snap))
+        raise Exception(e)
+
+    lines = out.splitlines()
+    for line in lines:
+        if snap in line:
+            # Second item in list is version or a codename
+            return line.split()[1]
+    return None
 
 
 class BaseOpenStackCharmMeta(type):
@@ -190,18 +249,28 @@ class BaseOpenStackCharmMeta(type):
         if members.get('abstract_class', False):
             return
         if 'release' in members.keys():
+            package_type = members.get('package_type', 'deb')
+            if package_type not in ('deb', 'snap'):
+                raise RuntimeError(
+                    "Package type {} is not a known type"
+                    .format(package_type))
             release = members['release']
             if release not in os_utils.OPENSTACK_RELEASES:
                 raise RuntimeError(
                     "Release {} is not a known OpenStack release"
                     .format(release))
-            if release in _releases.keys():
+            if (release in _releases.keys() and
+                    package_type in _releases[release].keys()):
                 raise RuntimeError(
                     "Release {} defined more than once in classes {} and {} "
                     " (at least)"
-                    .format(release, _releases[release].__name__, name))
+                    .format(release,
+                            _releases[release][package_type].__name__,
+                            name))
             # store the class against the release.
-            _releases[release] = cls
+            if release not in _releases:
+                _releases[release] = {}
+            _releases[release][package_type] = cls
         else:
             raise RuntimeError(
                 "class '{}' does not define a release that it supports. "
@@ -218,10 +287,14 @@ class BaseOpenStackCharmMeta(type):
         global _singleton
         if _singleton is None:
             release = None
+            package_type = None
             # see if a _release_selector_function has been registered.
             if _release_selector_function is not None:
                 release = _release_selector_function()
-            _singleton = get_charm_instance(release=release)
+            if _package_type_selector_function is not None:
+                package_type = _package_type_selector_function()
+            _singleton = get_charm_instance(release=release,
+                                            package_type=package_type or 'deb')
         return _singleton
 
 
@@ -348,11 +421,47 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         return reactive.bus.get_state(state)
 
     @staticmethod
+    def get_os_codename_snap(snap, codenames, fatal=True):
+        """Derive OpenStack release codename from an installed snap.
+
+        :param package: str Snap name to lookup (ie. in snap list)
+        :param codenames: dict of OrderedDict
+            {
+             'snap1': collections.OrderedDict([
+                 ('2', 'mitaka'),
+                 ('3', 'newton'),
+                 ('4', 'ocata'), ]),
+             'snap2': collections.OrderedDict([
+                 ('12', 'mitaka'),
+                 ('13', 'newton'),
+                 ('14', 'ocata'), ]),
+            }
+        :param fatal: bool Raise exception if snap not installed
+        :returns: str OpenStack version name corresponding to package
+        """
+        version_or_codename = get_snap_version(snap, fatal)
+
+        match = re.match('^(\d+)\.(\d+)', version_or_codename)
+        if match:
+            version = match.group(0)
+            # Generate a major version number for newer semantic
+            # versions of openstack projects
+            major_vers = version.split('.')[0]
+            try:
+                return codenames[snap][major_vers]
+            except KeyError:
+                # NOTE(jamespage): fallthrough to codename assumption
+                pass
+
+        # NOTE(jamespage): fallback to codename assumption
+        return version_or_codename
+
+    @staticmethod
     def get_os_codename_package(package, codenames, fatal=True):
         """Derive OpenStack release codename from an installed package.
 
-        :param package: str Package name to lookup in apt cache
-        :param codenames: dict of OrderedDict eg
+        :param package: str Package name to lookup (ie. in apt cache)
+        :param codenames: dict of OrderedDict eg (not applicable for snap pkgs)
             {
              'pkg1': collections.OrderedDict([
                  ('2', 'mitaka'),
@@ -396,6 +505,26 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
                 major_vers in codenames[package]):
             return codenames[package][major_vers]
 
+    def get_os_version_snap(self, snap, fatal=True):
+        """Derive OpenStack version number from an installed snap.
+
+        :param package: str Snap name to lookup in snap list
+        :param fatal: bool Raise exception if snap not installed
+        :returns: str OpenStack version number corresponding to snap
+        """
+        if os_utils.snap_install_requested():
+            codename = self.get_os_codename_snap(snap,
+                                                 self.snap_codenames,
+                                                 fatal=fatal)
+            if not codename:
+                return None
+
+            for version, cname in os_utils.OPENSTACK_CODENAMES.items():
+                if cname == codename:
+                    return version
+
+        return None
+
     def get_os_version_package(self, package, fatal=True):
         """Derive OpenStack version number from an installed package.
 
@@ -403,16 +532,18 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         :param fatal: bool Raise exception if pkg not installed
         :returns: str OpenStack version number corresponding to package
         """
-        codenames = self.package_codenames or os_utils.PACKAGE_CODENAMES
-        codename = self.get_os_codename_package(
-            package, codenames, fatal=fatal)
-        if not codename:
-            return None
+        if not os_utils.snap_install_requested():
+            codename = self.get_os_codename_package(
+                package, self.package_codenames or os_utils.PACKAGE_CODENAMES,
+                fatal=fatal)
+            if not codename:
+                return None
 
-        vers_map = os_utils.OPENSTACK_CODENAMES
-        for version, cname in vers_map.items():
-            if cname == codename:
-                return version
+            for version, cname in os_utils.OPENSTACK_CODENAMES.items():
+                if cname == codename:
+                    return version
+
+        return None
 
 
 class BaseOpenStackCharmActions(object):
@@ -440,15 +571,48 @@ class BaseOpenStackCharmActions(object):
         """
         return self.packages
 
+    @property
+    def all_snaps(self):
+        """List of snaps to be installed
+
+        Relies on the class variable 'snaps'
+
+        @return ['snap1', 'snap2', ...]
+        """
+        return self.snaps
+
+    @property
+    def primary_snap(self):
+        """Primary snap to use for configuration
+
+        Relies on the class variable 'snaps'
+
+        :return string: first snap found in 'snaps'
+        """
+        if self.snaps:
+            return self.snaps[0]
+        return None
+
     def install(self):
-        """Install packages related to this charm based on
-        contents of self.packages attribute.
+        """Install packages or snaps related to this charm based on
+        contents of self.packages or self.snaps attribute.
         """
         packages = fetch.filter_installed_packages(
             self.all_packages)
         if packages:
             hookenv.status_set('maintenance', 'Installing packages')
             fetch.apt_install(packages, fatal=True)
+
+        if os_utils.snap_install_requested():
+            if self.all_snaps:
+                hookenv.status_set('maintenance', 'Installing snaps')
+                os_utils.install_os_snaps(
+                    os_utils.get_snaps_install_info_from_origin(
+                        self.all_snaps,
+                        self.config['openstack-origin'],
+                        mode=self.snap_mode)
+                )
+
         # AJK: we set this as charms can use it to detect installed state
         self.set_state('{}-installed'.format(self.name))
         self.update_api_ports()
@@ -652,7 +816,7 @@ class BaseOpenStackCharmActions(object):
                 ports.append(line)
         return ports
 
-    def openstack_upgrade_available(self, package=None):
+    def openstack_upgrade_available(self, package=None, snap=None):
         """Check if an OpenStack upgrade is available
 
         :param package: str Package name to use to check upgrade availability
@@ -660,10 +824,16 @@ class BaseOpenStackCharmActions(object):
         """
         if not package:
             package = self.release_pkg
+        if not snap:
+            snap = self.release_snap
 
         src = self.config['openstack-origin']
         cur_vers = self.get_os_version_package(package)
         avail_vers = os_utils.get_os_version_install_source(src)
+        if os_utils.snap_install_requested():
+            cur_vers = self.get_os_version_snap(snap)
+        else:
+            cur_vers = self.get_os_version_package(package)
         apt.init()
         return apt.version_compare(avail_vers, cur_vers) == 1
 
@@ -680,13 +850,22 @@ class BaseOpenStackCharmActions(object):
             self.do_openstack_upgrade_db_migration()
 
     def do_openstack_pkg_upgrade(self):
-        """Upgrade OpenStack packages
+        """Upgrade OpenStack packages and snaps
 
         :returns: None
         """
         new_src = self.config['openstack-origin']
         new_os_rel = os_utils.get_os_codename_install_source(new_src)
         hookenv.log('Performing OpenStack upgrade to %s.' % (new_os_rel))
+
+        # TODO(jamespage): Deal with deb->snap->deb migrations
+        if os_utils.snap_install_requested() and self.all_snaps:
+            os_utils.install_os_snaps(
+                snaps=os_utils.get_snaps_install_info_from_origin(
+                    self.all_snaps,
+                    self.config['openstack-origin'],
+                    mode=self.snap_mode),
+                refresh=True)
 
         os_utils.configure_installation_source(new_src)
         fetch.apt_update()
@@ -721,6 +900,15 @@ class BaseOpenStackCharmActions(object):
             subprocess.check_call(self.sync_cmd)
         else:
             hookenv.log("Deferring DB sync to leader", level=hookenv.INFO)
+
+    # NOTE(jamespage): Not currently used - switch from c-h function for perf?
+    def snap_install_requested(self):
+        """Determine whether a snap based install is configured
+        via the openstack-origin configuration option
+
+        :returns: None
+        """
+        return self.options.openstack_origin.startswith('snap:')
 
 
 class BaseOpenStackCharmAssessStatus(object):

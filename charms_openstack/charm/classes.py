@@ -16,6 +16,7 @@ from charms_openstack.charm.core import (
     BaseOpenStackCharm,
     BaseOpenStackCharmActions,
     BaseOpenStackCharmAssessStatus,
+    get_snap_version,
 )
 from charms_openstack.charm.utils import (
     get_upstream_version,
@@ -50,15 +51,28 @@ class OpenStackCharm(BaseOpenStackCharm,
     # first_release = this is the first release in which this charm works
     release = 'icehouse'
 
+    # package type - package type (deb or snap) in which this charm works
+    package_type = 'deb'
+
     # The name of the charm (for printing, etc.)
     name = 'charmname'
 
     # List of packages to install
     packages = []
 
+    # List of snaps to install
+    snaps = []
+
+    # Mode to install snaps in (jailmode/devmode/classic)
+    snap_mode = 'jailmode'
+
     # Package to determine application version from
     # defaults to first in packages if not provided
-    version_package = None
+    version_package = release_pkg = None
+
+    # Snap to determine application version from;
+    # defaults to first in snaps if not provided
+    version_snap = release_snap = None
 
     # Keystone endpoint type
     service_type = None
@@ -121,15 +135,26 @@ class OpenStackCharm(BaseOpenStackCharm,
     @property
     def application_version(self):
         """Return the current version of the application being deployed by
-        the charm, as indicated by the version_package attribute
+        the charm, as indicated by the version_package or version_snap
+        attribute
         """
-        if not self.version_package:
-            self.version_package = self.packages[0]
-        version = get_upstream_version(
-            self.version_package
-        )
-        if not version:
-            version = os_utils.os_release(self.version_package)
+        if os_utils.snap_install_requested():
+            if not self.version_snap:
+                self.version_snap = self.snaps[0]
+            version = get_snap_version(self.version_snap,
+                                       fatal=False)
+            if not version:
+                version = os_utils.get_os_codename_install_source(
+                    self.config['openstack-origin']
+                )
+        else:
+            if not self.version_package:
+                self.version_package = self.packages[0]
+            version = get_upstream_version(
+                self.version_package
+            )
+            if not version:
+                version = os_utils.os_release(self.version_package)
         return version
 
 
@@ -251,6 +276,14 @@ class OpenStackAPICharm(OpenStackCharm):
                 self.token_cache_pkgs())
 
     @property
+    def all_snaps(self):
+        """List of snaps to be installed
+
+        @return ['snap1', 'snap2', ...]
+        """
+        return super().all_snaps
+
+    @property
     def full_restart_map(self):
         """Map of services to be restarted if a file changes
 
@@ -278,7 +311,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
         self.set_haproxy_stat_password()
 
     @property
-    def apache_vhost_file(self):
+    def apache_ssl_vhost_file(self):
         """Apache vhost for SSL termination
 
         :returns: string
@@ -291,8 +324,8 @@ class HAOpenStackCharm(OpenStackAPICharm):
         Enable Apache vhost for SSL termination if vhost exists and it is not
         curently enabled
         """
-        if not os.path.exists(self.apache_vhost_file):
-            open(self.apache_vhost_file, 'a').close()
+        if not os.path.exists(self.apache_ssl_vhost_file):
+            open(self.apache_ssl_vhost_file, 'a').close()
 
         check_enabled = subprocess.call(
             ['a2query', '-s', 'openstack_https_frontend'])
@@ -315,9 +348,19 @@ class HAOpenStackCharm(OpenStackAPICharm):
         _packages = super(HAOpenStackCharm, self).all_packages
         if self.haproxy_enabled():
             _packages.append('haproxy')
-        if self.apache_enabled():
-            _packages.append('apache2')
+        if not os_utils.snap_install_requested():
+            if self.apache_enabled():
+                _packages.append('apache2')
         return _packages
+
+    @property
+    def all_snaps(self):
+        """List of snaps to be installed
+
+        @return ['snap1', 'snap2', ...]
+        """
+        _snaps = super().all_snaps
+        return _snaps
 
     @property
     def full_restart_map(self):
@@ -332,16 +375,33 @@ class HAOpenStackCharm(OpenStackAPICharm):
         _restart_map = super(HAOpenStackCharm, self).full_restart_map
         if self.haproxy_enabled():
             _restart_map[self.HAPROXY_CONF] = ['haproxy']
-        if self.apache_enabled():
-            _restart_map[self.apache_vhost_file] = ['apache2']
+        if os_utils.snap_install_requested():
+            # TODO(coreycb): add nginx config/service for ssl vhost
+            pass
+        else:
+            if self.apache_enabled():
+                _restart_map[self.apache_ssl_vhost_file] = ['apache2']
         return _restart_map
 
     def apache_enabled(self):
         """Determine if apache is being used
 
         @return True if apache is being used"""
-        return (self.get_state('ssl.enabled') or
-                self.get_state('ssl.requested'))
+        if os_utils.snap_install_requested():
+            return False
+        else:
+            return (self.get_state('ssl.enabled') or
+                    self.get_state('ssl.requested'))
+
+    def nginx_ssl_enabled(self):
+        """Determine if nginx is being used
+
+        @return True if nginx is being used"""
+        if os_utils.snap_install_requested():
+            return (self.get_state('ssl.enabled') or
+                    self.get_state('ssl.requested'))
+        else:
+            return False
 
     def haproxy_enabled(self):
         """Determine if haproxy is fronting the services
@@ -394,6 +454,8 @@ class HAOpenStackCharm(OpenStackAPICharm):
 
     def enable_apache_modules(self):
         """Enable Apache modules needed for SSL termination"""
+        if os_utils.snap_install_requested():
+            return
         restart = False
         for module in ['ssl', 'proxy', 'proxy_http']:
             check_enabled = subprocess.call(['a2query', '-m', module])
@@ -412,9 +474,14 @@ class HAOpenStackCharm(OpenStackAPICharm):
         @param key string SSL Key
         @param cn string Canonical name for service
         """
+        if os_utils.snap_install_requested():
+            ssl_dir = '/var/snap/{snap_name}/etc/nginx/ssl'.format(
+                snap_name=self.primary_snap)
+        else:
+            ssl_dir = os.path.join('/etc/apache2/ssl/', self.name)
+
         if not cn:
             cn = os_ip.resolve_address(endpoint_type=os_ip.INTERNAL)
-        ssl_dir = os.path.join('/etc/apache2/ssl/', self.name)
         ch_host.mkdir(path=ssl_dir)
         if cn:
             cert_filename = 'cert_{}'.format(cn)
@@ -535,7 +602,10 @@ class HAOpenStackCharm(OpenStackAPICharm):
                         self.configure_cert(
                             ssl['cert'], ssl['key'], cn=ssl['cn'])
                         self.configure_ca(ssl['ca'])
-                    self.configure_apache()
+
+                    if not os_utils.snap_install_requested():
+                        self.configure_apache()
+
                     self.remove_state('ssl.requested')
                 self.set_state('ssl.enabled', True)
             else:
@@ -563,6 +633,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
 
     def configure_ca(self, ca_cert, update_certs=True):
         """Write Certificate Authority certificate"""
+        # TODO(jamespage): work this out for snap based installations
         cert_file = (
             '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt')
         if ca_cert:

@@ -13,7 +13,14 @@ from unit_tests.charms_openstack.charm.common import (
 
 import unit_tests.utils as utils
 
-TEST_CONFIG = {'config': True}
+TEST_CONFIG = {'config': True,
+               'openstack-origin': None}
+SNAP_MAP = {
+    'mysnap': {
+        'channel': 'edge',
+        'mode': 'jailmode',
+    }
+}
 
 
 class TestRegisterOSReleaseSelector(unittest.TestCase):
@@ -60,10 +67,16 @@ class TestBaseOpenStackCharmMeta(BaseOpenStackCharmTest):
         class TestC2(chm_core.BaseOpenStackCharm):
             release = 'mitaka'
 
+        class TestC3(chm_core.BaseOpenStackCharm):
+            release = 'ocata'
+            package_type = 'snap'
+
         self.assertTrue('liberty' in chm_core._releases.keys())
         self.assertTrue('mitaka' in chm_core._releases.keys())
-        self.assertEqual(chm_core._releases['liberty'], TestC1)
-        self.assertEqual(chm_core._releases['mitaka'], TestC2)
+        self.assertTrue('ocata' in chm_core._releases.keys())
+        self.assertEqual(chm_core._releases['liberty']['deb'], TestC1)
+        self.assertEqual(chm_core._releases['mitaka']['deb'], TestC2)
+        self.assertEqual(chm_core._releases['ocata']['snap'], TestC3)
 
     def test_register_unknown_series(self):
         self.patch_object(chm_core, '_releases', new={})
@@ -351,14 +364,28 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.hookenv, 'apt_install')
         self.patch_object(chm_core.subprocess,
                           'check_output', return_value=b'\n')
+        self.patch_object(chm_core.os_utils, 'snap_install_requested',
+                          return_value=True)
+        self.patch_object(chm_core.os_utils, 'install_os_snaps')
+        self.patch_object(chm_core.os_utils,
+                          'get_snaps_install_info_from_origin',
+                          return_value=SNAP_MAP)
+
         self.target.install()
         # TODO: remove next commented line as we don't set this state anymore
         # self.target.set_state.assert_called_once_with('my-charm-installed')
         self.fip.assert_called_once_with(self.target.packages)
         self.status_set.assert_has_calls([
             mock.call('maintenance', 'Installing packages'),
+            mock.call('maintenance', 'Installing snaps'),
             mock.call('maintenance',
                       'Installation complete - awaiting next status')])
+        self.install_os_snaps.assert_called_once_with(SNAP_MAP)
+        self.get_snaps_install_info_from_origin.assert_called_once_with(
+            ['mysnap'],
+            None,
+            mode='jailmode'
+        )
 
     def test_api_port(self):
         self.assertEqual(self.target.api_port('service1'), 1)
@@ -557,6 +584,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.apt_cache.return_value = {
             'testpkg': pkg_mock}
         self.patch_object(chm_core.apt, 'upstream_version')
+        self.patch_object(chm_core.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.upstream_version.return_value = '3.0.0~b1'
         self.assertEqual(
             chm_core.BaseOpenStackCharm.get_os_codename_package(
@@ -576,6 +605,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('package_codenames')
         self.patch_target('get_os_codename_package',
                           return_value='my-series')
+        self.patch_object(chm_core.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.assertEqual(
             self.target.get_os_version_package('testpkg'),
             '2011.2')
@@ -584,15 +615,31 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                           return_value='unknown-series')
         self.assertEqual(self.target.get_os_version_package('testpkg'), None)
 
-    def test_openstack_upgrade_available(self):
+    def test_openstack_upgrade_available_package(self):
         self.patch_target('get_os_version_package')
         self.patch_object(chm_core.os_utils, 'get_os_version_install_source')
         self.patch_object(chm_core, 'apt')
         self.patch_target('config',
                           new={'openstack-origin': 'cloud:natty-folsom'})
+        self.patch_object(chm_core.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.get_os_version_package.return_value = 2
         self.get_os_version_install_source.return_value = 3
-        self.target.openstack_upgrade_available('testpkg')
+        self.target.openstack_upgrade_available(package='testpkg')
+        self.apt.version_compare.assert_called_once_with(3, 2)
+
+    def test_openstack_upgrade_available_snap(self):
+        self.patch_target('get_os_version_snap')
+        self.patch_object(chm_core.os_utils, 'get_os_version_install_source')
+        self.patch_object(chm_core, 'apt')
+        self.patch_target('config',
+                          new={'openstack-origin': 'snap:ocata/stable'})
+        self.patch_object(chm_core.os_utils, 'snap_install_requested',
+                          return_value=True)
+        self.get_os_version_snap.return_value = 2
+        self.get_os_version_install_source.return_value = 3
+        self.target.openstack_upgrade_available(snap='testsnap')
+        self.get_os_version_snap.assert_called_once_with('testsnap')
         self.apt.version_compare.assert_called_once_with(3, 2)
 
     def test_upgrade_if_available(self):
@@ -618,7 +665,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             'int_list')
         self.do_openstack_upgrade_db_migration.assert_called_once_with()
 
-    def test_do_openstack_pkg_upgrade(self):
+    def test_do_openstack_pkg_upgrade_package(self):
         self.patch_target('config',
                           new={'openstack-origin': 'cloud:natty-kilo'})
         self.patch_object(chm_core.os_utils, 'get_os_codename_install_source')
@@ -627,6 +674,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_upgrade')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_install')
+        self.patch_object(chm_core.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.target.do_openstack_pkg_upgrade()
         self.configure_installation_source.assert_called_once_with(
             'cloud:natty-kilo')
@@ -642,6 +691,44 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 '--option', 'Dpkg::Options::=--force-confnew', '--option',
                 'Dpkg::Options::=--force-confdef'],
             fatal=True)
+
+    def test_do_openstack_pkg_upgrade_snap(self):
+        self.patch_target('config',
+                          new={'openstack-origin': 'snap:ocata/stable'})
+        self.patch_object(chm_core.os_utils, 'get_os_codename_install_source')
+        self.patch_object(chm_core.hookenv, 'log')
+        self.patch_object(chm_core.os_utils, 'configure_installation_source')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_upgrade')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_install')
+        self.patch_object(chm_core.os_utils, 'snap_install_requested',
+                          return_value=True)
+        self.patch_object(chm_core.os_utils, 'install_os_snaps')
+        self.patch_object(chm_core.os_utils,
+                          'get_snaps_install_info_from_origin',
+                          return_value=SNAP_MAP)
+        self.target.do_openstack_pkg_upgrade()
+        self.configure_installation_source.assert_called_once_with(
+            'snap:ocata/stable')
+        self.apt_update.assert_called_once_with()
+        self.apt_upgrade.assert_called_once_with(
+            dist=True, fatal=True,
+            options=[
+                '--option', 'Dpkg::Options::=--force-confnew', '--option',
+                'Dpkg::Options::=--force-confdef'])
+        self.apt_install.assert_called_once_with(
+            packages=['p1', 'p2', 'p3', 'package-to-filter'],
+            options=[
+                '--option', 'Dpkg::Options::=--force-confnew', '--option',
+                'Dpkg::Options::=--force-confdef'],
+            fatal=True)
+        self.install_os_snaps.assert_called_once_with(snaps=SNAP_MAP,
+                                                      refresh=True)
+        self.get_snaps_install_info_from_origin.assert_called_once_with(
+            ['mysnap'],
+            'snap:ocata/stable',
+            mode='jailmode',
+        )
 
     def test_do_openstack_upgrade_config_render(self):
         self.patch_target('render_with_interfaces')

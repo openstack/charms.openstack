@@ -24,7 +24,9 @@ class MyOpenStackCharm(chm_classes.OpenStackCharm):
     release = 'icehouse'
     name = 'my-charm'
     packages = ['p1', 'p2', 'p3', 'package-to-filter']
+    snaps = ['mysnap']
     version_package = 'p2'
+    version_snap = 'mysnap'
     api_ports = {
         'service1': {
             'public': 1,

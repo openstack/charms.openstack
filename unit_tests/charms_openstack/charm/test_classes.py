@@ -8,7 +8,8 @@ from unit_tests.charms_openstack.charm.common import MyOpenStackCharm
 import charms_openstack.charm.classes as chm
 import charms_openstack.charm.core as chm_core
 
-TEST_CONFIG = {'config': True}
+TEST_CONFIG = {'config': True,
+               'openstack-origin': None}
 
 
 class TestOpenStackCharm__init__(BaseOpenStackCharmTest):
@@ -236,6 +237,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm.os_utils, 'os_release')
         self.patch_object(chm, 'get_upstream_version',
                           return_value='1.2.3')
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.target.version_package = None
         self.assertEqual(self.target.application_version, '1.2.3')
         self.get_upstream_version.assert_called_once_with('p1')
@@ -244,14 +247,26 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm.os_utils, 'os_release')
         self.patch_object(chm, 'get_upstream_version',
                           return_value='1.2.3')
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.assertEqual(self.target.application_version, '1.2.3')
         self.get_upstream_version.assert_called_once_with('p2')
+
+    def test_application_version_snap(self):
+        self.patch_object(chm, 'get_snap_version',
+                          return_value='4.0.3')
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=True)
+        self.assertEqual(self.target.application_version, '4.0.3')
+        self.get_snap_version.assert_called_once_with('mysnap', fatal=False)
 
     def test_application_version_dfs(self):
         self.patch_object(chm.os_utils, 'os_release',
                           return_value='mitaka')
         self.patch_object(chm, 'get_upstream_version',
                           return_value=None)
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.assertEqual(self.target.application_version, 'mitaka')
         self.get_upstream_version.assert_called_once_with('p2')
         self.os_release.assert_called_once_with('p2')
@@ -366,6 +381,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('token_cache_pkgs', return_value=[])
         self.patch_target('haproxy_enabled', return_value=False)
         self.patch_target('apache_enabled', return_value=False)
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.assertEqual(['pkg1'], self.target.all_packages)
         self.token_cache_pkgs.return_value = ['memcache']
         self.haproxy_enabled.return_value = True
@@ -391,6 +408,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('enable_memcache', return_value=True)
         self.patch_target('haproxy_enabled', return_value=True)
         self.patch_target('apache_enabled', return_value=True)
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.assertEqual(
             self.target.full_restart_map,
             {'/etc/apache2/sites-available/openstack_https_frontend.conf':
@@ -515,6 +534,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(
             chm.subprocess, 'call',
             new=lambda x: apache_mods[x.pop()])
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.target.enable_apache_modules()
         self.check_call.assert_called_once_with(
             ['a2enmod', 'proxy_http'])
@@ -523,6 +544,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
     def test_configure_cert(self):
         self.patch_object(chm.ch_host, 'mkdir')
         self.patch_object(chm.ch_host, 'write_file')
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.target.configure_cert('mycert', 'mykey', cn='mycn')
         self.mkdir.assert_called_once_with(path='/etc/apache2/ssl/charmname')
         calls = [
@@ -564,6 +587,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             'ssl_cert': base64.b64encode(b'cert'),
             'ssl_ca': base64.b64encode(b'ca')}
         self.patch_target('config', new=config)
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.assertEqual(
             self.target.get_certs_and_keys(),
             [{'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': None}])
@@ -573,6 +598,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             'ssl_key': base64.b64encode(b'key'),
             'ssl_cert': base64.b64encode(b'cert')}
         self.patch_target('config', new=config)
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.assertEqual(
             self.target.get_certs_and_keys(),
             [{'key': 'key', 'cert': 'cert', 'ca': None, 'cn': None}])
@@ -601,6 +628,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target(
             'get_local_addresses',
             return_value=['int_addr', 'priv_addr', 'pub_addr', 'admin_addr'])
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         expect = [
             {
                 'ca': 'ca',
@@ -664,6 +693,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.charmhelpers.fetch,
                           'apt_install',
                           name='apt_install')
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.target.configure_ssl()
         cert_calls = [
             mock.call('cert1', 'key1', cn='cn1'),
@@ -684,6 +715,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm.reactive.bus, 'set_state')
         self.patch_object(chm.reactive.RelationBase, 'from_state',
                           return_value=None)
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.target.configure_ssl()
         self.set_state.assert_called_once_with('ssl.enabled', False)
 
@@ -693,6 +726,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm.reactive.bus, 'set_state')
         self.patch_object(chm.reactive.RelationBase, 'from_state',
                           return_value='ssl_int')
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.target.configure_ssl()
         self.set_state.assert_called_once_with('ssl.enabled', False)
         self.configure_rabbit_cert.assert_called_once_with('ssl_int')

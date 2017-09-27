@@ -660,6 +660,14 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         """
         return charms.reactive.bus.get_state('ssl.enabled')
 
+    @property
+    def ssl(self):
+        """Whether SSL is being used for this service
+
+        @return True is SSL has been enable
+        """
+        return charms.reactive.bus.get_state('ssl.enabled')
+
     def determine_service_port(self, port):
         """Calculate port service should use given external port
 
