@@ -60,10 +60,16 @@ class TestBaseOpenStackCharmMeta(BaseOpenStackCharmTest):
         class TestC2(chm_core.BaseOpenStackCharm):
             release = 'mitaka'
 
+        class TestC3(chm_core.BaseOpenStackCharm):
+            release = 'ocata'
+            package_type = 'snap'
+
         self.assertTrue('liberty' in chm_core._releases.keys())
         self.assertTrue('mitaka' in chm_core._releases.keys())
-        self.assertEqual(chm_core._releases['liberty'], TestC1)
-        self.assertEqual(chm_core._releases['mitaka'], TestC2)
+        self.assertTrue('ocata' in chm_core._releases.keys())
+        self.assertEqual(chm_core._releases['liberty']['deb'], TestC1)
+        self.assertEqual(chm_core._releases['mitaka']['deb'], TestC2)
+        self.assertEqual(chm_core._releases['ocata']['snap'], TestC3)
 
     def test_register_unknown_series(self):
         self.patch_object(chm_core, '_releases', new={})
@@ -557,6 +563,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.apt_cache.return_value = {
             'testpkg': pkg_mock}
         self.patch_object(chm_core.apt, 'upstream_version')
+        self.patch_object(chm_core.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.upstream_version.return_value = '3.0.0~b1'
         self.assertEqual(
             chm_core.BaseOpenStackCharm.get_os_codename_package(
@@ -576,6 +584,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('package_codenames')
         self.patch_target('get_os_codename_package',
                           return_value='my-series')
+        self.patch_object(chm_core.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.assertEqual(
             self.target.get_os_version_package('testpkg'),
             '2011.2')
@@ -590,6 +600,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core, 'apt')
         self.patch_target('config',
                           new={'openstack-origin': 'cloud:natty-folsom'})
+        self.patch_object(chm_core.os_utils, 'snap_install_requested',
+                          return_value=False)
         self.get_os_version_package.return_value = 2
         self.get_os_version_install_source.return_value = 3
         self.target.openstack_upgrade_available('testpkg')

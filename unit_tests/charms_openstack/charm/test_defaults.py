@@ -120,6 +120,49 @@ class TestDefaults(BaseOpenStackCharmTest):
         kv.set.assert_called_once_with(chm.OPENSTACK_RELEASE_KEY, 'two')
         self.os_release.assert_called_once_with('python-keystonemiddleware')
 
+    def test_default_select_package_type_handler(self):
+        self.assertIn('charm.default-select-package-type',
+                      chm._default_handler_map)
+        self.patch_object(chm, 'register_package_type_selector')
+        h = self.mock_decorator_gen_simple()
+        self.register_package_type_selector.side_effect = h.decorator
+        # call the default handler installer function, and check its map.
+        f = chm._default_handler_map['charm.default-select-package-type']
+        f()
+        self.assertIsNotNone(h.map['function'])
+        # verify that the installed function works
+        kv = mock.MagicMock()
+        self.patch_object(chm.unitdata, 'kv', new=lambda: kv)
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
+        # set a package_type
+        kv.get.return_value = 'deb'
+        package_type = h.map['function']()
+        self.assertEqual(package_type, 'deb')
+        kv.set.assert_not_called()
+        kv.get.assert_called_once_with(chm.OPENSTACK_PACKAGE_TYPE_KEY, None)
+
+        # No release set, ensure it calls snap_install_requested and
+        # sets package_type to 'snap'
+        kv.reset_mock()
+        kv.get.return_value = None
+        self.snap_install_requested.return_value = True
+        package_type = h.map['function']()
+        self.assertEqual(package_type, 'snap')
+        kv.set.assert_called_once_with(chm.OPENSTACK_PACKAGE_TYPE_KEY, 'snap')
+        self.snap_install_requested.assert_called_once_with()
+
+        # No release set, ensure it calls snap_install_requested and
+        # sets package_type to 'deb'
+        kv.reset_mock()
+        kv.get.return_value = None
+        self.snap_install_requested.reset_mock()
+        self.snap_install_requested.return_value = False
+        package_type = h.map['function']()
+        self.assertEqual(package_type, 'deb')
+        kv.set.assert_called_once_with(chm.OPENSTACK_PACKAGE_TYPE_KEY, 'deb')
+        self.snap_install_requested.assert_called_once_with()
+
     def test_default_amqp_connection_handler(self):
         self.assertIn('amqp.connected', chm._default_handler_map)
         self.patch_object(chm.reactive, 'set_state')
