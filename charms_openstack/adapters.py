@@ -568,6 +568,13 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         return getattr(self, 'prefer_ipv6', False)
 
     @property
+    def ipv6_enabled(self):
+        """
+        @return True if IPv6 is enabled
+        """
+        return not ch_ip.is_ipv6_disabled()
+
+    @property
     def local_address(self):
         """Return remotely accessible address of charm (not localhost)
 

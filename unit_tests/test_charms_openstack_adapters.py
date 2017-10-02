@@ -494,6 +494,20 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             self.assertEqual(c.local_host, 'ip6-localhost')
             self.assertEqual(c.haproxy_host, '::')
 
+    def test_ipv6_enabled(self):
+        with mock.patch.object(adapters.ch_ip,
+                               'is_ipv6_disabled') as is_ipv6_disabled:
+
+            # IPv6 disabled
+            is_ipv6_disabled.return_value = True
+            a = adapters.APIConfigurationAdapter()
+            self.assertEqual(a.ipv6_enabled, False)
+
+            # IPv6 enabled
+            is_ipv6_disabled.return_value = False
+            b = adapters.APIConfigurationAdapter()
+            self.assertEqual(b.ipv6_enabled, True)
+
     def test_external_ports(self):
         c = adapters.APIConfigurationAdapter(port_map=self.api_ports)
         self.assertEqual(c.external_ports, {9001, 9002, 9003})
