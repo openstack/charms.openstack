@@ -392,6 +392,13 @@ class TestConfigurationAdapter(unittest.TestCase):
             self.assertEqual(c.charm_instance, instance)
             self.assertTrue(c._charm_instance_weakref is not None)
 
+    def test_application_name(self):
+        with mock.patch.object(adapters.hookenv, 'config', new=lambda: {}):
+            with mock.patch.object(adapters.hookenv, 'service_name',
+                                   return_value='myapp'):
+                c = adapters.ConfigurationAdapter()
+                self.assertEqual(c.application_name, 'myapp')
+
 
 class TestAPIConfigurationAdapter(unittest.TestCase):
     api_ports = {

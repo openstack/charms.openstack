@@ -482,6 +482,11 @@ class ConfigurationAdapter(object):
             return self._charm_instance_weakref()
         return None
 
+    @property
+    def application_name(self):
+        """Return the name of the deployed charm"""
+        return hookenv.service_name()
+
 
 class APIConfigurationAdapter(ConfigurationAdapter):
     """This configuration adapter extends the base class and adds properties
