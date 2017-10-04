@@ -4,7 +4,6 @@ import charms.reactive as reactive
 
 from charms_openstack.charm.classes import OpenStackCharm
 from charms_openstack.charm.core import register_os_release_selector
-from charms_openstack.charm.core import register_package_type_selector
 
 # The default handlers that charms.openstack provides.
 ALLOWED_DEFAULT_HANDLERS = [
@@ -15,7 +14,6 @@ ALLOWED_DEFAULT_HANDLERS = [
     'identity-service.available',
     'config.changed',
     'charm.default-select-release',
-    'charm.default-select-package-type',
     'update-status',
     'upgrade-charm',
 ]
@@ -25,7 +23,6 @@ _default_handler_map = {}
 
 # Used to store the discovered release version for caching between invocations
 OPENSTACK_RELEASE_KEY = 'charmers.openstack-release-version'
-OPENSTACK_PACKAGE_TYPE_KEY = 'charmers.openstack-package-type'
 
 
 def use_defaults(*defaults):
@@ -99,31 +96,6 @@ def make_default_select_release_handler():
             release_version = os_utils.os_release('python-keystonemiddleware')
             unitdata.kv().set(OPENSTACK_RELEASE_KEY, release_version)
         return release_version
-
-
-@_map_default_handler('charm.default-select-package-type')
-def make_default_select_package_type_handler():
-    """This handler is a bit more unusual, as it just sets the package type
-    selector using the @register_package_type_selector decorator
-    """
-
-    @register_package_type_selector
-    def default_select_package_type():
-        """Determine the package type (snap or deb) based on the
-        openstack-origin setting.
-
-        Note that this function caches the package type after the first
-        install so that it doesn't need to keep going and getting it from
-        the config information.
-        """
-        package_type = unitdata.kv().get(OPENSTACK_PACKAGE_TYPE_KEY, None)
-        if package_type is None:
-            if os_utils.snap_install_requested():
-                package_type = 'snap'
-            else:
-                package_type = 'deb'
-            unitdata.kv().set(OPENSTACK_PACKAGE_TYPE_KEY, package_type)
-        return package_type
 
 
 @_map_default_handler('amqp.connected')
