@@ -2,6 +2,7 @@ import base64
 import contextlib
 import os
 import random
+import shutil
 import string
 import subprocess
 
@@ -29,6 +30,8 @@ VIP_KEY = "vip"
 CIDR_KEY = "vip_cidr"
 IFACE_KEY = "vip_iface"
 APACHE_SSL_VHOST = '/etc/apache2/sites-available/openstack_https_frontend.conf'
+SYSTEM_CA_CERTS = '/etc/ssl/certs/ca-certificates.crt'
+SNAP_CA_CERTS = '/var/snap/{}/common/etc/ssl/certs/ca-certificates.crt'
 
 
 class OpenStackCharm(BaseOpenStackCharm,
@@ -630,6 +633,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
                          for path in cert_files}
         if checksums != new_checksums and update_certs:
             self.run_update_certs()
+            self.install_snap_certs()
 
     def configure_ca(self, ca_cert, update_certs=True):
         """Write Certificate Authority certificate"""
@@ -649,6 +653,22 @@ class HAOpenStackCharm(OpenStackAPICharm):
         single-file list of certificates
         """
         subprocess.check_call(['update-ca-certificates', '--fresh'])
+
+    def install_snap_certs(self):
+        """Install systems CA certificates for a snap
+
+        Installs the aggregated host system ca-certificates.crt into
+        $SNAP_COMMON/etc/ssl/certs for services running within a sandboxed
+        snap to consume.
+
+        Snaps should set the REQUESTS_CA_BUNDLE environment variable to
+        ensure requests based API calls use the updated system certs.
+        """
+        if (os_utils.snap_install_requested() and
+                os.path.exists(SYSTEM_CA_CERTS)):
+            ca_certs = SNAP_CA_CERTS.format(self.primary_snap)
+            ch_host.mkdir(os.path.dirname(ca_certs))
+            shutil.copyfile(SYSTEM_CA_CERTS, ca_certs)
 
     def update_peers(self, cluster):
         """Update peers in the cluster about the addresses that this unit

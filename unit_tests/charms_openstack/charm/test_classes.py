@@ -747,6 +747,7 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_configure_ca(self):
         self.patch_target('run_update_certs')
+        self.patch_target('install_snap_certs')
         with utils.patch_open() as (mock_open, mock_file):
             self.target.configure_ca('myca')
             mock_open.assert_called_with(
@@ -760,6 +761,49 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.check_call.assert_called_once_with(
             ['update-ca-certificates', '--fresh'])
 
+    def test_install_snap_certs(self):
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=True)
+        self.patch_object(chm.shutil, 'copyfile')
+        self.patch_object(chm.ch_host, 'mkdir')
+        self.patch_object(chm.os.path, 'exists', return_value=True)
+        self.target.snaps = ['mysnap']
+
+        self.target.install_snap_certs()
+
+        self.exists.assert_called_with('/etc/ssl/certs/ca-certificates.crt')
+        self.copyfile.assert_called_with(
+            '/etc/ssl/certs/ca-certificates.crt',
+            '/var/snap/mysnap/common/etc/ssl/certs/ca-certificates.crt',
+        )
+        self.mkdir.assert_called_with('/var/snap/mysnap/common/etc/ssl/certs')
+
+        self.snap_install_requested.reset_mock()
+        self.snap_install_requested.return_value = True
+        self.exists.reset_mock()
+        self.exists.return_value = False
+        self.copyfile.reset_mock()
+        self.mkdir.reset_mock()
+
+        self.target.install_snap_certs()
+
+        self.exists.assert_called_with('/etc/ssl/certs/ca-certificates.crt')
+        self.mkdir.assert_not_called()
+        self.copyfile.assert_not_called()
+
+        self.snap_install_requested.reset_mock()
+        self.snap_install_requested.return_value = False
+        self.exists.reset_mock()
+        self.exists.return_value = True
+        self.copyfile.reset_mock()
+        self.mkdir.reset_mock()
+
+        self.target.install_snap_certs()
+
+        self.exists.assert_not_called()
+        self.mkdir.assert_not_called()
+        self.copyfile.assert_not_called()
+
     def test_update_central_cacerts(self):
         self.patch_target('run_update_certs')
         change_hashes = ['hash1', 'hash2']
@@ -771,6 +815,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             return fake_hash_inner
         self.patch_object(chm.ch_host, 'path_hash')
         self.path_hash.side_effect = fake_hash(change_hashes)
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
         with self.target.update_central_cacerts(['file1']):
             pass
         self.run_update_certs.assert_called_with()
