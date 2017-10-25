@@ -475,7 +475,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
         @param cn string Canonical name for service
         """
         if os_utils.snap_install_requested():
-            ssl_dir = '/var/snap/{snap_name}/etc/nginx/ssl'.format(
+            ssl_dir = '/var/snap/{snap_name}/common/etc/nginx/ssl'.format(
                 snap_name=self.primary_snap)
         else:
             ssl_dir = os.path.join('/etc/apache2/ssl/', self.name)
