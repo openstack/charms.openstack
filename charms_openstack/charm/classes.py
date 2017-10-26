@@ -2,12 +2,14 @@ import base64
 import contextlib
 import os
 import random
+import re
 import shutil
 import string
 import subprocess
 
 import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.utils as os_utils
+import charmhelpers.contrib.openstack.ha as os_ha
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charmhelpers.fetch as fetch
@@ -29,6 +31,7 @@ import charms_openstack.ip as os_ip
 VIP_KEY = "vip"
 CIDR_KEY = "vip_cidr"
 IFACE_KEY = "vip_iface"
+DNSHA_KEY = "dns-ha"
 APACHE_SSL_VHOST = '/etc/apache2/sites-available/openstack_https_frontend.conf'
 SYSTEM_CA_CERTS = '/etc/ssl/certs/ca-certificates.crt'
 SNAP_CA_CERTS = '/var/snap/{}/common/etc/ssl/certs/ca-certificates.crt'
@@ -421,6 +424,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
         RESOURCE_TYPES = {
             'vips': self._add_ha_vips_config,
             'haproxy': self._add_ha_haproxy_config,
+            'dnsha': self._add_dnsha_config,
         }
         if self.ha_resources:
             for res_type in self.ha_resources:
@@ -432,7 +436,9 @@ class HAOpenStackCharm(OpenStackAPICharm):
 
         @param hacluster instance of interface class HAClusterRequires
         """
-        for vip in self.config.get(VIP_KEY, '').split():
+        if not self.config.get(VIP_KEY):
+            return
+        for vip in self.config[VIP_KEY].split():
             iface = (ch_ip.get_iface_for_address(vip) or
                      self.config.get(IFACE_KEY))
             netmask = (ch_ip.get_netmask_for_address(vip) or
@@ -446,6 +452,41 @@ class HAOpenStackCharm(OpenStackAPICharm):
         @param hacluster instance of interface class HAClusterRequires
         """
         hacluster.add_init_service(self.name, 'haproxy')
+
+    def _add_dnsha_config(self, hacluster):
+        """Add a DNSHA object to self.resources
+
+        @param hacluster instance of interface class HAClusterRequires
+        """
+        if not self.config.get(DNSHA_KEY):
+            return
+        settings = ['os-admin-hostname', 'os-internal-hostname',
+                    'os-public-hostname', 'os-access-hostname']
+
+        for setting in settings:
+            hostname = self.config.get(setting)
+            if hostname is None:
+                hookenv.log(
+                    'DNS HA: Hostname setting {} is None. Ignoring.'.format(
+                        setting),
+                    hookenv.DEBUG)
+                continue
+            m = re.search('os-(.+?)-hostname', setting)
+            if m:
+                endpoint_type = m.group(1)
+                # resolve_address's ADDRESS_MAP uses 'int' not 'internal'
+                if endpoint_type == 'internal':
+                    endpoint_type = 'int'
+            else:
+                msg = (
+                    'Unexpected DNS hostname setting: {}. Cannot determine '
+                    'endpoint_type name'.format(setting))
+                hookenv.status_set('blocked', msg)
+                raise os_ha.DNSHAException(msg)
+            ip = os_ip.resolve_address(
+                endpoint_type=endpoint_type,
+                override=False)
+            hacluster.add_dnsha(self.name, ip, hostname, endpoint_type)
 
     def set_haproxy_stat_password(self):
         """Set a stats password for accessing haproxy statistics"""

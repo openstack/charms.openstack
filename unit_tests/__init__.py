@@ -28,6 +28,8 @@ sys.modules['charmhelpers.core.templating'] = charmhelpers.core.templating
 sys.modules['charmhelpers.core.unitdata'] = charmhelpers.core.unitdata
 sys.modules['charmhelpers.contrib'] = charmhelpers.contrib
 sys.modules['charmhelpers.contrib.openstack'] = charmhelpers.contrib.openstack
+sys.modules['charmhelpers.contrib.openstack.ha'] = (
+    charmhelpers.contrib.openstack.ha)
 sys.modules['charmhelpers.contrib.openstack.utils'] = (
     charmhelpers.contrib.openstack.utils)
 sys.modules['charmhelpers.contrib.openstack.templating'] = (

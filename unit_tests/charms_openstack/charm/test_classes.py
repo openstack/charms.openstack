@@ -479,6 +479,13 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             mock.call('myservice', 'vip2', 'user_iface', 'user_cidr')]
         interface_mock.add_vip.assert_has_calls(calls)
 
+    def test__add_ha_vips_config_novip(self):
+        config = {'vip': None}
+        self.patch_target('config', new=config)
+        interface_mock = mock.Mock()
+        self.target._add_ha_vips_config(interface_mock)
+        self.assertFalse(interface_mock.add_vip.called)
+
     def test__add_ha_haproxy_config(self):
         self.patch_target('name', new='myservice')
         interface_mock = mock.Mock()
@@ -486,6 +493,82 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         interface_mock.add_init_service.assert_called_once_with(
             'myservice',
             'haproxy')
+
+    def test__add_dnsha_config_single_dns_entry(self):
+        config = {
+            'dns-ha': True,
+            'os-admin-hostname': 'myservice-admin.maas'}
+        self.patch_target('config', new=config)
+        self.patch_target('name', new='myservice')
+        self.patch_object(chm.os_ip, 'resolve_address', '10.0.0.10')
+        interface_mock = mock.Mock()
+        self.target._add_dnsha_config(interface_mock)
+        interface_mock.add_dnsha.assert_called_once_with(
+            'myservice',
+            '10.0.0.10',
+            'myservice-admin.maas',
+            'admin')
+
+    def test__add_dnsha_config_multi_dns_entries(self):
+        config = {
+            'dns-ha': True,
+            'os-public-hostname': 'myservice-public.maas',
+            'os-admin-hostname': 'myservice-admin.maas'}
+        addr = {
+            'public': '10.10.0.10',
+            'admin': '10.0.0.10'}
+        self.patch_target('config', new=config)
+        self.patch_target('name', new='myservice')
+        self.patch_object(
+            chm.os_ip,
+            'resolve_address',
+            new=lambda endpoint_type, override=False: addr[endpoint_type])
+        interface_mock = mock.Mock()
+        self.target._add_dnsha_config(interface_mock)
+        calls = [
+            mock.call(
+                'myservice',
+                '10.0.0.10',
+                'myservice-admin.maas',
+                'admin'),
+            mock.call(
+                'myservice',
+                '10.10.0.10',
+                'myservice-public.maas',
+                'public')]
+        interface_mock.add_dnsha.assert_has_calls(calls)
+
+    def test__add_dnsha_config_single_internal_dns_entry(self):
+        config = {
+            'dns-ha': True,
+            'os-internal-hostname': 'myservice-internal.maas'}
+        self.patch_target('config', new=config)
+        self.patch_target('name', new='myservice')
+        self.patch_object(chm.os_ip, 'resolve_address', '10.0.0.10')
+        interface_mock = mock.Mock()
+        self.target._add_dnsha_config(interface_mock)
+        interface_mock.add_dnsha.assert_called_once_with(
+            'myservice',
+            '10.0.0.10',
+            'myservice-internal.maas',
+            'int')
+
+    def test__add_dnsha_config_dns_ha_false(self):
+        config = {
+            'os-internal-hostname': 'myservice-internal.maas'
+        }
+        self.patch_target('config', new=config)
+        interface_mock = mock.Mock()
+        self.target._add_dnsha_config(interface_mock)
+        self.assertFalse(interface_mock.add_dnsha.called)
+        config['dns-ha'] = None
+        interface_mock.reset_mock()
+        self.target._add_dnsha_config(interface_mock)
+        self.assertFalse(interface_mock.add_dnsha.called)
+        config['dns-ha'] = False
+        interface_mock.reset_mock()
+        self.target._add_dnsha_config(interface_mock)
+        self.assertFalse(interface_mock.add_dnsha.called)
 
     def test_set_haproxy_stat_password(self):
         self.patch_object(chm.reactive.bus, 'get_state')
