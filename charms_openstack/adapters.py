@@ -145,6 +145,22 @@ class OpenStackRelationAdapter(object):
                             self.relation, name)()))(meth_name))
 
 
+class MemcacheRelationAdapter(OpenStackRelationAdapter):
+
+    """
+    Adapter for the MemcacheRequires relation interface.
+    """
+
+    interface_type = 'memcache'
+
+    @property
+    def url(self):
+        hosts = sorted(self.relation.memcache_hosts())
+        if hosts:
+            return "memcached://{}:11211?timeout=5".format(hosts[0])
+        return None
+
+
 class RabbitMQRelationAdapter(OpenStackRelationAdapter):
     """
     Adapter for the RabbitMQRequires relation interface.
@@ -1096,6 +1112,7 @@ class OpenStackAPIRelationAdapters(OpenStackRelationAdapters):
         'amqp': RabbitMQRelationAdapter,
         'shared_db': DatabaseRelationAdapter,
         'cluster': PeerHARelationAdapter,
+        'coordinator_memcached': MemcacheRelationAdapter,
     }
 
     def __init__(self, relations, options=None, options_instance=None,

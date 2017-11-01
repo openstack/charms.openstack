@@ -102,6 +102,26 @@ class TestOpenStackRelationAdapter(unittest.TestCase):
         self.assertEqual(i.b, 4)
 
 
+class FakeMemcacheRelation():
+
+    auto_accessors = ['private_address']
+    relation_name = 'memcache'
+
+    def private_address(self):
+        return 'private-address'
+
+    def memcache_hosts(self):
+        return ['host1', 'host2']
+
+
+class TestMemcacheRelationAdapter(unittest.TestCase):
+
+    def test_class(self):
+        fake = FakeMemcacheRelation()
+        memcache = adapters.MemcacheRelationAdapter(fake)
+        self.assertEqual(memcache.url, 'memcached://host1:11211?timeout=5')
+
+
 class FakeRabbitMQRelation():
 
     auto_accessors = ['vip', 'private_address']
