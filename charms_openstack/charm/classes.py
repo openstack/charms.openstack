@@ -724,7 +724,9 @@ class HAOpenStackCharm(OpenStackAPICharm):
         laddrs = []
         for addr_type in sorted(os_ip.ADDRESS_MAP.keys()):
             cidr = self.config.get(os_ip.ADDRESS_MAP[addr_type]['config'])
-            laddr = ch_ip.get_address_in_network(cidr)
+            laddr = ch_ip.get_relation_ip(
+                os_ip.ADDRESS_MAP[addr_type]['binding'],
+                cidr)
             laddrs.append((addr_type, laddr))
         with is_data_changed('update_peers.laddrs', laddrs) as changed:
             if changed:

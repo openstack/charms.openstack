@@ -251,8 +251,8 @@ class TestPeerHARelationAdapter(unittest.TestCase):
         }
         del expect_local_ns['this_unit_private_addr']
         # Tests PeerHARelationAdapter with peers
-        with mock.patch.object(adapters.ch_ip, 'get_address_in_network',
-                               new=lambda x: test_addresses.get(x)), \
+        with mock.patch.object(adapters.ch_ip, 'get_relation_ip',
+                               new=lambda _, x: test_addresses.get(x)), \
                 mock.patch.object(adapters.ch_ip, 'get_netmask_for_address',
                                   new=lambda x: test_netmasks.get(x)), \
                 mock.patch.object(adapters, 'APIConfigurationAdapter',
@@ -275,8 +275,8 @@ class TestPeerHARelationAdapter(unittest.TestCase):
                 'this_unit_internal_addr'])
 
         # Tests PeerHARelationAdapter without peers
-        with mock.patch.object(adapters.ch_ip, 'get_address_in_network',
-                               new=lambda x: test_addresses.get(x)), \
+        with mock.patch.object(adapters.ch_ip, 'get_relation_ip',
+                               new=lambda _, x: test_addresses.get(x)), \
                 mock.patch.object(adapters.ch_ip, 'get_netmask_for_address',
                                   new=lambda x: test_netmasks.get(x)), \
                 mock.patch.object(adapters, 'APIConfigurationAdapter',

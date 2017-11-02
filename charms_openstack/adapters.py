@@ -259,7 +259,9 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         """
         cfg_opt = os_ip.ADDRESS_MAP[os_ip.INTERNAL]['config']
         int_net = self.config.get(cfg_opt)
-        laddr = ch_ip.get_address_in_network(int_net) or self.local_address
+        laddr = ch_ip.get_relation_ip(
+            os_ip.ADDRESS_MAP[os_ip.INTERNAL]['binding'],
+            int_net)
         try:
             hosts = sorted(
                 list(self.cluster_hosts[laddr]['backends'].values()))
@@ -316,7 +318,9 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         _cluster_hosts = {}
         for addr_type in ADDRESS_TYPES:
             cfg_opt = os_ip.ADDRESS_MAP[addr_type]['config']
-            laddr = ch_ip.get_address_in_network(config.get(cfg_opt))
+            laddr = ch_ip.get_relation_ip(
+                os_ip.ADDRESS_MAP[addr_type]['binding'],
+                config.get(cfg_opt))
             if laddr:
                 netmask = ch_ip.get_netmask_for_address(laddr)
                 _cluster_hosts[laddr] = {
@@ -351,7 +355,9 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         """
         for addr_type in ADDRESS_TYPES:
             cfg_opt = os_ip.ADDRESS_MAP[addr_type]['config']
-            laddr = ch_ip.get_address_in_network(self.config.get(cfg_opt))
+            laddr = ch_ip.get_relation_ip(
+                os_ip.ADDRESS_MAP[addr_type]['binding'],
+                self.config.get(cfg_opt))
             if laddr:
                 self.cluster_hosts[laddr] = \
                     self.local_network_split_addresses()[laddr]
