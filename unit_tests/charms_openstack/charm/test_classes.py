@@ -611,7 +611,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         apache_mods = {
             'ssl': 0,
             'proxy': 0,
-            'proxy_http': 1}
+            'proxy_http': 1,
+            'headers': 0}
         self.patch_object(chm.ch_host, 'service_restart')
         self.patch_object(chm.subprocess, 'check_call')
         self.patch_object(
