@@ -55,4 +55,6 @@ def mock_charmhelpers():
         'newton',
         'ocata',
         'pike',
+        'queens',
+        'rocky',
     )
