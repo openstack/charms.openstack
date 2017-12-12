@@ -83,7 +83,8 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_set_state(self):
         # tests that OpenStackCharm.set_state() calls set_state() global
-        self.patch_object(chm.reactive.bus, 'set_state')
+        # self.patch_object(chm.reactive.bus, 'set_state')
+        self.patch('charms.reactive.bus.set_state', name='set_state')
         self.target.set_state('hello')
         self.set_state.assert_called_once_with('hello', None)
         self.set_state.reset_mock()
@@ -92,7 +93,7 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_remove_state(self):
         # tests that OpenStackCharm.remove_state() calls remove_state() global
-        self.patch_object(chm.reactive.bus, 'remove_state')
+        self.patch('charms.reactive.bus.remove_state', name='remove_state')
         self.target.remove_state('hello')
         self.remove_state.assert_called_once_with('hello')
 
@@ -571,8 +572,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.assertFalse(interface_mock.add_dnsha.called)
 
     def test_set_haproxy_stat_password(self):
-        self.patch_object(chm.reactive.bus, 'get_state')
-        self.patch_object(chm.reactive.bus, 'set_state')
+        self.patch('charms.reactive.bus.get_state', name='get_state')
+        self.patch('charms.reactive.bus.set_state', name='set_state')
         self.get_state.return_value = None
         self.target.set_haproxy_stat_password()
         self.set_state.assert_called_once_with('haproxy.stat.password',
@@ -767,8 +768,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('configure_apache')
         self.patch_target('configure_cert')
         self.patch_target('configure_ca')
-        self.patch_object(chm.reactive.bus, 'set_state')
-        self.patch_object(chm.reactive.RelationBase, 'from_state',
+        self.patch('charms.reactive.bus.set_state', name='set_state')
+        self.patch_object(chm.relations, 'endpoint_from_flag',
                           return_value=None)
         self.patch_object(chm_core.charmhelpers.fetch,
                           'filter_installed_packages',
@@ -796,8 +797,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_configure_ssl_off(self):
         self.patch_target('get_certs_and_keys', return_value=[])
-        self.patch_object(chm.reactive.bus, 'set_state')
-        self.patch_object(chm.reactive.RelationBase, 'from_state',
+        self.patch('charms.reactive.bus.set_state', name='set_state')
+        self.patch_object(chm.relations, 'endpoint_from_flag',
                           return_value=None)
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
@@ -807,8 +808,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
     def test_configure_ssl_rabbit(self):
         self.patch_target('get_certs_and_keys', return_value=[])
         self.patch_target('configure_rabbit_cert')
-        self.patch_object(chm.reactive.bus, 'set_state')
-        self.patch_object(chm.reactive.RelationBase, 'from_state',
+        self.patch('charms.reactive.bus.set_state', name='set_state')
+        self.patch_object(chm.relations, 'endpoint_from_flag',
                           return_value='ssl_int')
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)

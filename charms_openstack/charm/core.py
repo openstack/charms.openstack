@@ -15,6 +15,7 @@ import charmhelpers.core.host as ch_host
 import charmhelpers.core.templating
 import charmhelpers.fetch as fetch
 import charms.reactive as reactive
+import charms.reactive.relations as relations
 
 import charms_openstack.adapters as os_adapters
 import charms_openstack.ip as os_ip
@@ -51,7 +52,7 @@ def optional_interfaces(args, *interfaces):
         interfaces.
     :returns: [list of reactive interfaces]
     """
-    return args + tuple(ri for ri in (reactive.RelationBase.from_state(i)
+    return args + tuple(ri for ri in (relations.endpoint_from_flag(i)
                                       for i in interfaces)
                         if ri is not None)
 
@@ -374,7 +375,7 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         :param adapters_instance: Class which has make_adapter() method
         :returns: None if the state doesn't exist, or the adapter
         """
-        interface = reactive.RelationBase.from_state(state)
+        interface = relations.endpoint_from_flag(state)
         if interface is None:
             return None
         adapters_instance = adapters_instance or self.adapters_instance

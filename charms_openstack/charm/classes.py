@@ -13,7 +13,7 @@ import charmhelpers.contrib.openstack.ha as os_ha
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charmhelpers.fetch as fetch
-import charms.reactive as reactive
+import charms.reactive.relations as relations
 
 from charms_openstack.charm.core import (
     BaseOpenStackCharm,
@@ -631,10 +631,9 @@ class HAOpenStackCharm(OpenStackAPICharm):
         @param keystone_interface KeystoneRequires class
         """
         keystone_interface = (
-            reactive.RelationBase
-            .from_state('identity-service.available.ssl') or
-            reactive.RelationBase
-            .from_state('identity-service.available.ssl_legacy'))
+            relations.endpoint_from_flag('identity-service.available.ssl') or
+            relations
+            .endpoint_from_flag('identity-service.available.ssl_legacy'))
         ssl_objects = self.get_certs_and_keys(
             keystone_interface=keystone_interface)
         with is_data_changed('configure_ssl.ssl_objects',
@@ -654,7 +653,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
                 self.set_state('ssl.enabled', True)
             else:
                 self.set_state('ssl.enabled', False)
-        amqp_ssl = reactive.RelationBase.from_state('amqp.available.ssl')
+        amqp_ssl = relations.endpoint_from_flag('amqp.available.ssl')
         if amqp_ssl:
             self.configure_rabbit_cert(amqp_ssl)
 

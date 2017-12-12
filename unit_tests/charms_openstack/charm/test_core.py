@@ -132,14 +132,12 @@ class TestFunctions(BaseOpenStackCharmTest):
         self.assertIsInstance(chm_core.get_charm_instance(), self.C3)
 
     def test_optional_interfaces(self):
-        self.patch_object(chm_core.reactive,
-                          'RelationBase',
-                          name='relation_base')
-        self.relation_base.from_state.side_effect = ['x', None, 'z']
+        self.patch_object(chm_core.relations, 'endpoint_from_flag')
+        self.endpoint_from_flag.side_effect = ['x', None, 'z']
         r = chm_core.optional_interfaces(
             ('a', 'b', 'c'), 'any', 'old', 'thing')
         self.assertEqual(r, ('a', 'b', 'c', 'x', 'z'))
-        self.relation_base.from_state.assert_has_calls(
+        self.endpoint_from_flag.assert_has_calls(
             [mock.call('any'), mock.call('old'), mock.call('thing')])
 
 

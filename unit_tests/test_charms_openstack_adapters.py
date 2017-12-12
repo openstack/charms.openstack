@@ -1183,8 +1183,7 @@ class TestCustomOpenStackAPIRelationAdapters(unittest.TestCase):
                 mock.patch.object(adapters.hookenv,
                                   'config',
                                   new=lambda: test_config), \
-                mock.patch.object(adapters.reactive.RelationBase,
-                                  'from_state',
+                mock.patch.object(adapters.relations, 'endpoint_from_flag',
                                   new=FakePeerHARelationAdapter), \
                 mock.patch.object(adapters, 'PeerHARelationAdapter',
                                   new=FakePeerHARelationAdapter2):

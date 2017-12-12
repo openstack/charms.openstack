@@ -66,3 +66,17 @@ class BaseTestCase(unittest.TestCase):
             started.return_value = return_value
         self._patches_start[name] = started
         setattr(self, name, started)
+
+    def patch(self, item, return_value=None, name=None, new=None, **kwargs):
+        if name is None:
+            raise RuntimeError("Must pass 'name' to .patch()")
+        if new is not None:
+            mocked = mock.patch(item, new=new, **kwargs)
+        else:
+            mocked = mock.patch(item, **kwargs)
+        self._patches[name] = mocked
+        started = mocked.start()
+        if new is None:
+            started.return_value = return_value
+        self._patches_start[name] = started
+        setattr(self, name, started)

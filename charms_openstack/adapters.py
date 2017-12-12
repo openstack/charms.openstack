@@ -20,7 +20,7 @@ import itertools
 import re
 import weakref
 
-import charms.reactive as reactive
+import charms.reactive.relations as relations
 import charms.reactive.bus
 import charmhelpers.contrib.hahelpers.cluster as ch_cluster
 import charmhelpers.contrib.network.ip as ch_ip
@@ -1165,7 +1165,7 @@ class OpenStackAPIRelationAdapters(OpenStackRelationAdapters):
         else:
             # LY: Automatically add the cluster relation if it exists and
             # has not been passed through.
-            cluster_rel = reactive.RelationBase.from_state('cluster.connected')
+            cluster_rel = relations.endpoint_from_flag('cluster.connected')
             if cluster_rel:
                 return PeerHARelationAdapter(relation=cluster_rel)
         return None
