@@ -501,7 +501,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
         if os_utils.snap_install_requested():
             return
         restart = False
-        for module in ['ssl', 'proxy', 'proxy_http']:
+        for module in ['ssl', 'proxy', 'proxy_http', 'headers']:
             check_enabled = subprocess.call(['a2query', '-m', module])
             if check_enabled != 0:
                 subprocess.check_call(['a2enmod', module])
