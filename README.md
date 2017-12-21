@@ -226,7 +226,7 @@ To be completed.
 
 ## OpenStacke Upgrade via config
 
-An OpenStack principle charm has an 'openstack-origin' configruation option.
+An OpenStack principle charm has an 'openstack-origin' configuration option.
 This is used to setup the package source for a charm. If a user updates this
 option to point at a package repository then the charm can be configured to
 automatically upgrade. This is achieved with the following steps:
