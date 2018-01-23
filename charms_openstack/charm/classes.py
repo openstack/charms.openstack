@@ -509,6 +509,13 @@ class HAOpenStackCharm(OpenStackAPICharm):
         if restart:
             ch_host.service_restart('apache2')
 
+    def get_default_cn(self):
+        """Return the default Canonical Name to be used for SSL setup
+
+        @returns 'canonical_name'
+        """
+        return os_ip.resolve_address(endpoint_type=os_ip.INTERNAL)
+
     def configure_cert(self, cert, key, cn=None):
         """Configure service SSL cert and key
 
@@ -525,7 +532,8 @@ class HAOpenStackCharm(OpenStackAPICharm):
             ssl_dir = os.path.join('/etc/apache2/ssl/', self.name)
 
         if not cn:
-            cn = os_ip.resolve_address(endpoint_type=os_ip.INTERNAL)
+            cn = self.get_default_cn()
+
         ch_host.mkdir(path=ssl_dir)
         if cn:
             cert_filename = 'cert_{}'.format(cn)
@@ -576,7 +584,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
                 'cert': self.config_defined_ssl_cert.decode('utf-8'),
                 'ca': (self.config_defined_ssl_ca.decode('utf-8')
                        if self.config_defined_ssl_ca else None),
-                'cn': None}]
+                'cn': self.get_default_cn()}]
         elif keystone_interface:
             keys_and_certs = []
             for addr in self.get_local_addresses():

@@ -672,22 +672,24 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             'ssl_cert': base64.b64encode(b'cert'),
             'ssl_ca': base64.b64encode(b'ca')}
         self.patch_target('config', new=config)
+        self.patch_object(chm.os_ip, 'resolve_address', 'addr')
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
         self.assertEqual(
             self.target.get_certs_and_keys(),
-            [{'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': None}])
+            [{'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'addr'}])
 
     def test_get_certs_and_keys_noca(self):
         config = {
             'ssl_key': base64.b64encode(b'key'),
             'ssl_cert': base64.b64encode(b'cert')}
         self.patch_target('config', new=config)
+        self.patch_object(chm.os_ip, 'resolve_address', 'addr')
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
         self.assertEqual(
             self.target.get_certs_and_keys(),
-            [{'key': 'key', 'cert': 'cert', 'ca': None, 'cn': None}])
+            [{'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'addr'}])
 
     def test_get_certs_and_keys_ks_interface(self):
         class KSInterface(object):
