@@ -3,6 +3,7 @@ import mock
 import unittest
 
 import charms_openstack.charm.core as chm_core
+import charms_openstack.adapters as os_adapters
 
 from unit_tests.charms_openstack.charm.utils import BaseOpenStackCharmTest
 from unit_tests.charms_openstack.charm.common import (
@@ -471,11 +472,87 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             source='path1',
             template_loader='my-loader',
             target='path1',
-            context=mock.ANY)
+            context=mock.ANY,
+            config_template=None
+        )
         # assert the context was an MyAdapter instance.
         context = self.render.call_args_list[0][1]['context']
         assert isinstance(context, MyAdapter)
         self.assertEqual(context.interfaces, ['interface1', 'interface2'])
+
+    def test_render_config_from_string(self):
+        # give us a way to check that the context manager was called.
+        from contextlib import contextmanager
+        d = [0]
+
+        @contextmanager
+        def fake_restart_on_change():
+            d[0] += 1
+            yield
+
+        self.target.string_templates = {'path1': ('options', 't_prop')}
+
+        self.patch_target('restart_on_change', new=fake_restart_on_change)
+        self.patch_object(chm_core.charmhelpers.core.templating, 'render')
+        self.patch_object(chm_core.os_templating,
+                          'get_loader',
+                          return_value='my-loader')
+
+        config_template = 'justatest'
+        adapters_instance = self.target.adapters_instance
+        adapters_instance.options = mock.MagicMock()
+        adapters_instance.options.t_prop = config_template
+
+        self.target.render_configs(['path1'])
+        self.assertEqual(d[0], 1)
+        self.render.assert_called_once_with(
+            source='path1',
+            template_loader='my-loader',
+            target='path1',
+            context=mock.ANY,
+            config_template=config_template,
+        )
+        # assert the context was an MyAdapter instance.
+        context = self.render.call_args_list[0][1]['context']
+        assert isinstance(context, MyAdapter)
+        self.assertEqual(context.interfaces, ['interface1', 'interface2'])
+
+    def test_render_config_from_string_no_property(self):
+        self.target.string_templates = {'path1': ('options', 't_prop')}
+
+        self.patch_object(chm_core.charmhelpers.core.templating, 'render')
+        self.patch_object(chm_core.os_templating,
+                          'get_loader',
+                          return_value='my-loader')
+
+        adapters_instance = self.target.adapters_instance
+        adapters_instance.options = mock.create_autospec(
+            os_adapters.ConfigurationAdapter
+        )
+
+        self.assertRaises(RuntimeError, self.target.render_configs, ['path1'])
+
+    def test_render_config_from_string_no_relation(self):
+        """
+        Make sure that if there is no relation adapter yet for a provided
+        string template metadata there are no error conditions triggered.
+        In other words, 'render' function should not be called while an attempt
+        to get a template from an adapter property should be made.
+        """
+        self.target.string_templates = {'path1': ('options', 't_prop')}
+        self.patch_object(chm_core.charmhelpers.core.templating, 'render')
+        self.patch_object(chm_core.os_templating,
+                          'get_loader',
+                          return_value='my-loader')
+
+        with mock.patch.object(MyOpenStackCharm, '_get_string_template',
+                               wraps=self.target._get_string_template) as m:
+
+            adapters_instance = self.target.adapters_instance
+
+            self.target.render_configs(['path1'])
+            m.assert_called_once_with('path1', adapters_instance)
+            self.render.assert_not_called()
 
     def test_render_configs_singleton_render_with_interfaces(self):
         self.patch_object(chm_core.charmhelpers.core.templating, 'render')
@@ -498,22 +575,30 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 source='path1',
                 template_loader='my-loader',
                 target='path1',
-                context=mock.ANY),
+                context=mock.ANY,
+                config_template=None
+            ),
             mock.call(
                 source='path2',
                 template_loader='my-loader',
                 target='path2',
-                context=mock.ANY),
+                context=mock.ANY,
+                config_template=None
+            ),
             mock.call(
                 source='path3',
                 template_loader='my-loader',
                 target='path3',
-                context=mock.ANY),
+                context=mock.ANY,
+                config_template=None
+            ),
             mock.call(
                 source='path4',
                 template_loader='my-loader',
                 target='path4',
-                context=mock.ANY),
+                context=mock.ANY,
+                config_template=None
+            ),
         ]
         self.render.assert_has_calls(calls, any_order=True)
         # Assert that None was not passed to render via the context kwarg
@@ -549,22 +634,30 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 source='path1',
                 template_loader='my-loader',
                 target='path1',
-                context=mock.ANY),
+                context=mock.ANY,
+                config_template=None
+            ),
             mock.call(
                 source='path2',
                 template_loader='my-loader',
                 target='path2',
-                context=mock.ANY),
+                context=mock.ANY,
+                config_template=None
+            ),
             mock.call(
                 source='path3',
                 template_loader='my-loader',
                 target='path3',
-                context=mock.ANY),
+                context=mock.ANY,
+                config_template=None
+            ),
             mock.call(
                 source='path4',
                 template_loader='my-loader',
                 target='path4',
-                context=mock.ANY),
+                context=mock.ANY,
+                config_template=None
+            ),
         ]
         self.render.assert_has_calls(calls, any_order=True)
         # Assert that None was not passed to render via the context kwarg

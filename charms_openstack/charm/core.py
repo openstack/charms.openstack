@@ -690,6 +690,34 @@ class BaseOpenStackCharmActions(object):
         self.render_configs(self.full_restart_map.keys(),
                             adapters_instance=adapters_instance)
 
+    def _get_string_template(self, conf, adapters_instance):
+        """
+        Find out if a charm class provides meta information about whether
+        this is a template to be fetched from a string dynamically or not.
+        """
+        config_template = None
+        tmpl_meta = self.string_templates.get(conf)
+        if tmpl_meta:
+            # meta information exists but not clear if an attribute has
+            # been set yet either via config option or via relation data
+            config_template = False
+            rel_name, _property = tmpl_meta
+            try:
+                config_template_adapter = getattr(adapters_instance,
+                                                  rel_name)
+                try:
+                    config_template = getattr(config_template_adapter,
+                                              _property)
+                except AttributeError:
+                    raise RuntimeError('{} does not contain {} property'
+                                       .format(config_template_adapter,
+                                               _property))
+            except AttributeError:
+                hookenv.log('Skipping a string template for {} as a '
+                            'relation adapter is not present'
+                            .format(rel_name), level=hookenv.DEBUG)
+        return config_template
+
     def render_configs(self, configs, adapters_instance=None):
         """Render the configuration files identified in the list passed as
         configs.
@@ -703,19 +731,37 @@ class BaseOpenStackCharmActions(object):
         render_with_interfaces() which constructs a new adapters_instance
         anyway.
 
+        Configs may not only be loaded via OpenStack loaders but also via
+        string templates passed via config options or from relation data.
+        This must be explicitly declared via string_templates dict of a given
+        derived charm class by using a relation name that identifies a relation
+        adapter or config option adapter and a property to be used from that
+        adapter instance.
+
         :param configs: list of strings, the names of the configuration files.
         :param adapters_instance: [optional] the adapters_instance to use.
         """
         if adapters_instance is None:
             adapters_instance = self.adapters_instance
+
         with self.restart_on_change():
             for conf in configs:
+                # check if we need to load a template from a string
+                config_template = self._get_string_template(conf,
+                                                            adapters_instance)
+                if config_template is False:
+                    # got a string template but it was not provided which
+                    # means we need to skip this config to avoid rendering
+                    return
+
                 charmhelpers.core.templating.render(
                     source=os.path.basename(conf),
                     template_loader=os_templating.get_loader(
                         'templates/', self.release),
                     target=conf,
-                    context=adapters_instance)
+                    context=adapters_instance,
+                    config_template=config_template
+                )
 
     def render_with_interfaces(self, interfaces, configs=None):
         """Render the configs using the interfaces passed; overrides any
@@ -930,6 +976,13 @@ class BaseOpenStackCharmAssessStatus(object):
     # The list of services that this charm manages
     services = []
     """
+
+    # a dict of meta tuples of the following format to render templates
+    # from strings based on adapter properties (resolved at runtime):
+    # {config_file_path: (relation_name, adapter property)}
+    # relation names should be normalized (lowercase, underscores instead of
+    # dashes; use "options" relation name for a config adapter
+    string_templates = {}
 
     def __init__(self, *args, **kwargs):
         """Set up specific mixin requirements"""
