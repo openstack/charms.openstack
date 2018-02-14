@@ -656,6 +656,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
 
                     if not os_utils.snap_install_requested():
                         self.configure_apache()
+                        ch_host.service_reload('apache2')
 
                     self.remove_state('ssl.requested')
                 self.set_state('ssl.enabled', True)
