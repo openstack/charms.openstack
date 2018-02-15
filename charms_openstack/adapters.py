@@ -281,7 +281,7 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
                         'network': 'this_unit_private_addr/private_netmask'},
                 'internal_addresses': ['intaddr']}
         """
-        relation_info = {}
+        relation_info = collections.OrderedDict()
         try:
             cluster_relid = hookenv.relation_ids('cluster')[0]
             if not hookenv.related_units(relid=cluster_relid):
@@ -315,7 +315,7 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
                     'network': 'this_unit_public_addr/public_netmask'}}
         """
         config = hookenv.config()
-        _cluster_hosts = {}
+        _cluster_hosts = collections.OrderedDict()
         for addr_type in ADDRESS_TYPES:
             cfg_opt = os_ip.ADDRESS_MAP[addr_type]['config']
             laddr = ch_ip.get_relation_ip(
