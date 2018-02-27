@@ -18,7 +18,6 @@ import netaddr
 
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.contrib.network.ip as net_ip
-import charmhelpers.contrib.hahelpers.cluster as cluster
 import charms.reactive.bus
 
 PUBLIC = 'public'
@@ -113,11 +112,13 @@ def _resolve_network_cidr(ip_address):
 def resolve_address(endpoint_type=PUBLIC, override=True):
     """Return unit address depending on net config.
 
-    If unit is clustered with vip(s) and has net splits defined, return vip on
-    correct network. If clustered with no nets defined, return primary vip.
+    If unit is has vip(s) configured and has net splits defined, return vip on
+    correct network. If vip configured with no nets defined, return primary
+    vip.
 
-    If not clustered, return unit address ensuring address is on configured net
-    split if one is configured, or a Juju 2.0 extra-binding has been used.
+    If no vip is configured, return unit address ensuring address is on
+    configured net split if one is configured, or a Juju 2.0 extra-binding has
+    been used.
 
     :param endpoint_type: Network endpoing type
     :param override: Accept hostname overrides or not
@@ -136,9 +137,8 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
     net_addr = hookenv.config(net_type)
     net_fallback = ADDRESS_MAP[endpoint_type]['fallback']
     binding = ADDRESS_MAP[endpoint_type]['binding']
-    clustered = cluster.is_clustered()
 
-    if clustered and vips:
+    if vips:
         if net_addr:
             for vip in vips:
                 if net_ip.is_address_in_network(net_addr, vip):
@@ -179,6 +179,6 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
     if resolved_address is None:
         raise ValueError("Unable to resolve a suitable IP address based on "
                          "charm state and configuration. (net_type=%s, "
-                         "clustered=%s)" % (net_type, clustered))
+                         % (net_type))
 
     return resolved_address

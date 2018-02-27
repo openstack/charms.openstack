@@ -51,7 +51,6 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         self.resolve_address.assert_called_once_with(ip.INTERNAL)
 
     def test_resolve_address(self):
-        self.patch_object(ip.cluster, 'is_clustered')
         self.patch_object(ip.hookenv, 'config')
         self.patch_object(ip.hookenv, 'network_get_primary_address')
         self.patch_object(ip.net_ip, 'is_address_in_network')
@@ -63,7 +62,7 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         # what it was called with.
         calls_list = []
         _config = {
-            'vip': 'vip-address',
+            'vip': None,
             'prefer-ipv6': False,
             'os-public-network': 'the-public-network',
             'os-public-hostname': None,
@@ -80,10 +79,9 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         # Juju pre 2.0 behaviour where network-get is not implemented
         self.network_get_primary_address.side_effect = NotImplementedError
 
-        # first test, if not clustered, that the function uses unit_get() and
+        # first test, if no VIP, that the function uses unit_get() and
         # get_address_in_network to get a real address.
         # for the default PUBLIC endpoint
-        self.is_clustered.return_value = False
         self.get_address_in_network.return_value = 'got-address'
         self.unit_get.return_value = 'unit-get-address'
         addr = ip.resolve_address()
@@ -97,18 +95,18 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         self.get_address_in_network.assert_called_once_with(
             'the-public-network', 'unit-get-address')
 
-        # second test: not clustered, prefer-ipv6 is True
+        # second test: no vip, prefer-ipv6 is True
         _config['prefer-ipv6'] = True
         calls_list = []
         self.get_ipv6_addr.return_value = ['ipv6-addr']
         self.get_address_in_network.reset_mock()
         addr = ip.resolve_address()
-        self.get_ipv6_addr.assert_called_once_with(exc_list=['vip-address'])
+        self.get_ipv6_addr.assert_called_once_with(exc_list=None)
         self.get_address_in_network.assert_called_once_with(
             'the-public-network', 'ipv6-addr')
 
-        # Third test: clustered, and config(...) returns None
-        self.is_clustered.return_value = True
+        # Third test: vip, and config(...) returns None
+        _config['vip'] = 'vip-address'
         _config['os-public-network'] = None
         calls_list = []
         addr = ip.resolve_address()
@@ -141,7 +139,6 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
             addr = ip.resolve_address()
 
     def test_resolve_address_network_binding(self):
-        self.patch_object(ip.cluster, 'is_clustered')
         self.patch_object(ip.hookenv, 'config')
         self.patch_object(ip.hookenv, 'network_get_primary_address')
         self.patch_object(ip.net_ip, 'is_address_in_network')
@@ -154,7 +151,7 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         # what it was called with.
         calls_list = []
         _config = {
-            'vip': 'vip1 vip2',
+            'vip': None,
             'prefer-ipv6': False,
             'os-public-network': None,
             'os-public-hostname': None,
@@ -168,10 +165,9 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
 
         self.config.side_effect = fake_config
 
-        # first test, if not clustered, that the function uses unit_get
+        # first test, if no vip, that the function uses unit_get
         # network_get_primary_address to get a real address.
         # for the default PUBLIC endpoint
-        self.is_clustered.return_value = False
         self.network_get_primary_address.return_value = 'got-address'
         self._resolve_network_cidr.return_value = 'cidr'
         self.unit_get.return_value = 'unit-get-address'
@@ -187,7 +183,7 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
             'public'
         )
 
-        # second test: not clustered, prefer-ipv6 is True, ensure
+        # second test: no vip, prefer-ipv6 is True, ensure
         # that ipv6 address is fallback and network-get is still
         # used to determine the public endpoint binding
         _config['prefer-ipv6'] = True
@@ -195,7 +191,7 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         self.get_ipv6_addr.return_value = ['ipv6-addr']
         self.get_address_in_network.reset_mock()
         addr = ip.resolve_address()
-        self.get_ipv6_addr.assert_called_once_with(exc_list=['vip1', 'vip2'])
+        self.get_ipv6_addr.assert_called_once_with(exc_list=None)
         self.network_get_primary_address.assert_called_with(
             'public'
         )
@@ -206,7 +202,7 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         self.is_address_in_network.side_effect = _fake_addr_in_net
 
         # Third test: clustered
-        self.is_clustered.return_value = True
+        _config['vip'] = 'vip1 vip2'
         calls_list = []
         addr = ip.resolve_address()
         self.assertEqual(calls_list, [('os-public-hostname',),

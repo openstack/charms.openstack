@@ -14,6 +14,7 @@
 
 import sys
 import mock
+import os
 
 # mock out some charmhelpers libraries as they have apt install side effects
 apt_pkg = mock.MagicMock()
@@ -63,6 +64,9 @@ charmhelpers.contrib.openstack.utils.OPENSTACK_RELEASES = (
     'ocata',
     'pike',
 )
+
+# charms.reactive uses hookenv.charm_dir which must return a directory
+charmhelpers.core.hookenv.charm_dir.return_value = os.path.curdir
 
 
 def _fake_retry(num_retries, base_delay=0, exc_type=Exception):
