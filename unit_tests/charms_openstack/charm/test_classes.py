@@ -671,25 +671,43 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             'ssl_key': base64.b64encode(b'key'),
             'ssl_cert': base64.b64encode(b'cert'),
             'ssl_ca': base64.b64encode(b'ca')}
+        addresses = {
+            'admin': 'adm_addr',
+            'int': 'int_addr',
+            'public': 'pub_addr'}
         self.patch_target('config', new=config)
         self.patch_object(chm.os_ip, 'resolve_address', 'addr')
+        self.resolve_address.side_effect = \
+            lambda endpoint_type=None: addresses[endpoint_type]
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
         self.assertEqual(
             self.target.get_certs_and_keys(),
-            [{'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'addr'}])
+            [
+                {'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'int_addr'},
+                {'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'adm_addr'},
+                {'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'pub_addr'}])
 
     def test_get_certs_and_keys_noca(self):
         config = {
             'ssl_key': base64.b64encode(b'key'),
             'ssl_cert': base64.b64encode(b'cert')}
+        addresses = {
+            'admin': 'adm_addr',
+            'int': 'int_addr',
+            'public': 'pub_addr'}
         self.patch_target('config', new=config)
         self.patch_object(chm.os_ip, 'resolve_address', 'addr')
+        self.resolve_address.side_effect = \
+            lambda endpoint_type=None: addresses[endpoint_type]
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
         self.assertEqual(
             self.target.get_certs_and_keys(),
-            [{'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'addr'}])
+            [
+                {'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'int_addr'},
+                {'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'adm_addr'},
+                {'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'pub_addr'}])
 
     def test_get_certs_and_keys_ks_interface(self):
         class KSInterface(object):

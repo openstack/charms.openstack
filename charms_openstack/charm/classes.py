@@ -579,12 +579,15 @@ class HAOpenStackCharm(OpenStackAPICharm):
         ]
         """
         if self.config_defined_ssl_key and self.config_defined_ssl_cert:
-            return [{
-                'key': self.config_defined_ssl_key.decode('utf-8'),
-                'cert': self.config_defined_ssl_cert.decode('utf-8'),
-                'ca': (self.config_defined_ssl_ca.decode('utf-8')
-                       if self.config_defined_ssl_ca else None),
-                'cn': self.get_default_cn()}]
+            ssl_artifacts = []
+            for ep_type in [os_ip.INTERNAL, os_ip.ADMIN, os_ip.PUBLIC]:
+                ssl_artifacts.append({
+                    'key': self.config_defined_ssl_key.decode('utf-8'),
+                    'cert': self.config_defined_ssl_cert.decode('utf-8'),
+                    'ca': (self.config_defined_ssl_ca.decode('utf-8')
+                           if self.config_defined_ssl_ca else None),
+                    'cn': os_ip.resolve_address(endpoint_type=ep_type)})
+            return ssl_artifacts
         elif keystone_interface:
             keys_and_certs = []
             for addr in self.get_local_addresses():
