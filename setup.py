@@ -69,8 +69,9 @@ setup(
     author_email='alex.kavanagh@canonical.com',
     license='Apache-2.0: http://www.apache.org/licenses/LICENSE-2.0',
     packages=find_packages(exclude=["unit_tests"]),
+    exclude_package_data={'': ['.gitignore', '.git']},
     zip_safe=False,
-    cmdclass = {'test': Tox},
+    cmdclass={'test': Tox},
     install_requires=install_require,
     extras_require={
         'testing': tests_require,

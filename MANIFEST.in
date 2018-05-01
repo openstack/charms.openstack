@@ -1,2 +1,3 @@
 include *.txt *.ini *.cfg *.rst
+exclude .git .gitignore
 recursive-include charm *.ico *.png *.css *.gif *.jpg *.txt
