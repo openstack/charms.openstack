@@ -564,13 +564,15 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             return resolved_addresses[endpoint_type]
 
         with mock.patch.object(adapters.hookenv, 'config',
-                               new=lambda: test_config), \
+                               return_value=test_config), \
                 mock.patch.object(adapters.hookenv, 'unit_get',
                                   return_value='thisunit'), \
-                mock.patch.object(adapters.os_ip, 'resolve_address',
-                                  new=_resolve_address), \
                 mock.patch.object(adapters.ch_ip, 'get_address_in_network',
-                                  new=lambda x, y: test_networks[x]):
+                                  new=lambda x, y: test_networks[x]), \
+                mock.patch.object(adapters.ch_ip, 'get_relation_ip',
+                                  new=lambda x, y: test_networks[x]), \
+                mock.patch.object(adapters.os_ip, 'resolve_address',
+                                  new=_resolve_address):
             c = adapters.APIConfigurationAdapter()
             self.assertEqual(
                 c.get_network_addresses(), [

@@ -800,12 +800,15 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         """
         addresses = []
         for net_type in ADDRESS_TYPES:
-            net_cfg_opt = os_ip.ADDRESS_MAP[net_type]['config'].replace('-',
-                                                                        '_')
-            config_cidr = getattr(self, net_cfg_opt, None)
-            addr = ch_ip.get_address_in_network(
-                config_cidr,
-                hookenv.unit_get('private-address'))
+            net_cfg_opt = os_ip.ADDRESS_MAP[net_type]['config']
+            config_cidr = getattr(self, net_cfg_opt.replace('-', '_'), None)
+            if hookenv.config(net_cfg_opt):
+                addr = ch_ip.get_address_in_network(
+                    config_cidr,
+                    hookenv.unit_get('private-address'))
+            else:
+                addr = ch_ip.get_relation_ip(
+                    os_ip.ADDRESS_MAP[net_type]['binding'])
             addresses.append(
                 (addr, os_ip.resolve_address(endpoint_type=net_type)))
         return sorted(addresses)
