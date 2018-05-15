@@ -344,6 +344,24 @@ class TestOpenStackAPICharm(BaseOpenStackCharmTest):
         with self.assertRaises(RuntimeError):
             self.target.get_database_setup()
 
+    def test_get_certificate_requests(self):
+        self.patch_object(
+            chm.cert_utils,
+            'get_certificate_request',
+            return_value={'cert_requests': {'test.e.c': {'sans': ['san1']}}})
+        self.assertEqual(
+            self.target.get_certificate_requests(),
+            {'test.e.c': {'sans': ['san1']}})
+
+    def test_get_certificate_requests_empty(self):
+        self.patch_object(
+            chm.cert_utils,
+            'get_certificate_request',
+            return_value={})
+        self.assertEqual(
+            self.target.get_certificate_requests(),
+            {})
+
     def test_all_packages(self):
         self.patch_target('enable_memcache')
         self.patch_target('packages', new=['pkg1', 'pkg2'])
@@ -759,6 +777,61 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
 
         self.assertEqual(
             self.target.get_certs_and_keys(keystone_interface=KSInterface()),
+            expect)
+
+    def test_get_certs_and_keys_certs_interface(self):
+        class CertsInterface(object):
+
+            def get_batch_requests(self):
+                req = {
+                    'int_addr': {
+                        'cert': 'int_cert',
+                        'key': 'int_key'},
+                    'priv_addr': {
+                        'cert': 'priv_cert',
+                        'key': 'priv_key'},
+                    'pub_addr': {
+                        'cert': 'pub_cert',
+                        'key': 'pub_key'},
+                    'admin_addr': {
+                        'cert': 'admin_cert',
+                        'key': 'admin_key'}}
+                return req
+
+            def get_ca(self):
+                return 'CA'
+
+            def get_chain(self):
+                return 'CHAIN'
+
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
+        expect = [
+            {
+                'ca': 'CA',
+                'cert': 'admin_certCHAIN',
+                'cn': 'admin_addr',
+                'key': 'admin_key'},
+            {
+                'ca': 'CA',
+                'cert': 'int_certCHAIN',
+                'cn': 'int_addr',
+                'key': 'int_key'},
+            {
+                'ca': 'CA',
+                'cert': 'priv_certCHAIN',
+                'cn': 'priv_addr',
+                'key': 'priv_key'},
+            {
+                'ca': 'CA',
+                'cert': 'pub_certCHAIN',
+                'cn': 'pub_addr',
+                'key': 'pub_key'},
+        ]
+
+        self.assertEqual(
+            self.target.get_certs_and_keys(
+                certificates_interface=CertsInterface()),
             expect)
 
     def test_config_defined_certs_and_keys(self):

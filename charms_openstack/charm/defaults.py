@@ -18,6 +18,7 @@ ALLOWED_DEFAULT_HANDLERS = [
     'charm.default-select-package-type',
     'update-status',
     'upgrade-charm',
+    'certificates.available',
 ]
 
 # Where to store the default handler functions for each default state
@@ -134,6 +135,16 @@ def make_default_amqp_connection_handler():
     or hooks directory.
     """
     reactive.set_state('charms.openstack.do-default-amqp.connected')
+
+
+@_map_default_handler('certificates.available')
+def make_default_certificates_available_handler():
+    """Set the default certificates.available state so that the default handler in
+    layer-openstack can run.
+    Convoluted, because charms.reactive will only run handlers in the reactive
+    or hooks directory.
+    """
+    reactive.set_state('charms.openstack.do-default-certificates.available')
 
 
 @_map_default_handler('shared-db.connected')

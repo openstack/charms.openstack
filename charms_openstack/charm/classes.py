@@ -10,6 +10,7 @@ import subprocess
 import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.utils as os_utils
 import charmhelpers.contrib.openstack.ha as os_ha
+import charmhelpers.contrib.openstack.cert_utils as cert_utils
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charmhelpers.fetch as fetch
@@ -271,6 +272,12 @@ class OpenStackAPICharm(OpenStackCharm):
         raise RuntimeError(
             "get_database_setup() needs to be overriden in the derived "
             "class")
+
+    def get_certificate_requests(self):
+        """Return a dict of certificate requests
+        """
+        return cert_utils.get_certificate_request(
+            json_encode=False).get('cert_requests', {})
 
     @property
     def all_packages(self):
@@ -563,7 +570,8 @@ class HAOpenStackCharm(OpenStackAPICharm):
                 addresses.append(laddr)
         return sorted(list(set(addresses)))
 
-    def get_certs_and_keys(self, keystone_interface=None):
+    def get_certs_and_keys(self, keystone_interface=None,
+                           certificates_interface=None):
         """Collect SSL config for local endpoints
 
         SSL keys and certs may come from user specified configuration for this
@@ -600,6 +608,21 @@ class HAOpenStackCharm(OpenStackAPICharm):
                         'cert': cert,
                         'ca': ca,
                         'cn': addr})
+            return keys_and_certs
+        elif certificates_interface:
+            keys_and_certs = []
+            reqs = certificates_interface.get_batch_requests()
+            ca = certificates_interface.get_ca()
+            chain = certificates_interface.get_chain()
+            for cn, data in sorted(reqs.items()):
+                cert = data['cert']
+                if chain:
+                    cert = cert + chain
+                keys_and_certs.append({
+                    'key': data['key'],
+                    'cert': cert,
+                    'ca': ca,
+                    'cn': cn})
             return keys_and_certs
         else:
             return []
@@ -645,8 +668,11 @@ class HAOpenStackCharm(OpenStackAPICharm):
             relations.endpoint_from_flag('identity-service.available.ssl') or
             relations
             .endpoint_from_flag('identity-service.available.ssl_legacy'))
+        certificates_interface = relations.endpoint_from_flag(
+            'certificates.batch.cert.available')
         ssl_objects = self.get_certs_and_keys(
-            keystone_interface=keystone_interface)
+            keystone_interface=keystone_interface,
+            certificates_interface=certificates_interface)
         with is_data_changed('configure_ssl.ssl_objects',
                              ssl_objects) as changed:
             if ssl_objects:
@@ -656,7 +682,8 @@ class HAOpenStackCharm(OpenStackAPICharm):
                         self.configure_cert(
                             ssl['cert'], ssl['key'], cn=ssl['cn'])
                         self.configure_ca(ssl['ca'])
-
+                    cert_utils.create_ip_cert_links(
+                        os.path.join('/etc/apache2/ssl/', self.name))
                     if not os_utils.snap_install_requested():
                         self.configure_apache()
                         ch_host.service_reload('apache2')
