@@ -28,6 +28,8 @@ def mock_charmhelpers():
         charmhelpers.contrib.openstack.ha)
     sys.modules['charmhelpers.contrib.openstack.utils'] = (
         charmhelpers.contrib.openstack.utils)
+    sys.modules['charmhelpers.contrib.openstack.cert_utils'] = (
+        charmhelpers.contrib.openstack.cert_utils)
     sys.modules['charmhelpers.contrib.openstack.templating'] = (
         charmhelpers.contrib.openstack.templating)
     sys.modules['charmhelpers.contrib.network'] = charmhelpers.contrib.network
