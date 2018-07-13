@@ -13,12 +13,15 @@ import charmhelpers.contrib.openstack.utils as os_utils
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charmhelpers.core.templating
+import charmhelpers.core.unitdata as unitdata
 import charmhelpers.fetch as fetch
 import charms.reactive as reactive
 import charms.reactive.relations as relations
 
 import charms_openstack.adapters as os_adapters
 import charms_openstack.ip as os_ip
+
+from charms_openstack.charm import defaults as os_defaults
 
 # _releases{} is a dictionary of release -> class that is instantiated
 # according to the the release that is being requested.  i.e. a charm can
@@ -892,9 +895,14 @@ class BaseOpenStackCharmActions(object):
         """
         if self.openstack_upgrade_available(self.release_pkg):
             hookenv.status_set('maintenance', 'Running openstack upgrade')
-            self.do_openstack_pkg_upgrade()
-            self.do_openstack_upgrade_config_render(interfaces_list)
-            self.do_openstack_upgrade_db_migration()
+            new_src = self.config['openstack-origin']
+            new_os_rel = os_utils.get_os_codename_install_source(new_src)
+            unitdata.kv().set(os_defaults.OPENSTACK_RELEASE_KEY,
+                              new_os_rel)
+            target_charm = get_charm_instance(new_os_rel)
+            target_charm.do_openstack_pkg_upgrade()
+            target_charm.do_openstack_upgrade_config_render(interfaces_list)
+            target_charm.do_openstack_upgrade_db_migration()
 
     def do_openstack_pkg_upgrade(self):
         """Upgrade OpenStack packages and snaps

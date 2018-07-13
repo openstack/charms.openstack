@@ -739,6 +739,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('do_openstack_pkg_upgrade')
         self.patch_target('do_openstack_upgrade_config_render')
         self.patch_target('do_openstack_upgrade_db_migration')
+        self.patch_object(chm_core, 'get_charm_instance')
         # Test no upgrade avaialble
         self.openstack_upgrade_available.return_value = False
         self.target.upgrade_if_available('int_list')
@@ -747,14 +748,17 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.assertFalse(self.do_openstack_upgrade_config_render.called)
         self.assertFalse(self.do_openstack_upgrade_db_migration.called)
         # Test upgrade avaialble
+        target_charm = mock.MagicMock()
+        self.get_charm_instance.return_value = target_charm
         self.openstack_upgrade_available.return_value = True
         self.target.upgrade_if_available('int_list')
         self.status_set.assert_called_once_with('maintenance',
                                                 'Running openstack upgrade')
-        self.do_openstack_pkg_upgrade.assert_called_once_with()
-        self.do_openstack_upgrade_config_render.assert_called_once_with(
-            'int_list')
-        self.do_openstack_upgrade_db_migration.assert_called_once_with()
+        target_charm.do_openstack_pkg_upgrade.assert_called_once_with()
+        (target_charm.do_openstack_upgrade_config_render.
+            assert_called_once_with('int_list'))
+        (target_charm.do_openstack_upgrade_db_migration.
+            assert_called_once_with())
 
     def test_do_openstack_pkg_upgrade_package(self):
         self.patch_target('config',
@@ -777,7 +781,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 '--option', 'Dpkg::Options::=--force-confnew', '--option',
                 'Dpkg::Options::=--force-confdef'])
         self.apt_install.assert_called_once_with(
-            packages=['p1', 'p2', 'p3', 'package-to-filter'],
+            packages=self.target.all_packages,
             options=[
                 '--option', 'Dpkg::Options::=--force-confnew', '--option',
                 'Dpkg::Options::=--force-confdef'],
@@ -808,7 +812,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 '--option', 'Dpkg::Options::=--force-confnew', '--option',
                 'Dpkg::Options::=--force-confdef'])
         self.apt_install.assert_called_once_with(
-            packages=['p1', 'p2', 'p3', 'package-to-filter'],
+            packages=self.target.all_packages,
             options=[
                 '--option', 'Dpkg::Options::=--force-confnew', '--option',
                 'Dpkg::Options::=--force-confdef'],
@@ -824,7 +828,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
     def test_do_openstack_upgrade_config_render(self):
         self.patch_target('render_with_interfaces')
         self.target.do_openstack_upgrade_config_render('int_list')
-        self.render_with_interfaces.assert_called_once_with('int_list')
+        self.target.render_with_interfaces.assert_called_once_with(
+            'int_list')
 
     def test_do_openstack_upgrade_db_migration(self):
         self.patch_object(chm_core.hookenv, 'is_leader')
