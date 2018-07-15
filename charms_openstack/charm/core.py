@@ -326,6 +326,12 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
 
     package_codenames = {}
 
+    # File permissions
+    # config files written with 'group' read permission but always
+    # owned by root.
+    user = 'root'
+    group = 'root'
+
     @property
     def singleton(self):
         """Return the only instance of the charm class in this run"""
@@ -763,7 +769,9 @@ class BaseOpenStackCharmActions(object):
                         'templates/', self.release),
                     target=conf,
                     context=adapters_instance,
-                    config_template=config_template
+                    config_template=config_template,
+                    group=self.group,
+                    perms=0o640,
                 )
 
     def render_with_interfaces(self, interfaces, configs=None):

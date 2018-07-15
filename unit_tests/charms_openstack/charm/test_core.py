@@ -473,7 +473,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             template_loader='my-loader',
             target='path1',
             context=mock.ANY,
-            config_template=None
+            config_template=None,
+            group='root',
+            perms=0o640,
         )
         # assert the context was an MyAdapter instance.
         context = self.render.call_args_list[0][1]['context']
@@ -511,6 +513,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             target='path1',
             context=mock.ANY,
             config_template=config_template,
+            group='root',
+            perms=0o640,
         )
         # assert the context was an MyAdapter instance.
         context = self.render.call_args_list[0][1]['context']
@@ -576,28 +580,36 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 template_loader='my-loader',
                 target='path1',
                 context=mock.ANY,
-                config_template=None
+                config_template=None,
+                group='root',
+                perms=0o640,
             ),
             mock.call(
                 source='path2',
                 template_loader='my-loader',
                 target='path2',
                 context=mock.ANY,
-                config_template=None
+                config_template=None,
+                group='root',
+                perms=0o640,
             ),
             mock.call(
                 source='path3',
                 template_loader='my-loader',
                 target='path3',
                 context=mock.ANY,
-                config_template=None
+                config_template=None,
+                group='root',
+                perms=0o640,
             ),
             mock.call(
                 source='path4',
                 template_loader='my-loader',
                 target='path4',
                 context=mock.ANY,
-                config_template=None
+                config_template=None,
+                group='root',
+                perms=0o640,
             ),
         ]
         self.render.assert_has_calls(calls, any_order=True)
@@ -635,28 +647,36 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 template_loader='my-loader',
                 target='path1',
                 context=mock.ANY,
-                config_template=None
+                config_template=None,
+                group='root',
+                perms=0o640,
             ),
             mock.call(
                 source='path2',
                 template_loader='my-loader',
                 target='path2',
                 context=mock.ANY,
-                config_template=None
+                config_template=None,
+                group='root',
+                perms=0o640,
             ),
             mock.call(
                 source='path3',
                 template_loader='my-loader',
                 target='path3',
                 context=mock.ANY,
-                config_template=None
+                config_template=None,
+                group='root',
+                perms=0o640,
             ),
             mock.call(
                 source='path4',
                 template_loader='my-loader',
                 target='path4',
                 context=mock.ANY,
-                config_template=None
+                config_template=None,
+                group='root',
+                perms=0o640,
             ),
         ]
         self.render.assert_has_calls(calls, any_order=True)
