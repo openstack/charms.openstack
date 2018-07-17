@@ -323,7 +323,7 @@ That if `required_relations` is `['identity-service']`, then the
 `identity-service.available` states.
 
 If the charm author requires additional states to be checked for an interface,
-then the  method `states_to_check` should be overriden in the derived class and
+then the  method `states_to_check` should be overridden in the derived class and
 additional states, the status and error message provided.  See the code for
 further details.
 

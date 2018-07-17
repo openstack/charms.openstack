@@ -181,7 +181,7 @@ class OpenStackAPICharm(OpenStackCharm):
     # If None, then the default ConfigurationAdapter is used.
     configuration_class = os_adapters.APIConfigurationAdapter
 
-    # These can be overriden in the derived charm class to allow specialism of
+    # These can be overridden in the derived charm class to allow specialism of
     # config files.  These values are read in the APIConfigurationAdapter and
     # used to furnish the dictionary provided from the property
     # 'wsgi_worker_context'.  e.g. config.wsgi_worker_context.processes would
@@ -238,13 +238,13 @@ class OpenStackAPICharm(OpenStackCharm):
     def get_amqp_credentials(self):
         """Provide the default amqp username and vhost as a tuple.
 
-        This needs to be overriden in a derived class to provide the username
+        This needs to be overridden in a derived class to provide the username
         and vhost to the amqp interface IF the default amqp handlers are being
         used.
         :returns (username, host): two strings to send to the amqp provider.
         """
         raise RuntimeError(
-            "get_amqp_credentials() needs to be overriden in the derived "
+            "get_amqp_credentials() needs to be overridden in the derived "
             "class")
 
     def get_database_setup(self):
@@ -270,7 +270,7 @@ class OpenStackAPICharm(OpenStackCharm):
         :returns [{'database': ...}, ...]: credentials for multiple databases
         """
         raise RuntimeError(
-            "get_database_setup() needs to be overriden in the derived "
+            "get_database_setup() needs to be overridden in the derived "
             "class")
 
     def get_certificate_requests(self):

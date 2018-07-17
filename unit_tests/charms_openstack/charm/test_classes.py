@@ -335,12 +335,12 @@ class TestOpenStackAPICharm(BaseOpenStackCharmTest):
         self.assertEqual(self.target.token_cache_pkgs(), [])
 
     def test_get_amqp_credentials(self):
-        # verify that the instance throws an error if not overriden
+        # verify that the instance throws an error if not overridden
         with self.assertRaises(RuntimeError):
             self.target.get_amqp_credentials()
 
     def test_get_database_setup(self):
-        # verify that the instance throws an error if not overriden
+        # verify that the instance throws an error if not overridden
         with self.assertRaises(RuntimeError):
             self.target.get_database_setup()
 
