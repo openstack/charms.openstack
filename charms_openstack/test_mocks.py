@@ -41,6 +41,9 @@ def mock_charmhelpers():
         charmhelpers.contrib.hahelpers)
     sys.modules['charmhelpers.contrib.hahelpers.cluster'] = (
         charmhelpers.contrib.hahelpers.cluster)
+    sys.modules['charmhelpers.core.hookenv.charm_dir'] = (
+        charmhelpers.core.hookenv.charm_dir)
+    charmhelpers.core.hookenv.charm_dir.return_value = "/tmp"
 
     # mock in the openstack releases so that the tests can run
     charmhelpers.contrib.openstack.utils.OPENSTACK_RELEASES = (
