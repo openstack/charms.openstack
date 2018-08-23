@@ -21,7 +21,11 @@ import charms.reactive.relations as relations
 import charms_openstack.adapters as os_adapters
 import charms_openstack.ip as os_ip
 
-from charms_openstack.charm import defaults as os_defaults
+
+# Used to store the discovered release version for caching between invocations
+OPENSTACK_RELEASE_KEY = 'charmers.openstack-release-version'
+OPENSTACK_PACKAGE_TYPE_KEY = 'charmers.openstack-package-type'
+
 
 # _releases{} is a dictionary of release -> class that is instantiated
 # according to the the release that is being requested.  i.e. a charm can
@@ -905,7 +909,7 @@ class BaseOpenStackCharmActions(object):
             hookenv.status_set('maintenance', 'Running openstack upgrade')
             new_src = self.config['openstack-origin']
             new_os_rel = os_utils.get_os_codename_install_source(new_src)
-            unitdata.kv().set(os_defaults.OPENSTACK_RELEASE_KEY,
+            unitdata.kv().set(OPENSTACK_RELEASE_KEY,
                               new_os_rel)
             target_charm = get_charm_instance(new_os_rel)
             target_charm.do_openstack_pkg_upgrade()

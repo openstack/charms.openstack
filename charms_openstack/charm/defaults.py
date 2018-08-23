@@ -5,6 +5,8 @@ import charms.reactive as reactive
 from charms_openstack.charm.classes import OpenStackCharm
 from charms_openstack.charm.core import register_os_release_selector
 from charms_openstack.charm.core import register_package_type_selector
+from charms_openstack.charm.core import OPENSTACK_RELEASE_KEY
+from charms_openstack.charm.core import OPENSTACK_PACKAGE_TYPE_KEY
 
 # The default handlers that charms.openstack provides.
 ALLOWED_DEFAULT_HANDLERS = [
@@ -23,10 +25,6 @@ ALLOWED_DEFAULT_HANDLERS = [
 
 # Where to store the default handler functions for each default state
 _default_handler_map = {}
-
-# Used to store the discovered release version for caching between invocations
-OPENSTACK_RELEASE_KEY = 'charmers.openstack-release-version'
-OPENSTACK_PACKAGE_TYPE_KEY = 'charmers.openstack-package-type'
 
 
 def use_defaults(*defaults):
