@@ -949,6 +949,17 @@ class BaseOpenStackCharmActions(object):
             packages=self.all_packages,
             options=dpkg_opts,
             fatal=True)
+        if self.purge_packages:
+            # NOTE(jamespage):
+            # Ensure packages that should be purged are actually installed
+            installed_packages = list(
+                set(self.purge_packages) -
+                set(fetch.filter_installed_packages(self.purge_packages))
+            )
+            if installed_packages:
+                fetch.apt_purge(packages=installed_packages,
+                                fatal=True)
+                fetch.apt_autoremove(purge=True, fatal=True)
         self.release = new_os_rel
 
     def do_openstack_upgrade_config_render(self, interfaces_list):

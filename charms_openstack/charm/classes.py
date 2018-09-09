@@ -67,6 +67,12 @@ class OpenStackCharm(BaseOpenStackCharm,
     # List of packages to install
     packages = []
 
+    # List of packages to purge
+    purge_packages = []
+
+    # Python version used to execute installed workload
+    python_version = 2
+
     # List of snaps to install
     snaps = []
 
@@ -232,7 +238,10 @@ class OpenStackAPICharm(OpenStackCharm):
         """
         packages = []
         if self.enable_memcache(release=release):
-            packages.extend(['memcached', 'python-memcache'])
+            if self.python_version == 2:
+                packages.extend(['memcached', 'python-memcache'])
+            else:
+                packages.extend(['memcached', 'python3-memcache'])
         return packages
 
     def get_amqp_credentials(self):

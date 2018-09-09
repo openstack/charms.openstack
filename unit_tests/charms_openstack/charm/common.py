@@ -24,6 +24,7 @@ class MyOpenStackCharm(chm_classes.OpenStackCharm):
     release = 'icehouse'
     name = 'my-charm'
     packages = ['p1', 'p2', 'p3', 'package-to-filter']
+    purge_packages = ['python-obsolete', 'python-notinstalled']
     snaps = ['mysnap']
     version_package = 'p2'
     version_snap = 'mysnap'

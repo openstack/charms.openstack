@@ -789,6 +789,11 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_upgrade')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_install')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_purge')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_autoremove')
+        self.patch_object(chm_core.charmhelpers.fetch,
+                          'filter_installed_packages',
+                          return_value=['python-notinstalled'])
         self.patch_object(chm_core.os_utils, 'snap_install_requested',
                           return_value=False)
         self.target.do_openstack_pkg_upgrade()
@@ -805,6 +810,12 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             options=[
                 '--option', 'Dpkg::Options::=--force-confnew', '--option',
                 'Dpkg::Options::=--force-confdef'],
+            fatal=True)
+        self.apt_purge.assert_called_once_with(
+            packages=['python-obsolete'],
+            fatal=True)
+        self.apt_autoremove.assert_called_once_with(
+            purge=True,
             fatal=True)
 
     def test_do_openstack_pkg_upgrade_snap(self):
