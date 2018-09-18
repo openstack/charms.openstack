@@ -170,6 +170,24 @@ class OpenStackCharm(BaseOpenStackCharm,
                 version = os_utils.os_release(self.version_package)
         return version
 
+    def run_pause_or_resume(self, action):
+        """Helper to enable pause/resume action to be processed."""
+        actions = {
+            'pause': os_utils.pause_unit,
+            'resume': os_utils.resume_unit}
+        pause_services = self.services
+        if self.haproxy_enabled():
+            pause_services.append('haproxy')
+        actions[action](self.assess_status, services=pause_services)
+
+    def pause(self):
+        """Pause the charms services."""
+        self.run_pause_or_resume('pause')
+
+    def resume(self):
+        """Resume the charms services."""
+        self.run_pause_or_resume('resume')
+
 
 class OpenStackAPICharm(OpenStackCharm):
     """The base class for API OS charms -- this just bakes in the default
