@@ -175,7 +175,7 @@ class OpenStackCharm(BaseOpenStackCharm,
         actions = {
             'pause': os_utils.pause_unit,
             'resume': os_utils.resume_unit}
-        pause_services = self.services
+        pause_services = self.services[:]
         if self.haproxy_enabled():
             pause_services.append('haproxy')
         actions[action](self.assess_status, services=pause_services)
@@ -186,6 +186,17 @@ class OpenStackCharm(BaseOpenStackCharm,
 
     def resume(self):
         """Resume the charms services."""
+        self.run_pause_or_resume('resume')
+
+    def series_upgrade_prepare(self):
+        """Prepare to upgrade series"""
+        os_utils.set_unit_upgrading()
+        self.run_pause_or_resume('pause')
+
+    def series_upgrade_complete(self):
+        """Prepare to upgrade series"""
+        os_utils.clear_unit_paused()
+        os_utils.clear_unit_upgrading()
         self.run_pause_or_resume('resume')
 
 
