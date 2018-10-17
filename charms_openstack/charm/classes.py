@@ -170,6 +170,17 @@ class OpenStackCharm(BaseOpenStackCharm,
                 version = os_utils.os_release(self.version_package)
         return version
 
+    def haproxy_enabled(self):
+        """Determine if haproxy is fronting the services
+
+        The OpenStackCharm class may be used for subordinates or charms which
+        do not use haproxy. This method is overriden in the HAOpenStackCharm
+        class where haproxy is utilized.
+
+        @return None
+        """
+        pass
+
     def run_pause_or_resume(self, action):
         """Helper to enable pause/resume action to be processed."""
         actions = {
