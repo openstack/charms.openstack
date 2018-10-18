@@ -130,7 +130,10 @@ class OpenStackRelationAdapter(object):
         Note that the accessor is dynamic as each access calls the underlying
         getattr() for each property access.
         """
-        self.accessors.extend(self.relation.auto_accessors)
+        try:
+            self.accessors.extend(self.relation.auto_accessors)
+        except AttributeError:
+            self.accessors = []
         for field in self.accessors:
             meth_name = field.replace('-', '_')
             # Get the relation property dynamically
@@ -1107,7 +1110,10 @@ class OpenStackRelationAdapters(object):
         :param relation: a RelationBase derived reactive relation
         :returns (string, OpenstackRelationAdapter-derived): see above.
         """
-        relation_name = relation.relation_name.replace('-', '_')
+        try:
+            relation_name = relation.endpoint_name.replace('-', '_')
+        except AttributeError:
+            relation_name = relation.relation_name.replace('-', '_')
         try:
             adapter = self._adapters[relation_name](relation)
         except KeyError:
