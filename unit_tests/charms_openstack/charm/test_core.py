@@ -802,24 +802,38 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.apt.version_compare.assert_called_once_with(3, 2)
 
     def test_upgrade_if_available(self):
-        self.patch_target('openstack_upgrade_available')
+        self.patch_target('run_upgrade')
+        self.patch_target('openstack_upgrade_available', return_value=True)
+        self.patch_target('config',
+                          new={'action-managed-upgrade': False})
+        self.target.upgrade_if_available('int_list')
+        self.run_upgrade.assert_called_once_with(interfaces_list='int_list')
+
+    def test_upgrade_if_available_none_available(self):
+        self.patch_target('run_upgrade')
+        self.patch_target('openstack_upgrade_available', return_value=False)
+        self.target.upgrade_if_available('int_list')
+        self.assertFalse(self.run_upgrade.called)
+
+    def test_upgrade_if_available_action_managed_on(self):
+        self.patch_target('run_upgrade')
+        self.patch_target('openstack_upgrade_available', return_value=True)
+        self.patch_target('config',
+                          new={'action-managed-upgrade': True})
+        self.assertFalse(self.run_upgrade.called)
+
+    def test_run_upgrade(self):
         self.patch_object(chm_core.hookenv, 'status_set')
+        self.patch_target('do_openstack_upgrade_db_migration')
         self.patch_target('do_openstack_pkg_upgrade')
         self.patch_target('do_openstack_upgrade_config_render')
         self.patch_target('do_openstack_upgrade_db_migration')
+        self.patch_target('config',
+                          new={'openstack-origin': 'snap:ocata/stable'})
         self.patch_object(chm_core, 'get_charm_instance')
-        # Test no upgrade avaialble
-        self.openstack_upgrade_available.return_value = False
-        self.target.upgrade_if_available('int_list')
-        self.assertFalse(self.status_set.called)
-        self.assertFalse(self.do_openstack_pkg_upgrade.called)
-        self.assertFalse(self.do_openstack_upgrade_config_render.called)
-        self.assertFalse(self.do_openstack_upgrade_db_migration.called)
-        # Test upgrade avaialble
         target_charm = mock.MagicMock()
         self.get_charm_instance.return_value = target_charm
-        self.openstack_upgrade_available.return_value = True
-        self.target.upgrade_if_available('int_list')
+        self.target.run_upgrade('int_list')
         self.status_set.assert_called_once_with('maintenance',
                                                 'Running openstack upgrade')
         target_charm.do_openstack_pkg_upgrade.assert_called_once_with()

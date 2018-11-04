@@ -906,22 +906,34 @@ class BaseOpenStackCharmActions(object):
         apt.init()
         return apt.version_compare(avail_vers, cur_vers) == 1
 
+    def run_upgrade(self, interfaces_list=None):
+        """Upgrade OpenStack.
+
+        :param interfaces_list: List of instances of interface classes
+        :returns: None
+        """
+        hookenv.status_set('maintenance', 'Running openstack upgrade')
+        new_src = self.config['openstack-origin']
+        new_os_rel = os_utils.get_os_codename_install_source(new_src)
+        unitdata.kv().set(OPENSTACK_RELEASE_KEY, new_os_rel)
+        target_charm = get_charm_instance(new_os_rel)
+        target_charm.do_openstack_pkg_upgrade()
+        target_charm.do_openstack_upgrade_config_render(interfaces_list)
+        target_charm.do_openstack_upgrade_db_migration()
+
     def upgrade_if_available(self, interfaces_list):
-        """Upgrade OpenStack if an upgrade is available
+        """Upgrade OpenStack if an upgrade is available and action-managed
+           upgrades is not enabled.
 
         :param interfaces_list: List of instances of interface classes
         :returns: None
         """
         if self.openstack_upgrade_available(self.release_pkg):
-            hookenv.status_set('maintenance', 'Running openstack upgrade')
-            new_src = self.config['openstack-origin']
-            new_os_rel = os_utils.get_os_codename_install_source(new_src)
-            unitdata.kv().set(OPENSTACK_RELEASE_KEY,
-                              new_os_rel)
-            target_charm = get_charm_instance(new_os_rel)
-            target_charm.do_openstack_pkg_upgrade()
-            target_charm.do_openstack_upgrade_config_render(interfaces_list)
-            target_charm.do_openstack_upgrade_db_migration()
+            if self.config['action-managed-upgrade']:
+                hookenv.log('Not performing OpenStack upgrade as '
+                            'action-managed-upgrade is enabled')
+            else:
+                self.run_upgrade(interfaces_list=interfaces_list)
 
     def do_openstack_pkg_upgrade(self):
         """Upgrade OpenStack packages and snaps
@@ -978,12 +990,15 @@ class BaseOpenStackCharmActions(object):
                 return True
         return False
 
-    def do_openstack_upgrade_config_render(self, interfaces_list):
+    def do_openstack_upgrade_config_render(self, interfaces_list=None):
         """Render configs after upgrade
 
         :returns: None
         """
-        self.render_with_interfaces(interfaces_list)
+        if interfaces_list is not None:
+            self.render_with_interfaces(interfaces_list)
+        else:
+            self.render_all_configs()
 
     def do_openstack_upgrade_db_migration(self):
         """Run database migration after upgrade
