@@ -16,6 +16,7 @@ import charmhelpers.core.templating
 import charmhelpers.core.unitdata as unitdata
 import charmhelpers.fetch as fetch
 import charms.reactive as reactive
+import charms.reactive.flags as flags
 import charms.reactive.relations as relations
 
 import charms_openstack.adapters as os_adapters
@@ -735,15 +736,6 @@ class BaseOpenStackCharmActions(object):
         """Render the configuration files identified in the list passed as
         configs.
 
-        If adapters_instance is None then the self.adapters_instance is used
-        that was setup in the __init__() method.  Note, if no interfaces were
-        passed (the default) then there will be no interfaces.
-
-        TODO: need to work out how to make this function more useful - at the
-        moment, with a default setup, this function is only useful to
-        render_with_interfaces() which constructs a new adapters_instance
-        anyway.
-
         Configs may not only be loaded via OpenStack loaders but also via
         string templates passed via config options or from relation data.
         This must be explicitly declared via string_templates dict of a given
@@ -755,7 +747,16 @@ class BaseOpenStackCharmActions(object):
         :param adapters_instance: [optional] the adapters_instance to use.
         """
         if adapters_instance is None:
-            adapters_instance = self.adapters_instance
+            interfaces = []
+            for f in flags.get_flags():
+                ep_from_f = relations.endpoint_from_flag(f)
+                if ep_from_f:
+                    interfaces.append(ep_from_f)
+            try:
+                adapters_instance = self.adapters_class(interfaces,
+                                                        charm_instance=self)
+            except TypeError:
+                adapters_instance = self.adapters_class(interfaces)
 
         with self.restart_on_change():
             for conf in configs:

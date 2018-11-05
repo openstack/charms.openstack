@@ -465,8 +465,49 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.os_templating,
                           'get_loader',
                           return_value='my-loader')
-        # self.patch_target('adapter_instance', new='my-adapter')
-        self.target.render_configs(['path1'])
+        self.target.render_configs(
+            ['path1'],
+            adapters_instance=self.target.adapters_instance)
+        self.assertEqual(d[0], 1)
+        self.render.assert_called_once_with(
+            source='path1',
+            template_loader='my-loader',
+            target='path1',
+            context=mock.ANY,
+            config_template=None,
+            group='root',
+            perms=0o640,
+        )
+        # assert the context was an MyAdapter instance.
+        context = self.render.call_args_list[0][1]['context']
+        assert isinstance(context, MyAdapter)
+        self.assertEqual(context.interfaces, ['interface1', 'interface2'])
+
+    def test_render_configs_construct_adapters_instance(self):
+        # give us a way to check that the context manager was called.
+        from contextlib import contextmanager
+        d = [0]
+
+        @contextmanager
+        def fake_restart_on_change():
+            d[0] += 1
+            yield
+
+        self.patch_target('restart_on_change', new=fake_restart_on_change)
+        self.patch_object(chm_core.charmhelpers.core.templating, 'render')
+        self.patch_object(chm_core.os_templating,
+                          'get_loader',
+                          return_value='my-loader')
+        self.patch_object(
+            chm_core.flags,
+            'get_flags',
+            return_value=['interface1.available', 'interface2.ready'])
+        self.patch_object(
+            chm_core.relations,
+            'endpoint_from_flag',
+            side_effect=lambda x: x.split('.')[0])
+        self.target.render_configs(
+            ['path1'])
         self.assertEqual(d[0], 1)
         self.render.assert_called_once_with(
             source='path1',
@@ -505,7 +546,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         adapters_instance.options = mock.MagicMock()
         adapters_instance.options.t_prop = config_template
 
-        self.target.render_configs(['path1'])
+        self.target.render_configs(
+            ['path1'],
+            adapters_instance=self.target.adapters_instance)
         self.assertEqual(d[0], 1)
         self.render.assert_called_once_with(
             source='path1',
@@ -534,7 +577,10 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             os_adapters.ConfigurationAdapter
         )
 
-        self.assertRaises(RuntimeError, self.target.render_configs, ['path1'])
+        self.assertRaises(
+            RuntimeError,
+            self.target.render_configs, ['path1'],
+            adapters_instance=self.target.adapters_instance)
 
     def test_render_config_from_string_no_relation(self):
         """
@@ -554,7 +600,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
             adapters_instance = self.target.adapters_instance
 
-            self.target.render_configs(['path1'])
+            self.target.render_configs(
+                ['path1'],
+                adapters_instance=adapters_instance)
             m.assert_called_once_with('path1', adapters_instance)
             self.render.assert_not_called()
 
