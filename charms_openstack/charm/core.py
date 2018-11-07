@@ -1124,7 +1124,7 @@ class BaseOpenStackCharmAssessStatus(object):
                                                ports.values()))))
 
     def check_interfaces(self):
-        """Check that the required interfaces have both connected and availble
+        """Check that the required interfaces have both connected and available
         states set.
 
         This requires a convention from the OS interfaces that they set the
