@@ -826,8 +826,14 @@ class BaseOpenStackCharmActions(object):
         that the ports that are closed should be closed.  If the charm upgrade
         alters the ports then update_api_ports() function will adjust the ports
         as needed.
+
+        Obsolete packages will also be assessed for removal; if packages are
+        removed, then services will be restarted to pickup any changes.
         """
         self.update_api_ports()
+        self.install()
+        if self.remove_obsolete_packages():
+            self.restart_all()
 
     def update_api_ports(self, ports=None):
         """Update the ports list supplied (or the default ports defined in the
@@ -949,6 +955,14 @@ class BaseOpenStackCharmActions(object):
             packages=self.all_packages,
             options=dpkg_opts,
             fatal=True)
+        self.remove_obsolete_packages()
+        self.release = new_os_rel
+
+    def remove_obsolete_packages(self):
+        """Remove any packages that are no longer needed for operation
+
+        :returns: boolean indication where packages where removed.
+        """
         if self.purge_packages:
             # NOTE(jamespage):
             # Ensure packages that should be purged are actually installed
@@ -960,7 +974,8 @@ class BaseOpenStackCharmActions(object):
                 fetch.apt_purge(packages=installed_packages,
                                 fatal=True)
                 fetch.apt_autoremove(purge=True, fatal=True)
-        self.release = new_os_rel
+                return True
+        return False
 
     def do_openstack_upgrade_config_render(self, interfaces_list):
         """Render configs after upgrade

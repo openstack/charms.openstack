@@ -780,6 +780,30 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         (target_charm.do_openstack_upgrade_db_migration.
             assert_called_once_with())
 
+    def test_remove_obsolete_packages(self):
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_purge')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_autoremove')
+        self.patch_object(chm_core.charmhelpers.fetch,
+                          'filter_installed_packages',
+                          return_value=['python-notinstalled'])
+        self.assertTrue(self.target.remove_obsolete_packages())
+        self.apt_purge.assert_called_once_with(
+            packages=['python-obsolete'],
+            fatal=True)
+        self.apt_autoremove.assert_called_once_with(
+            purge=True,
+            fatal=True)
+
+    def test_remove_obsolete_packages_noop(self):
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_purge')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_autoremove')
+        self.patch_object(chm_core.charmhelpers.fetch,
+                          'filter_installed_packages',
+                          return_value=self.target.purge_packages)
+        self.assertFalse(self.target.remove_obsolete_packages())
+        self.apt_purge.assert_not_called()
+        self.apt_autoremove.assert_not_called()
+
     def test_do_openstack_pkg_upgrade_package(self):
         self.patch_target('config',
                           new={'openstack-origin': 'cloud:natty-kilo'})
@@ -874,3 +898,27 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.is_leader.return_value = True
         self.target.do_openstack_upgrade_db_migration()
         self.check_call.assert_called_once_with(['my-sync-cmd', 'param1'])
+
+    def test_upgrade_charm(self):
+        self.target.update_api_ports = mock.MagicMock()
+        self.target.install = mock.MagicMock()
+        self.target.remove_obsolete_packages = mock.MagicMock()
+        self.target.remove_obsolete_packages.return_value = True
+        self.target.restart_all = mock.MagicMock()
+        self.target.upgrade_charm()
+        self.target.update_api_ports.assert_called_once()
+        self.target.install.assert_called_once()
+        self.target.remove_obsolete_packages.assert_called_once()
+        self.target.restart_all.assert_called_once()
+
+    def test_upgrade_charm_no_purge(self):
+        self.target.update_api_ports = mock.MagicMock()
+        self.target.install = mock.MagicMock()
+        self.target.remove_obsolete_packages = mock.MagicMock()
+        self.target.remove_obsolete_packages.return_value = False
+        self.target.restart_all = mock.MagicMock()
+        self.target.upgrade_charm()
+        self.target.update_api_ports.assert_called_once()
+        self.target.install.assert_called_once()
+        self.target.remove_obsolete_packages.assert_called_once()
+        self.target.restart_all.assert_not_called()
