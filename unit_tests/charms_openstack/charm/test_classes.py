@@ -208,7 +208,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
     def setUp(self):
         def make_open_stack_charm():
-            return MyOpenStackCharm(['interface1', 'interface2'])
+            charm = MyOpenStackCharm(['interface1', 'interface2'])
+            charm.services = ['svc1', 'sv2']
+            return charm
 
         super(TestMyOpenStackCharm, self).setUp(make_open_stack_charm,
                                                 TEST_CONFIG)
@@ -271,6 +273,24 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.assertEqual(self.target.application_version, 'mitaka')
         self.get_upstream_version.assert_called_once_with('p2')
         self.os_release.assert_called_once_with('p2')
+
+    def test_restart_services(self):
+        self.patch_target('haproxy_enabled', return_value=False)
+        self.patch_object(chm.os_utils, 'manage_payload_services')
+        self.target.restart_services()
+        svcs = ['svc1', 'sv2']
+        self.manage_payload_services.assert_has_calls([
+            mock.call('stop', svcs),
+            mock.call('start', svcs)])
+
+    def test_restart_services_haproxy(self):
+        self.patch_target('haproxy_enabled', return_value=True)
+        self.patch_object(chm.os_utils, 'manage_payload_services')
+        self.target.restart_services()
+        svcs = ['svc1', 'sv2', 'haproxy']
+        self.manage_payload_services.assert_has_calls([
+            mock.call('stop', svcs),
+            mock.call('start', svcs)])
 
 
 class TestOpenStackAPICharm(BaseOpenStackCharmTest):

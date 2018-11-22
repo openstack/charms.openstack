@@ -210,6 +210,14 @@ class OpenStackCharm(BaseOpenStackCharm,
         os_utils.clear_unit_upgrading()
         self.run_pause_or_resume('resume')
 
+    def restart_services(self):
+        """Restart services"""
+        services = self.services[:]
+        if self.haproxy_enabled():
+            services.append('haproxy')
+        os_utils.manage_payload_services('stop', services)
+        os_utils.manage_payload_services('start', services)
+
 
 class OpenStackAPICharm(OpenStackCharm):
     """The base class for API OS charms -- this just bakes in the default
