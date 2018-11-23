@@ -30,7 +30,7 @@ import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charms_openstack.ip as os_ip
 
-ADDRESS_TYPES = os_ip.ADDRESS_MAP.keys()
+ADDRESS_TYPES = sorted(os_ip.ADDRESS_MAP.keys(), reverse=True)
 
 # handle declarative adapter properties using a decorator and simple functions
 
