@@ -218,6 +218,185 @@ class OpenStackCharm(BaseOpenStackCharm,
         os_utils.manage_payload_services('stop', services)
         os_utils.manage_payload_services('start', services)
 
+    @property
+    def rabbit_client_cert_dir(self):
+        return '/var/lib/charm/{}'.format(hookenv.service_name())
+
+    @property
+    def rabbit_cert_file(self):
+        return '{}/rabbit-client-ca.pem'.format(self.rabbit_client_cert_dir)
+
+    def get_certs_and_keys(self, keystone_interface=None,
+                           certificates_interface=None):
+        """Collect SSL config for local endpoints
+
+        SSL keys and certs may come from user specified configuration for this
+        charm or they may come directly from Keystone.
+
+        If collecting from keystone there may be a certificate and key per
+        endpoint (public, admin etc).
+
+        @returns [
+            {'key': 'key1', 'cert': 'cert1', 'ca': 'ca1', 'cn': 'cn1'}
+            {'key': 'key2', 'cert': 'cert2', 'ca': 'ca2', 'cn': 'cn2'}
+            ...
+        ]
+        """
+        if self.config_defined_ssl_key and self.config_defined_ssl_cert:
+            ssl_artifacts = []
+            for ep_type in [os_ip.INTERNAL, os_ip.ADMIN, os_ip.PUBLIC]:
+                ssl_artifacts.append({
+                    'key': self.config_defined_ssl_key.decode('utf-8'),
+                    'cert': self.config_defined_ssl_cert.decode('utf-8'),
+                    'ca': (self.config_defined_ssl_ca.decode('utf-8')
+                           if self.config_defined_ssl_ca else None),
+                    'cn': os_ip.resolve_address(endpoint_type=ep_type)})
+            return ssl_artifacts
+        elif keystone_interface:
+            keys_and_certs = []
+            for addr in self.get_local_addresses():
+                key = keystone_interface.get_ssl_key(addr)
+                cert = keystone_interface.get_ssl_cert(addr)
+                ca = keystone_interface.get_ssl_ca()
+                if key and cert:
+                    keys_and_certs.append({
+                        'key': key,
+                        'cert': cert,
+                        'ca': ca,
+                        'cn': addr})
+            return keys_and_certs
+        elif certificates_interface:
+            keys_and_certs = []
+            reqs = certificates_interface.get_batch_requests()
+            ca = certificates_interface.get_ca()
+            chain = certificates_interface.get_chain()
+            for cn, data in sorted(reqs.items()):
+                cert = data['cert']
+                if chain:
+                    cert = cert + chain
+                keys_and_certs.append({
+                    'key': data['key'],
+                    'cert': cert,
+                    'ca': ca,
+                    'cn': cn})
+            return keys_and_certs
+        else:
+            return []
+
+    def _get_b64decode_for(self, param):
+        config_value = self.config.get(param)
+        if config_value:
+            return base64.b64decode(config_value)
+        return None
+
+    @property
+    @hookenv.cached
+    def config_defined_ssl_key(self):
+        return self._get_b64decode_for('ssl_key')
+
+    @property
+    @hookenv.cached
+    def config_defined_ssl_cert(self):
+        return self._get_b64decode_for('ssl_cert')
+
+    @property
+    @hookenv.cached
+    def config_defined_ssl_ca(self):
+        return self._get_b64decode_for('ssl_ca')
+
+    def configure_ssl(self, keystone_interface=None):
+        """Configure SSL certificates and keys
+
+        NOTE(AJK): This function tries to minimise the work it does,
+        particularly with writing files and restarting apache.
+
+        @param keystone_interface KeystoneRequires class
+        """
+        keystone_interface = (
+            relations.endpoint_from_flag('identity-service.available.ssl') or
+            relations
+            .endpoint_from_flag('identity-service.available.ssl_legacy'))
+        certificates_interface = relations.endpoint_from_flag(
+            'certificates.batch.cert.available')
+        ssl_objects = self.get_certs_and_keys(
+            keystone_interface=keystone_interface,
+            certificates_interface=certificates_interface)
+        with is_data_changed('configure_ssl.ssl_objects',
+                             ssl_objects) as changed:
+            if ssl_objects:
+                if changed:
+                    for ssl in ssl_objects:
+                        self.set_state('ssl.requested', True)
+                        self.configure_cert(
+                            ssl['cert'], ssl['key'], cn=ssl['cn'])
+                        self.configure_ca(ssl['ca'])
+                    cert_utils.create_ip_cert_links(
+                        os.path.join('/etc/apache2/ssl/', self.name))
+                    if not os_utils.snap_install_requested():
+                        self.configure_apache()
+                        ch_host.service_reload('apache2')
+
+                    self.remove_state('ssl.requested')
+                self.set_state('ssl.enabled', True)
+            else:
+                self.set_state('ssl.enabled', False)
+        amqp_ssl = relations.endpoint_from_flag('amqp.available.ssl')
+        if amqp_ssl:
+            self.configure_rabbit_cert(amqp_ssl)
+
+    def configure_rabbit_cert(self, rabbit_interface):
+        if not os.path.exists(self.rabbit_client_cert_dir):
+            os.makedirs(self.rabbit_client_cert_dir)
+        with open(self.rabbit_cert_file, 'w') as crt:
+            crt.write(rabbit_interface.get_ssl_cert())
+
+    @contextlib.contextmanager
+    def update_central_cacerts(self, cert_files, update_certs=True):
+        """Update Central certs info if once of cert_files changes"""
+        checksums = {path: ch_host.path_hash(path)
+                     for path in cert_files}
+        yield
+        new_checksums = {path: ch_host.path_hash(path)
+                         for path in cert_files}
+        if checksums != new_checksums and update_certs:
+            self.run_update_certs()
+            self.install_snap_certs()
+
+    def configure_ca(self, ca_cert, update_certs=True):
+        """Write Certificate Authority certificate"""
+        # TODO(jamespage): work this out for snap based installations
+        cert_file = (
+            '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt')
+        if ca_cert:
+            with self.update_central_cacerts([cert_file], update_certs):
+                with open(cert_file, 'w') as crt:
+                    crt.write(ca_cert)
+
+    def run_update_certs(self):
+        """Update certifiacte
+
+        Run update-ca-certificates to update the directory /etc/ssl/certs to
+        hold SSL certificates and generates ca-certificates.crt, a concatenated
+        single-file list of certificates
+        """
+        subprocess.check_call(['update-ca-certificates', '--fresh'])
+
+    def install_snap_certs(self):
+        """Install systems CA certificates for a snap
+
+        Installs the aggregated host system ca-certificates.crt into
+        $SNAP_COMMON/etc/ssl/certs for services running within a sandboxed
+        snap to consume.
+
+        Snaps should set the REQUESTS_CA_BUNDLE environment variable to
+        ensure requests based API calls use the updated system certs.
+        """
+        if (os_utils.snap_install_requested() and
+                os.path.exists(SYSTEM_CA_CERTS)):
+            ca_certs = SNAP_CA_CERTS.format(self.primary_snap)
+            ch_host.mkdir(os.path.dirname(ca_certs))
+            shutil.copyfile(SYSTEM_CA_CERTS, ca_certs)
+
 
 class OpenStackAPICharm(OpenStackCharm):
     """The base class for API OS charms -- this just bakes in the default
@@ -626,185 +805,6 @@ class HAOpenStackCharm(OpenStackAPICharm):
             if laddr:
                 addresses.append(laddr)
         return sorted(list(set(addresses)))
-
-    def get_certs_and_keys(self, keystone_interface=None,
-                           certificates_interface=None):
-        """Collect SSL config for local endpoints
-
-        SSL keys and certs may come from user specified configuration for this
-        charm or they may come directly from Keystone.
-
-        If collecting from keystone there may be a certificate and key per
-        endpoint (public, admin etc).
-
-        @returns [
-            {'key': 'key1', 'cert': 'cert1', 'ca': 'ca1', 'cn': 'cn1'}
-            {'key': 'key2', 'cert': 'cert2', 'ca': 'ca2', 'cn': 'cn2'}
-            ...
-        ]
-        """
-        if self.config_defined_ssl_key and self.config_defined_ssl_cert:
-            ssl_artifacts = []
-            for ep_type in [os_ip.INTERNAL, os_ip.ADMIN, os_ip.PUBLIC]:
-                ssl_artifacts.append({
-                    'key': self.config_defined_ssl_key.decode('utf-8'),
-                    'cert': self.config_defined_ssl_cert.decode('utf-8'),
-                    'ca': (self.config_defined_ssl_ca.decode('utf-8')
-                           if self.config_defined_ssl_ca else None),
-                    'cn': os_ip.resolve_address(endpoint_type=ep_type)})
-            return ssl_artifacts
-        elif keystone_interface:
-            keys_and_certs = []
-            for addr in self.get_local_addresses():
-                key = keystone_interface.get_ssl_key(addr)
-                cert = keystone_interface.get_ssl_cert(addr)
-                ca = keystone_interface.get_ssl_ca()
-                if key and cert:
-                    keys_and_certs.append({
-                        'key': key,
-                        'cert': cert,
-                        'ca': ca,
-                        'cn': addr})
-            return keys_and_certs
-        elif certificates_interface:
-            keys_and_certs = []
-            reqs = certificates_interface.get_batch_requests()
-            ca = certificates_interface.get_ca()
-            chain = certificates_interface.get_chain()
-            for cn, data in sorted(reqs.items()):
-                cert = data['cert']
-                if chain:
-                    cert = cert + chain
-                keys_and_certs.append({
-                    'key': data['key'],
-                    'cert': cert,
-                    'ca': ca,
-                    'cn': cn})
-            return keys_and_certs
-        else:
-            return []
-
-    def _get_b64decode_for(self, param):
-        config_value = self.config.get(param)
-        if config_value:
-            return base64.b64decode(config_value)
-        return None
-
-    @property
-    @hookenv.cached
-    def config_defined_ssl_key(self):
-        return self._get_b64decode_for('ssl_key')
-
-    @property
-    @hookenv.cached
-    def config_defined_ssl_cert(self):
-        return self._get_b64decode_for('ssl_cert')
-
-    @property
-    @hookenv.cached
-    def config_defined_ssl_ca(self):
-        return self._get_b64decode_for('ssl_ca')
-
-    @property
-    def rabbit_client_cert_dir(self):
-        return '/var/lib/charm/{}'.format(hookenv.service_name())
-
-    @property
-    def rabbit_cert_file(self):
-        return '{}/rabbit-client-ca.pem'.format(self.rabbit_client_cert_dir)
-
-    def configure_ssl(self, keystone_interface=None):
-        """Configure SSL certificates and keys
-
-        NOTE(AJK): This function tries to minimise the work it does,
-        particularly with writing files and restarting apache.
-
-        @param keystone_interface KeystoneRequires class
-        """
-        keystone_interface = (
-            relations.endpoint_from_flag('identity-service.available.ssl') or
-            relations
-            .endpoint_from_flag('identity-service.available.ssl_legacy'))
-        certificates_interface = relations.endpoint_from_flag(
-            'certificates.batch.cert.available')
-        ssl_objects = self.get_certs_and_keys(
-            keystone_interface=keystone_interface,
-            certificates_interface=certificates_interface)
-        with is_data_changed('configure_ssl.ssl_objects',
-                             ssl_objects) as changed:
-            if ssl_objects:
-                if changed:
-                    for ssl in ssl_objects:
-                        self.set_state('ssl.requested', True)
-                        self.configure_cert(
-                            ssl['cert'], ssl['key'], cn=ssl['cn'])
-                        self.configure_ca(ssl['ca'])
-                    cert_utils.create_ip_cert_links(
-                        os.path.join('/etc/apache2/ssl/', self.name))
-                    if not os_utils.snap_install_requested():
-                        self.configure_apache()
-                        ch_host.service_reload('apache2')
-
-                    self.remove_state('ssl.requested')
-                self.set_state('ssl.enabled', True)
-            else:
-                self.set_state('ssl.enabled', False)
-        amqp_ssl = relations.endpoint_from_flag('amqp.available.ssl')
-        if amqp_ssl:
-            self.configure_rabbit_cert(amqp_ssl)
-
-    def configure_rabbit_cert(self, rabbit_interface):
-        if not os.path.exists(self.rabbit_client_cert_dir):
-            os.makedirs(self.rabbit_client_cert_dir)
-        with open(self.rabbit_cert_file, 'w') as crt:
-            crt.write(rabbit_interface.get_ssl_cert())
-
-    @contextlib.contextmanager
-    def update_central_cacerts(self, cert_files, update_certs=True):
-        """Update Central certs info if once of cert_files changes"""
-        checksums = {path: ch_host.path_hash(path)
-                     for path in cert_files}
-        yield
-        new_checksums = {path: ch_host.path_hash(path)
-                         for path in cert_files}
-        if checksums != new_checksums and update_certs:
-            self.run_update_certs()
-            self.install_snap_certs()
-
-    def configure_ca(self, ca_cert, update_certs=True):
-        """Write Certificate Authority certificate"""
-        # TODO(jamespage): work this out for snap based installations
-        cert_file = (
-            '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt')
-        if ca_cert:
-            with self.update_central_cacerts([cert_file], update_certs):
-                with open(cert_file, 'w') as crt:
-                    crt.write(ca_cert)
-
-    def run_update_certs(self):
-        """Update certifiacte
-
-        Run update-ca-certificates to update the directory /etc/ssl/certs to
-        hold SSL certificates and generates ca-certificates.crt, a concatenated
-        single-file list of certificates
-        """
-        subprocess.check_call(['update-ca-certificates', '--fresh'])
-
-    def install_snap_certs(self):
-        """Install systems CA certificates for a snap
-
-        Installs the aggregated host system ca-certificates.crt into
-        $SNAP_COMMON/etc/ssl/certs for services running within a sandboxed
-        snap to consume.
-
-        Snaps should set the REQUESTS_CA_BUNDLE environment variable to
-        ensure requests based API calls use the updated system certs.
-        """
-        if (os_utils.snap_install_requested() and
-                os.path.exists(SYSTEM_CA_CERTS)):
-            ca_certs = SNAP_CA_CERTS.format(self.primary_snap)
-            ch_host.mkdir(os.path.dirname(ca_certs))
-            shutil.copyfile(SYSTEM_CA_CERTS, ca_certs)
 
     def update_peers(self, cluster):
         """Update peers in the cluster about the addresses that this unit
