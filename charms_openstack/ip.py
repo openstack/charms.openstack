@@ -178,7 +178,7 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
 
     if resolved_address is None:
         raise ValueError("Unable to resolve a suitable IP address based on "
-                         "charm state and configuration. (net_type=%s, "
-                         % (net_type))
+                         "charm state and configuration. (net_type={})"
+                         .format(net_type))
 
     return resolved_address
