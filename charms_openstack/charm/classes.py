@@ -10,6 +10,7 @@ import subprocess
 import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.utils as os_utils
 import charmhelpers.contrib.openstack.ha as os_ha
+import charmhelpers.contrib.openstack.ha.utils as os_ha_utils
 import charmhelpers.contrib.openstack.cert_utils as cert_utils
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
@@ -682,12 +683,19 @@ class HAOpenStackCharm(OpenStackAPICharm):
         if not self.config.get(VIP_KEY):
             return
         for vip in self.config[VIP_KEY].split():
-            iface = (ch_ip.get_iface_for_address(vip) or
-                     self.config.get(IFACE_KEY))
-            netmask = (ch_ip.get_netmask_for_address(vip) or
-                       self.config.get(CIDR_KEY))
-            if iface is not None:
-                hacluster.add_vip(self.name, vip, iface, netmask)
+            iface, netmask, fallback = os_ha_utils.get_vip_settings(vip)
+            if fallback:
+                hacluster.add_vip(
+                    self.name,
+                    vip,
+                    iface,
+                    netmask)
+            else:
+                hacluster.add_vip(self.name, vip)
+                if iface:
+                    # Remove vip resource using old raw nic name.
+                    old_vip_key = 'res_{}_{}_vip'.format(self.name, iface)
+                    hacluster.delete_resource(old_vip_key)
 
     def _add_ha_haproxy_config(self, hacluster):
         """Add a InitService object for haproxy to self.resources

@@ -481,42 +481,39 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         interface_mock.bind_resources.assert_called_once_with(iface='ens12')
 
     def test__add_ha_vips_config(self):
-        ifaces = {
-            'vip1': 'eth1',
-            'vip2': 'eth2'}
-        masks = {
-            'vip1': 'netmask1',
-            'vip2': 'netmask2'}
+        nics = {
+            'vip1': ('eth1', 'netmask1', False),
+            'vip2': ('eth2', 'netmask2', False)}
         interface_mock = mock.Mock()
         self.patch_target('name', new='myservice')
         self.patch_target('config', new={'vip': 'vip1 vip2'})
-        self.patch_object(chm.ch_ip, 'get_iface_for_address')
-        self.get_iface_for_address.side_effect = lambda x: ifaces[x]
-        self.patch_object(chm.ch_ip, 'get_netmask_for_address')
-        self.get_netmask_for_address.side_effect = lambda x: masks[x]
+        self.patch_object(chm.os_ha_utils, 'get_vip_settings')
+        self.get_vip_settings.side_effect = lambda x: nics[x]
         self.target._add_ha_vips_config(interface_mock)
-        calls = [
-            mock.call('myservice', 'vip1', 'eth1', 'netmask1'),
-            mock.call('myservice', 'vip2', 'eth2', 'netmask2')]
-        interface_mock.add_vip.assert_has_calls(calls)
+        add_vip_calls = [
+            mock.call('myservice', 'vip1'),
+            mock.call('myservice', 'vip2')]
+        interface_mock.add_vip.assert_has_calls(add_vip_calls)
+        add_vip_calls = [
+            mock.call('res_myservice_eth1_vip'),
+            mock.call('res_myservice_eth2_vip')]
+        interface_mock.delete_resource.assert_has_calls(add_vip_calls)
 
     def test__add_ha_vips_config_fallback(self):
-        config = {
-            'vip_cidr': 'user_cidr',
-            'vip_iface': 'user_iface',
-            'vip': 'vip1 vip2'}
+        nics = {
+            'vip1': ('eth1', 'netmask1', True),
+            'vip2': ('eth2', 'netmask2', True)}
         interface_mock = mock.Mock()
         self.patch_target('name', new='myservice')
-        self.patch_target('config', new=config)
-        self.patch_object(chm.ch_ip, 'get_iface_for_address')
-        self.patch_object(chm.ch_ip, 'get_netmask_for_address')
-        self.get_iface_for_address.return_value = None
-        self.get_netmask_for_address.return_value = None
+        self.patch_target('config', new={'vip': 'vip1 vip2'})
+        self.patch_object(chm.os_ha_utils, 'get_vip_settings')
+        self.get_vip_settings.side_effect = lambda x: nics[x]
         self.target._add_ha_vips_config(interface_mock)
-        calls = [
-            mock.call('myservice', 'vip1', 'user_iface', 'user_cidr'),
-            mock.call('myservice', 'vip2', 'user_iface', 'user_cidr')]
-        interface_mock.add_vip.assert_has_calls(calls)
+        add_vip_calls = [
+            mock.call('myservice', 'vip1', 'eth1', 'netmask1'),
+            mock.call('myservice', 'vip2', 'eth2', 'netmask2')]
+        interface_mock.add_vip.assert_has_calls(add_vip_calls)
+        self.assertFalse(interface_mock.delete_resource.called)
 
     def test__add_ha_vips_config_novip(self):
         config = {'vip': None}
