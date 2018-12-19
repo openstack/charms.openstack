@@ -26,6 +26,8 @@ def mock_charmhelpers():
         charmhelpers.contrib.openstack.context)
     sys.modules['charmhelpers.contrib.openstack.ha'] = (
         charmhelpers.contrib.openstack.ha)
+    sys.modules['charmhelpers.contrib.openstack.ha.utils'] = (
+        charmhelpers.contrib.openstack.ha.utils)
     sys.modules['charmhelpers.contrib.openstack.utils'] = (
         charmhelpers.contrib.openstack.utils)
     sys.modules['charmhelpers.contrib.openstack.cert_utils'] = (
