@@ -99,7 +99,7 @@ This will automatically select `LibertyCharm` for a liberty release and
 on the `OpenStackCharm` instance via the `__init__()` method, so that the
 instance knows what the charm is.
 
-If only a single charm class is needed, the the `__init__()` method of the
+If only a single charm class is needed, the `__init__()` method of the
 class can be used to determine the release instead:
 
 ```python

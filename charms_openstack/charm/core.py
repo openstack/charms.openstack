@@ -29,7 +29,7 @@ OPENSTACK_PACKAGE_TYPE_KEY = 'charmers.openstack-package-type'
 
 
 # _releases{} is a dictionary of release -> class that is instantiated
-# according to the the release that is being requested.  i.e. a charm can
+# according to the release that is being requested.  i.e. a charm can
 # handle more than one release. The BaseOpenStackCharm() derived class sets the
 # `release` variable to indicate which release that the charm supports.
 # Any subsequent releases that need a different/specialised charm uses the

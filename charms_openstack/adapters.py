@@ -440,7 +440,7 @@ def make_default_options(base_cls=None, charm_instance=None):
     (based on the base_cls) using any custom properties that might have been
     made.
 
-    If base_cls is None, the the default ConfigurationAdapter will be used.
+    If base_cls is None, the default ConfigurationAdapter will be used.
 
     :param base_cls: a ConfigurationAdapter or derived class
     :param charm_instance: the charm instance to plug into the options.
