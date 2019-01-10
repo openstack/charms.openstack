@@ -109,7 +109,8 @@ def make_default_select_package_type_handler():
     @register_package_type_selector
     def default_select_package_type():
         """Determine the package type (snap or deb) based on the
-        openstack-origin setting.
+        configuration option indicated in the source_config_key
+        class variable.  (deafult: 'openstack-origin')
 
         Note that this function caches the package type after the first
         install so that it doesn't need to keep going and getting it from

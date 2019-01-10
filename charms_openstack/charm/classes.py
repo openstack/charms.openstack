@@ -113,6 +113,12 @@ class OpenStackCharm(BaseOpenStackCharm,
 
     # package_codenames = {}
 
+    # The name of the repository source configuration option.
+    # Useful for charms managing software from UCA and consuming the
+    # `openstack` layer directly for re-use of common code, but not being a
+    # OpenStack component.
+    source_config_key = 'openstack-origin'
+
     @property
     def region(self):
         """Return the OpenStack Region as contained in the config item 'region'
@@ -159,7 +165,7 @@ class OpenStackCharm(BaseOpenStackCharm,
                                        fatal=False)
             if not version:
                 version = os_utils.get_os_codename_install_source(
-                    self.config['openstack-origin']
+                    self.config[self.source_config_key]
                 )
         else:
             if not self.version_package:
@@ -452,7 +458,7 @@ class OpenStackAPICharm(OpenStackCharm):
         """
         if not release:
             release = os_utils.get_os_codename_install_source(
-                self.config['openstack-origin'])
+                self.config[self.source_config_key])
         if release not in os_utils.OPENSTACK_RELEASES:
             return ValueError("Unkown release {}".format(release))
         return (os_utils.OPENSTACK_RELEASES.index(release) >=

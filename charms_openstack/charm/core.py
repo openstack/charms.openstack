@@ -624,7 +624,7 @@ class BaseOpenStackCharmActions(object):
                 os_utils.install_os_snaps(
                     os_utils.get_snaps_install_info_from_origin(
                         self.all_snaps,
-                        self.config['openstack-origin'],
+                        self.config[self.source_config_key],
                         mode=self.snap_mode)
                 )
 
@@ -636,12 +636,14 @@ class BaseOpenStackCharmActions(object):
 
     def configure_source(self):
         """Configure installation source using the config item
-        'openstack-origin'
+        indicated in the source_config_key class variable
+        (default: 'openstack-origin')
 
         This configures the installation source for deb packages and then
         updates the packages list on the unit.
         """
-        os_utils.configure_installation_source(self.config['openstack-origin'])
+        os_utils.configure_installation_source(
+            self.config[self.source_config_key])
         fetch.apt_update(fatal=True)
 
     @property
@@ -896,7 +898,7 @@ class BaseOpenStackCharmActions(object):
         if not snap:
             snap = self.release_snap
 
-        src = self.config['openstack-origin']
+        src = self.config[self.source_config_key]
         cur_vers = self.get_os_version_package(package)
         avail_vers = os_utils.get_os_version_install_source(src)
         if os_utils.snap_install_requested():
@@ -913,7 +915,7 @@ class BaseOpenStackCharmActions(object):
         :returns: None
         """
         hookenv.status_set('maintenance', 'Running openstack upgrade')
-        new_src = self.config['openstack-origin']
+        new_src = self.config[self.source_config_key]
         new_os_rel = os_utils.get_os_codename_install_source(new_src)
         unitdata.kv().set(OPENSTACK_RELEASE_KEY, new_os_rel)
         target_charm = get_charm_instance(new_os_rel)
@@ -940,7 +942,7 @@ class BaseOpenStackCharmActions(object):
 
         :returns: None
         """
-        new_src = self.config['openstack-origin']
+        new_src = self.config[self.source_config_key]
         new_os_rel = os_utils.get_os_codename_install_source(new_src)
         hookenv.log('Performing OpenStack upgrade to %s.' % (new_os_rel))
 
@@ -949,7 +951,7 @@ class BaseOpenStackCharmActions(object):
             os_utils.install_os_snaps(
                 snaps=os_utils.get_snaps_install_info_from_origin(
                     self.all_snaps,
-                    self.config['openstack-origin'],
+                    self.config[self.source_config_key],
                     mode=self.snap_mode),
                 refresh=True)
 
@@ -1013,11 +1015,12 @@ class BaseOpenStackCharmActions(object):
     # NOTE(jamespage): Not currently used - switch from c-h function for perf?
     def snap_install_requested(self):
         """Determine whether a snap based install is configured
-        via the openstack-origin configuration option
+        via the configuration option indicated in the source_config_key
+        class variable.  (deafult: 'openstack-origin')
 
         :returns: None
         """
-        return self.options.openstack_origin.startswith('snap:')
+        return self.config[self.source_config_key].startswith('snap:')
 
 
 class BaseOpenStackCharmAssessStatus(object):
