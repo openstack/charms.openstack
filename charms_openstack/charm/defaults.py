@@ -21,6 +21,7 @@ ALLOWED_DEFAULT_HANDLERS = [
     'update-status',
     'upgrade-charm',
     'certificates.available',
+    'storage-backend.connected',
 ]
 
 # Where to store the default handler functions for each default state
@@ -144,6 +145,16 @@ def make_default_certificates_available_handler():
     or hooks directory.
     """
     reactive.set_state('charms.openstack.do-default-certificates.available')
+
+
+@_map_default_handler('storage-backend.connected')
+def make_default_storage_backend_connected_handler():
+    """Set the default storage-backend.connected state so that the default
+    handler in layer-openstack can run.
+    Convoluted, because charms.reactive will only run handlers in the reactive
+    or hooks directory.
+    """
+    reactive.set_state('charms.openstack.do-default-storage-backend.connected')
 
 
 @_map_default_handler('shared-db.connected')

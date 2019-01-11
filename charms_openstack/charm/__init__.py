@@ -24,12 +24,14 @@ from charms_openstack.charm.core import (
     register_os_release_selector,
 )
 from charms_openstack.charm.classes import (
+    CinderStoragePluginCharm,
     OpenStackCharm,
     OpenStackAPICharm,
     HAOpenStackCharm,
 )
 
 __all__ = (
+    "CinderStoragePluginCharm",
     "OpenStackCharm",
     "OpenStackAPICharm",
     "HAOpenStackCharm",

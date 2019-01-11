@@ -1,5 +1,6 @@
 import base64
 import contextlib
+import json
 import os
 import random
 import re
@@ -843,3 +844,53 @@ class HAOpenStackCharm(OpenStackAPICharm):
                     cluster.set_address(
                         os_ip.ADDRESS_MAP[addr_type]['binding'],
                         laddr)
+
+
+class CinderStoragePluginCharm(OpenStackCharm):
+
+    abstract_class = True
+
+    # The name of the charm (for printing, etc.)
+    name = ''
+
+    # List of packages to install
+    # XXX execd_preinstall
+    packages = []
+
+    version_package = ''
+    # The list of required services that are checked for assess_status
+    # e.g. required_relations = ['identity-service', 'shared-db']
+    required_relations = []
+
+    # A dictionary of:
+    # {
+    #    'config.file': ['list', 'of', 'services', 'to', 'restart'],
+    #    'config2.file': ['more', 'services'],
+    # }
+    # The files that for the keys of the dict are monitored and if the file
+    # changes the corresponding services are restarted
+    # XXX This is more involved in the tradioional charm so we're
+    # probably missing something herw!
+    restart_map = {}
+
+    # first_release = this is the first release in which this charm works
+    release = ''
+
+    @property
+    def stateless(self):
+        raise NotImplementedError()
+
+    @property
+    def service_name(self):
+        return hookenv.service_name()
+
+    def cinder_configuration(self):
+        raise NotImplementedError()
+
+    def send_storage_backend_data(self):
+        cbend = relations.endpoint_from_flag('storage-backend.connected')
+        cbend.send_plugin_configuration(
+            backend_name=self.service_name,
+            subordinate_configuration=json.dumps(
+                self.cinder_configuration()),
+            stateless=self.stateless)

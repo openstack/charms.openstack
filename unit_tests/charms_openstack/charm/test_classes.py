@@ -1020,3 +1020,33 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         with self.target.update_central_cacerts(['file1']):
             pass
         self.assertFalse(self.run_update_certs.called)
+
+
+class TestCinderStoragePluginCharm(BaseOpenStackCharmTest):
+
+    def setUp(self):
+        super(TestCinderStoragePluginCharm, self).setUp(
+            chm.CinderStoragePluginCharm,
+            TEST_CONFIG)
+
+    def test_stateless(self):
+        with self.assertRaises(NotImplementedError):
+            self.target.stateless
+
+    def test_service_name(self):
+        self.patch_object(chm.hookenv, 'service_name', return_value='svc1')
+        self.assertEqual(self.target.service_name, 'svc1')
+
+    def test_cinder_configuration(self):
+        with self.assertRaises(NotImplementedError):
+            self.target.cinder_configuration()
+
+    def test_send_storage_backend_data(self):
+        self.patch_object(chm.hookenv, 'service_name', return_value='svc1')
+        ep_mock = mock.MagicMock()
+        self.patch_object(
+            chm.relations,
+            'endpoint_from_flag',
+            return_value=ep_mock)
+        with self.assertRaises(NotImplementedError):
+            self.target.send_storage_backend_data()
