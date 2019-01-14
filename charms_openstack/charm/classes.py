@@ -1,6 +1,5 @@
 import base64
 import contextlib
-import json
 import os
 import random
 import re
@@ -899,8 +898,7 @@ class CinderStoragePluginCharm(OpenStackCharm):
 
     def send_storage_backend_data(self):
         cbend = relations.endpoint_from_flag('storage-backend.connected')
-        cbend.send_plugin_configuration(
+        cbend.configure_principal(
             backend_name=self.service_name,
-            subordinate_configuration=json.dumps(
-                self.cinder_configuration()),
+            configuration=self.cinder_configuration(),
             stateless=self.stateless)
