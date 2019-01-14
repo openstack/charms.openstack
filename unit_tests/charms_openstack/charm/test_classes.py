@@ -1029,6 +1029,52 @@ class TestCinderStoragePluginCharm(BaseOpenStackCharmTest):
             chm.CinderStoragePluginCharm,
             TEST_CONFIG)
 
+    def test_install(self):
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_target('config', new={'driver-source': 'ppa:user/ppa'})
+        self.target.install()
+        self.add_source.assert_called_once_with('ppa:user/ppa', key=None)
+        self.apt_update.assert_called_once_with()
+
+    def test_install_with_key(self):
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_target(
+            'config',
+            new={
+                'driver-source': 'ppa:user/ppa',
+                'driver-key': 'mykey'})
+        self.target.install()
+        self.add_source.assert_called_once_with('ppa:user/ppa', key='mykey')
+        self.apt_update.assert_called_once_with()
+
+    def test_install_no_additional_source(self):
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_target(
+            'config',
+            new={
+                'driver-source': '',
+                'driver-key': ''})
+        self.target.install()
+        self.assertFalse(self.add_source.called)
+        self.assertFalse(self.apt_update.called)
+
+    def test_install_source_undefined(self):
+        # A charm may be based from this class but not implement the
+        # additonal ppa option.
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_target('config', new={})
+        self.target.install()
+        self.assertFalse(self.add_source.called)
+        self.assertFalse(self.apt_update.called)
+
     def test_stateless(self):
         with self.assertRaises(NotImplementedError):
             self.target.stateless

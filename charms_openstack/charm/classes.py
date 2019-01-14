@@ -876,6 +876,16 @@ class CinderStoragePluginCharm(OpenStackCharm):
     # first_release = this is the first release in which this charm works
     release = ''
 
+    def install(self):
+        """Install PPA if one has been defined."""
+        if self.config.get('driver-source'):
+            fetch.add_source(
+                self.config.get('driver-source'),
+                key=self.config.get('driver-key'))
+            fetch.apt_update()
+        super().install()
+        self.assess_status()
+
     @property
     def stateless(self):
         raise NotImplementedError()
