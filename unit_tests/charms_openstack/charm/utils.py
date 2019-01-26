@@ -18,11 +18,18 @@ class BaseOpenStackCharmTest(unit_tests.utils.BaseTestCase):
         cls.patched_config_started = None
         cls.patched_config = None
 
+    def _get_config(self, x=None):
+        if x:
+            return self._test_config.get(x, None)
+        else:
+            return self._test_config
+
     def setUp(self, target_cls, test_config):
         super().setUp()
         # set up the return value on the mock before instantiating the class to
         # get the config into the class.config.
-        chm_core.hookenv.config.return_value = test_config
+        self._test_config = test_config
+        chm_core.hookenv.config.side_effect = self._get_config
         self.target = target_cls()
 
     def tearDown(self):
