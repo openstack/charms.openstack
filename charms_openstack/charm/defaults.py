@@ -96,7 +96,13 @@ def make_default_select_release_handler():
         """
         release_version = unitdata.kv().get(OPENSTACK_RELEASE_KEY, None)
         if release_version is None:
-            release_version = os_utils.os_release('python-keystonemiddleware')
+            try:
+                pkg = os_utils.get_installed_semantic_versioned_packages()[0]
+            except IndexError:
+                # A non-existent package will cause os_release to try other
+                # tactics for deriving the release.
+                pkg = 'dummy-package'
+            release_version = os_utils.os_release(pkg)
             unitdata.kv().set(OPENSTACK_RELEASE_KEY, release_version)
         return release_version
 

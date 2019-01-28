@@ -105,6 +105,10 @@ class TestDefaults(BaseOpenStackCharmTest):
         kv = mock.MagicMock()
         self.patch_object(chm.unitdata, 'kv', new=lambda: kv)
         self.patch_object(chm.os_utils, 'os_release')
+        self.patch_object(
+            chm.os_utils,
+            'get_installed_semantic_versioned_packages',
+            return_value=['cinder-common'])
         # set a release
         kv.get.return_value = 'one'
         release = h.map['function']()
@@ -118,7 +122,7 @@ class TestDefaults(BaseOpenStackCharmTest):
         release = h.map['function']()
         self.assertEqual(release, 'two')
         kv.set.assert_called_once_with(chm.OPENSTACK_RELEASE_KEY, 'two')
-        self.os_release.assert_called_once_with('python-keystonemiddleware')
+        self.os_release.assert_called_once_with('cinder-common')
 
     def test_default_select_package_type_handler(self):
         self.assertIn('charm.default-select-package-type',
