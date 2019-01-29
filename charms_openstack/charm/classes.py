@@ -120,6 +120,36 @@ class OpenStackCharm(BaseOpenStackCharm,
     source_config_key = 'openstack-origin'
 
     @property
+    def resource_install_map(self):
+        """Return map of resource names to installation methods
+
+        :returns Map of Juju resource names to installation methods
+        :rtype: {'resource_name': f}
+        """
+        install_map = {
+            'driver-deb': self.install_deb
+        }
+        return install_map
+
+    def install_deb(self, deb):
+        """Install the given deb.
+
+        :param deb: Path to deb
+        :type: str
+        """
+        # No attempt is made to deal with dependancies. These should be
+        # handled by the charms 'packages' list.
+        subprocess.check_call(['dpkg', '-i', deb])
+
+    def install_resources(self):
+        """Install Juju application resources
+        """
+        for resource_name, install_func in self.resource_install_map.items():
+            resource = hookenv.resource_get(resource_name)
+            if resource:
+                install_func(resource)
+
+    @property
     def region(self):
         """Return the OpenStack Region as contained in the config item 'region'
         """
@@ -876,14 +906,23 @@ class CinderStoragePluginCharm(OpenStackCharm):
     release = ''
 
     def install(self):
-        """Install PPA if one has been defined."""
+        """Install packages and resources."""
+        # Install PPA if one has been defined.
         if self.config.get('driver-source'):
             fetch.add_source(
                 self.config.get('driver-source'),
                 key=self.config.get('driver-key'))
             fetch.apt_update()
         super().install()
+        # All package install to run first incase payload has deps.
+        self.install_resources()
         self.assess_status()
+
+    def upgrade_charm(self):
+        """Run default upgrade_charm method and reinstall resources"""
+        super().upgrade_charm()
+        # A change in resources triggers an upgrade-charm
+        self.install_resources()
 
     @property
     def stateless(self):
