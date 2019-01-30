@@ -203,6 +203,35 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.subprocess.check_call.assert_not_called()
         self.leader_set.assert_not_called()
 
+    def test_resource_install_map(self):
+        self.assertEqual(
+            self.target.resource_install_map,
+            {
+                'driver-deb': self.target.install_deb})
+
+    def test_install_deb(self):
+        self.patch_object(chm.subprocess, 'check_call')
+        self.target.install_deb('mydeb')
+        self.check_call.assert_called_once_with(['dpkg', '-i', 'mydeb'])
+
+    def test_install_resources(self):
+        self.patch_target('install_deb')
+        self.patch_object(
+            chm.hookenv,
+            'resource_get',
+            return_value='/tmp/my.deb')
+        self.target.install_resources()
+        self.install_deb.assert_called_once_with('/tmp/my.deb')
+
+    def test_install_resources_no_resources(self):
+        self.patch_target('install_deb')
+        self.patch_object(
+            chm.hookenv,
+            'resource_get',
+            return_value=None)
+        self.target.install_resources()
+        self.assertFalse(self.install_deb.called)
+
 
 class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
@@ -1034,14 +1063,17 @@ class TestCinderStoragePluginCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
         self.patch_target('config', new={'driver-source': 'ppa:user/ppa'})
+        self.patch_target('install_resources')
         self.target.install()
         self.add_source.assert_called_once_with('ppa:user/ppa', key=None)
         self.apt_update.assert_called_once_with()
+        self.install_resources.assert_called_once_with()
 
     def test_install_with_key(self):
         self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
         self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_target('install_resources')
         self.patch_target(
             'config',
             new={
@@ -1055,6 +1087,7 @@ class TestCinderStoragePluginCharm(BaseOpenStackCharmTest):
         self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
         self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_target('install_resources')
         self.patch_target(
             'config',
             new={
@@ -1071,6 +1104,7 @@ class TestCinderStoragePluginCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
         self.patch_target('config', new={})
+        self.patch_target('install_resources')
         self.target.install()
         self.assertFalse(self.add_source.called)
         self.assertFalse(self.apt_update.called)
