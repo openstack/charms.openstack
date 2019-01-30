@@ -1088,6 +1088,7 @@ class BaseOpenStackCharmAssessStatus(object):
         for f in [self.check_if_paused,
                   self.custom_assess_status_check,
                   self.check_interfaces,
+                  self.check_mandatory_config,
                   self.check_services_running]:
             state, message = f()
             if state is not None:
@@ -1198,6 +1199,28 @@ class BaseOpenStackCharmAssessStatus(object):
             return status, ", ".join(messages)
         # Everything is fine.
         return None, None
+
+    def check_mandatory_config(self):
+        """Check that all mandatory config has been set.
+
+        Returns (None, None) if the interfaces are okay, or a status, message
+        if any of the config is missing.
+
+        :returns status & message info
+        :rtype: (status, message) or (None, None)
+        """
+        missing_config = []
+        status = None
+        message = None
+        if getattr(self, 'mandatory_config', None):
+            for c in self.mandatory_config:
+                if hookenv.config(c) is None:
+                    missing_config.append(c)
+        if missing_config:
+            status = 'blocked'
+            message = 'The following mandatory config is unset: {}'.format(
+                ','.join(missing_config))
+        return status, message
 
     def states_to_check(self, required_relations=None):
         """Construct a default set of connected and available states for each

@@ -15,6 +15,9 @@ from unit_tests.charms_openstack.charm.common import (
 import unit_tests.utils as utils
 
 TEST_CONFIG = {'config': True,
+               'mandconfig1': 'Iamset',
+               'mandconfig2': 'Iamalsoset',
+               'mandconfig3': None,
                'openstack-origin': None}
 SNAP_MAP = {
     'mysnap': {
@@ -197,6 +200,7 @@ class TestBaseOpenStackCharmAssessStatus(BaseOpenStackCharmTest):
         # disable all of the check functions
         self.patch_target('check_if_paused', return_value=(None, None))
         self.patch_target('check_interfaces', return_value=(None, None))
+        self.patch_target('check_mandatory_config', return_value=(None, None))
         self.patch_target('custom_assess_status_check',
                           return_value=(None, None))
         self.patch_target('check_services_running', return_value=(None, None))
@@ -210,6 +214,7 @@ class TestBaseOpenStackCharmAssessStatus(BaseOpenStackCharmTest):
         # check all the check functions got called
         self.check_if_paused.assert_called_once_with()
         self.check_interfaces.assert_called_once_with()
+        self.check_mandatory_config.assert_called_once_with()
         self.custom_assess_status_check.assert_called_once_with()
         self.check_services_running.assert_called_once_with()
 
@@ -288,6 +293,24 @@ class TestBaseOpenStackCharmAssessStatus(BaseOpenStackCharmTest):
             'rel2.available': 4,
         }
         self.assertEqual(self.target.check_interfaces(), (None, None))
+
+    def test_check_mandatory_config_no_mandatory_config(self):
+        self.assertEqual(
+            self.target.check_mandatory_config(),
+            (None, None))
+
+    def test_check_mandatory_config_config_set(self):
+        self.target.mandatory_config = ['mandconfig1', 'mandconfig2']
+        self.assertEqual(
+            self.target.check_mandatory_config(),
+            (None, None))
+
+    def test_check_mandatory_config_config_unset(self):
+        self.target.mandatory_config = ['mandconfig1', 'mandconfig3']
+        self.assertEqual(
+            self.target.check_mandatory_config(),
+            ('blocked',
+             'The following mandatory config is unset: mandconfig3'))
 
     def test_check_assess_status_check_services_running(self):
         # verify that the function calls _ows_check_services_running() with the
