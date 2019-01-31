@@ -941,3 +941,6 @@ class CinderStoragePluginCharm(OpenStackCharm):
             backend_name=self.service_name,
             configuration=self.cinder_configuration(),
             stateless=self.stateless)
+        # Add an assess status which will be picked up later by the atexit()
+        # handler.
+        self.assess_status()
