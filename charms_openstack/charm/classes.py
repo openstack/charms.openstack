@@ -310,7 +310,7 @@ class OpenStackCharm(BaseOpenStackCharm,
             for cn, data in sorted(reqs.items()):
                 cert = data['cert']
                 if chain:
-                    cert = cert + chain
+                    cert = cert + os.linesep + chain
                 keys_and_certs.append({
                     'key': data['key'],
                     'cert': cert,

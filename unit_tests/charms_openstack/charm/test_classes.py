@@ -855,22 +855,22 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         expect = [
             {
                 'ca': 'CA',
-                'cert': 'admin_certCHAIN',
+                'cert': 'admin_cert\nCHAIN',
                 'cn': 'admin_addr',
                 'key': 'admin_key'},
             {
                 'ca': 'CA',
-                'cert': 'int_certCHAIN',
+                'cert': 'int_cert\nCHAIN',
                 'cn': 'int_addr',
                 'key': 'int_key'},
             {
                 'ca': 'CA',
-                'cert': 'priv_certCHAIN',
+                'cert': 'priv_cert\nCHAIN',
                 'cn': 'priv_addr',
                 'key': 'priv_key'},
             {
                 'ca': 'CA',
-                'cert': 'pub_certCHAIN',
+                'cert': 'pub_cert\nCHAIN',
                 'cn': 'pub_addr',
                 'key': 'pub_key'},
         ]
