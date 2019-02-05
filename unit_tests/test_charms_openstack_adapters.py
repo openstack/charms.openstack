@@ -334,22 +334,47 @@ class SSLDatabaseRelationAdapter(adapters.DatabaseRelationAdapter):
 class TestDatabaseRelationAdapter(unittest.TestCase):
 
     def test_class(self):
-        fake = FakeDatabaseRelation()
-        db = adapters.DatabaseRelationAdapter(fake)
-        self.assertEqual(db.host, 'host1')
-        self.assertEqual(db.type, 'mysql')
-        self.assertEqual(db.password, 'password1')
-        self.assertEqual(db.username, 'username1')
-        self.assertEqual(db.database, 'database1')
-        self.assertEqual(db.uri, 'mysql://username1:password1@host1/database1')
-        self.assertEqual(db.get_uri('x'),
-                         'mysql://username1x:password1x@host1/database1x')
-        # test the ssl feature of the base class
-        db = SSLDatabaseRelationAdapter(fake)
-        self.assertEqual(db.uri,
-                         'mysql://username1:password1@host1/database1'
-                         '?ssl_ca=my-ca'
-                         '&ssl_cert=my-cert&ssl_key=my-key')
+        with mock.patch.object(adapters.ch_utils,
+                               'get_os_codename_install_source',
+                               return_value='rocky'):
+            fake = FakeDatabaseRelation()
+            db = adapters.DatabaseRelationAdapter(fake)
+            self.assertEqual(db.host, 'host1')
+            self.assertEqual(db.type, 'mysql')
+            self.assertEqual(db.password, 'password1')
+            self.assertEqual(db.username, 'username1')
+            self.assertEqual(db.database, 'database1')
+            self.assertEqual(
+                db.uri,
+                'mysql://username1:password1@host1/database1')
+            self.assertEqual(
+                db.get_uri('x'),
+                'mysql://username1x:password1x@host1/database1x')
+            # test the ssl feature of the base class
+            db = SSLDatabaseRelationAdapter(fake)
+            self.assertEqual(
+                db.uri,
+                'mysql://username1:password1@host1/database1'
+                '?ssl_ca=my-ca'
+                '&ssl_cert=my-cert&ssl_key=my-key')
+        with mock.patch.object(adapters.ch_utils,
+                               'get_os_codename_install_source',
+                               return_value='stein'):
+            fake = FakeDatabaseRelation()
+            db = adapters.DatabaseRelationAdapter(fake)
+            self.assertEqual(
+                db.uri,
+                'mysql+pymysql://username1:password1@host1/database1')
+            self.assertEqual(
+                db.get_uri('x'),
+                'mysql+pymysql://username1x:password1x@host1/database1x')
+            # test the ssl feature of the base class
+            db = SSLDatabaseRelationAdapter(fake)
+            self.assertEqual(
+                db.uri,
+                'mysql+pymysql://username1:password1@host1/database1'
+                '?ssl_ca=my-ca'
+                '&ssl_cert=my-cert&ssl_key=my-key')
 
 
 class TestConfigurationAdapter(unittest.TestCase):

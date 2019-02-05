@@ -392,6 +392,7 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
     def __init__(self, relation):
         add_accessors = ['password', 'username', 'database']
         super(DatabaseRelationAdapter, self).__init__(relation, add_accessors)
+        self.config = hookenv.config()
 
     @property
     def host(self):
@@ -405,15 +406,23 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
         return 'mysql'
 
     def get_uri(self, prefix=None):
+        driver = 'mysql'
+        release = ch_utils.get_os_codename_install_source(
+            self.config['openstack-origin'])
+        if (ch_utils.OPENSTACK_RELEASES.index(release) >=
+                ch_utils.OPENSTACK_RELEASES.index('stein')):
+            driver = 'mysql+pymysql'
         if prefix:
-            uri = 'mysql://{}:{}@{}/{}'.format(
+            uri = '{}://{}:{}@{}/{}'.format(
+                driver,
                 self.relation.username(prefix=prefix),
                 self.relation.password(prefix=prefix),
                 self.host,
                 self.relation.database(prefix=prefix),
             )
         else:
-            uri = 'mysql://{}:{}@{}/{}'.format(
+            uri = '{}://{}:{}@{}/{}'.format(
+                driver,
                 self.username,
                 self.password,
                 self.host,
