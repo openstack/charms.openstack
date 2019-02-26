@@ -124,7 +124,7 @@ class TestMemcacheRelationAdapter(unittest.TestCase):
 
 class FakeRabbitMQRelation():
 
-    auto_accessors = ['vip', 'private_address']
+    auto_accessors = ['vip', 'private_address', 'password']
     relation_name = 'amqp'
 
     def __init__(self, vip=None):
@@ -145,11 +145,15 @@ class FakeRabbitMQRelation():
     def username(self):
         return 'fakename'
 
+    def password(self):
+        return 'password'
+
 
 class TestRabbitMQRelationAdapter(unittest.TestCase):
 
     def test_class(self):
         fake = FakeRabbitMQRelation(None)
+        adapters.ch_ip.format_ipv6_addr.side_effect = lambda x: x
         mq = adapters.RabbitMQRelationAdapter(fake)
         self.assertEqual(mq.vhost, 'vhost')
         self.assertEqual(mq.username, 'fakename')
@@ -158,6 +162,11 @@ class TestRabbitMQRelationAdapter(unittest.TestCase):
         # fake._vip = 'vip1'
         # self.assertEqual(mq.host, 'vip1')
         self.assertEqual(mq.hosts, 'host1,host2')
+        self.assertEqual(
+            mq.transport_url,
+            'rabbit://fakename:password@host1:5672,'
+            'fakename:password@host2:5672/vhost'
+        )
 
 
 class FakeAPIConfigAdapter():

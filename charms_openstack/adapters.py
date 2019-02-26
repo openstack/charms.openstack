@@ -206,6 +206,23 @@ class RabbitMQRelationAdapter(OpenStackRelationAdapter):
         return '/var/lib/charm/{}/rabbit-client-ca.pem'.format(
             hookenv.service_name())
 
+    @property
+    def transport_url(self):
+        """
+        oslo.messaging formatted transport URL
+
+        :returns: oslo.messaging formatted transport URL
+        :rtype: string
+        """
+        hosts = self.relation.rabbitmq_hosts()
+        transport_url_hosts = ','.join([
+            "{}:{}@{}:5672".format(self.username,
+                                   self.password,
+                                   ch_ip.format_ipv6_addr(host_) or host_)
+            for host_ in hosts
+        ])
+        return "rabbit://{}/{}".format(transport_url_hosts, self.vhost)
+
 
 class PeerHARelationAdapter(OpenStackRelationAdapter):
     """
