@@ -124,28 +124,54 @@ class OpenStackRelationAdapter(object):
 
     def _setup_properties(self):
         """
-        Setup property based accessors for an interfaces
-        auto accessors
+        Setup property based accessors for interface.
+
+        For charms.reactive.Endpoint interfaces a list of properties is built
+        by looking for type(property) attributes added by the interface class.
+
+        For charms.reactive.RelationBase interfaces the auto_accessors list is
+        used to determine which properties to set.
 
         Note that the accessor is dynamic as each access calls the underlying
         getattr() for each property access.
         """
-        try:
-            self.accessors.extend(self.relation.auto_accessors)
-        except AttributeError:
-            self.accessors = []
-        for field in self.accessors:
-            meth_name = field.replace('-', '_')
-            # Get the relation property dynamically
-            # Note the additional lambda name: is to create a closure over
-            # meth_name so that a new 'name' gets created for each loop,
-            # otherwise the same variable meth_name is referenced in each of
-            # the internal lambdas.  i.e. this is (lambda x: ...)(value)
-            setattr(self.__class__,
-                    meth_name,
-                    (lambda name: property(
-                        lambda self: getattr(
-                            self.relation, name)()))(meth_name))
+        if isinstance(self.relation, charms.reactive.Endpoint):
+            # Get names of properties the interface class instance has,
+            # remove the properties inherited from charms.reactive.Endpoint
+            # base class
+            interface_instance_names = dir(self.relation)
+            base_class_names = dir(charms.reactive.Endpoint)
+            property_names = [
+                p for p in interface_instance_names if isinstance(
+                    getattr(type(self.relation), p, None), property) and
+                p not in base_class_names]
+            for name in property_names:
+                # The double lamda trick is necessary to ensure we get fresh
+                # data from the interface class property at every call to the
+                # new property. Without it we would store the value that was
+                # there at instantiation of this class.
+                setattr(self.__class__,
+                        name,
+                        (lambda name: property(
+                            lambda self: getattr(
+                                self.relation, name)))(name))
+        else:
+            try:
+                self.accessors.extend(self.relation.auto_accessors)
+            except AttributeError:
+                self.accessors = []
+            for field in self.accessors:
+                meth_name = field.replace('-', '_')
+                # Get the relation property dynamically
+                # Note the additional lambda name: is to create a closure over
+                # meth_name so that a new 'name' gets created for each loop,
+                # otherwise the same variable meth_name is referenced in each
+                # of the internal lambdas.  i.e. this is (lambda x: ...)(value)
+                setattr(self.__class__,
+                        meth_name,
+                        (lambda name: property(
+                            lambda self: getattr(
+                                self.relation, name)()))(meth_name))
 
 
 class MemcacheRelationAdapter(OpenStackRelationAdapter):

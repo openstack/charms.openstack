@@ -36,7 +36,8 @@ IFACE_KEY = "vip_iface"
 DNSHA_KEY = "dns-ha"
 APACHE_SSL_VHOST = '/etc/apache2/sites-available/openstack_https_frontend.conf'
 SYSTEM_CA_CERTS = '/etc/ssl/certs/ca-certificates.crt'
-SNAP_CA_CERTS = '/var/snap/{}/common/etc/ssl/certs/ca-certificates.crt'
+SNAP_PATH_PREFIX_FORMAT = '/var/snap/{}/common'
+SNAP_CA_CERTS = SNAP_PATH_PREFIX_FORMAT + '/etc/ssl/certs/ca-certificates.crt'
 
 
 class OpenStackCharm(BaseOpenStackCharm,

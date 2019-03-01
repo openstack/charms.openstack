@@ -24,6 +24,8 @@ import copy
 import unittest
 import mock
 
+import charms.reactive as reactive
+
 import charms_openstack.adapters as adapters
 
 
@@ -54,9 +56,10 @@ class MyRelation(object):
 
     auto_accessors = ['this', 'that']
     relation_name = 'my-name'
+    value = 'this'
 
     def this(self):
-        return 'this'
+        return self.value
 
     def that(self):
         return 'that'
@@ -65,16 +68,31 @@ class MyRelation(object):
         return 'thing'
 
 
+class MyEndpointRelation(reactive.Endpoint):
+
+    value = 'has value in config rendering'
+
+    def a_function(self):
+        return 'value is not for config rendering'
+
+    @property
+    def a_property(self):
+        return self.value
+
+
 class TestOpenStackRelationAdapter(unittest.TestCase):
 
     def test_class(self):
-        ad = adapters.OpenStackRelationAdapter(MyRelation(), ['some'])
+        r = MyRelation()
+        ad = adapters.OpenStackRelationAdapter(r, ['some'])
         self.assertEqual(ad.this, 'this')
         self.assertEqual(ad.that, 'that')
         self.assertEqual(ad.some, 'thing')
         self.assertEqual(ad.relation_name, 'my-name')
         with self.assertRaises(AttributeError):
             ad.relation_name = 'hello'
+        r.value = 'changed'
+        self.assertEqual(ad.this, 'changed')
 
     def test_class_no_relation(self):
         ad = adapters.OpenStackRelationAdapter(relation_name='cluster')
@@ -100,6 +118,15 @@ class TestOpenStackRelationAdapter(unittest.TestCase):
         i = kls()
         self.assertIsInstance(i, FakeRelation)
         self.assertEqual(i.b, 4)
+
+    def test_class_with_endpoint_relation(self):
+        er = MyEndpointRelation('my-name')
+        ad = adapters.OpenStackRelationAdapter(er)
+        self.assertEqual(ad.a_property, 'has value in config rendering')
+        er.value = 'can change after instantiation'
+        self.assertEqual(ad.a_property, 'can change after instantiation')
+        with self.assertRaises(AttributeError):
+            self.assertFalse(ad.a_function)
 
 
 class FakeMemcacheRelation():

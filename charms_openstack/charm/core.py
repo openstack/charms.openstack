@@ -931,7 +931,7 @@ class BaseOpenStackCharmActions(object):
         :returns: None
         """
         if self.openstack_upgrade_available(self.release_pkg):
-            if self.config['action-managed-upgrade']:
+            if self.config.get('action-managed-upgrade', False):
                 hookenv.log('Not performing OpenStack upgrade as '
                             'action-managed-upgrade is enabled')
             else:
@@ -1007,7 +1007,9 @@ class BaseOpenStackCharmActions(object):
 
         :returns: None
         """
-        if hookenv.is_leader():
+        if not self.sync_cmd:
+            return
+        elif hookenv.is_leader():
             subprocess.check_call(self.sync_cmd)
         else:
             hookenv.log("Deferring DB sync to leader", level=hookenv.INFO)
