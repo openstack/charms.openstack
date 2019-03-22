@@ -700,10 +700,10 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         calls = [
             mock.call(
                 path='/etc/apache2/ssl/charmname/cert_mycn',
-                content=b'mycert'),
+                content=b'mycert', group='root', perms=0o640),
             mock.call(
                 path='/etc/apache2/ssl/charmname/key_mycn',
-                content=b'mykey')]
+                content=b'mykey', group='root', perms=0o640)]
         self.write_file.assert_has_calls(calls)
         self.write_file.reset_mock()
         self.patch_object(chm.os_ip, 'resolve_address', 'addr')
@@ -711,10 +711,10 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         calls = [
             mock.call(
                 path='/etc/apache2/ssl/charmname/cert_addr',
-                content=b'mycert'),
+                content=b'mycert', group='root', perms=0o640),
             mock.call(
                 path='/etc/apache2/ssl/charmname/key_addr',
-                content=b'mykey')]
+                content=b'mykey', group='root', perms=0o640)]
         self.write_file.assert_has_calls(calls)
 
     def test_get_local_addresses(self):
@@ -919,7 +919,6 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
                           name='apt_install')
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
-        self.target.configure_ssl()
         cert_calls = [
             mock.call('cert1', 'key1', cn='cn1'),
             mock.call('cert2', 'key2', cn='cn2')]
@@ -929,10 +928,20 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         set_state_calls = [
             mock.call('ssl.requested', True),
             mock.call('ssl.enabled', True)]
-        self.configure_cert.assert_has_calls(cert_calls)
-        self.configure_ca.assert_has_calls(ca_calls)
-        self.configure_apache.assert_called_once_with()
-        self.set_state.assert_has_calls(set_state_calls)
+        with mock.patch.object(chm, 'is_data_changed') as changed:
+            changed.return_value.__enter__.return_value = False
+            self.target.configure_ssl()
+            self.configure_cert.assert_has_calls(cert_calls)
+            self.configure_ca.assert_has_calls(ca_calls)
+            self.assertFalse(self.configure_apache.called)
+            self.set_state.assert_has_calls(set_state_calls)
+        with mock.patch.object(chm, 'is_data_changed') as changed:
+            changed.return_value.__enter__.return_value = True
+            self.target.configure_ssl()
+            self.configure_cert.assert_has_calls(cert_calls)
+            self.configure_ca.assert_has_calls(ca_calls)
+            self.configure_apache.called_once_with()
+            self.set_state.assert_has_calls(set_state_calls)
 
     def test_configure_ssl_off(self):
         self.patch_target('get_certs_and_keys', return_value=[])
