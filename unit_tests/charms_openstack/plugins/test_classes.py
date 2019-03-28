@@ -1,5 +1,6 @@
 import mock
 import os
+import subprocess
 
 from unit_tests.charms_openstack.charm.utils import BaseOpenStackCharmTest
 
@@ -88,6 +89,30 @@ class TestOpenStackCephConsumingCharm(BaseOpenStackCharmTest):
         self.chown.assert_called_with(
             '/etc/ceph/ceph.client.sarepta.keyring',
             user='ceph', group='ceph')
+
+        self.patch_object(cpl.os, 'chmod')
+        self.check_call.side_effect = [
+            subprocess.CalledProcessError(42, [], ''), None]
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.target.configure_ceph_keyring(interface)
+        self.check_call.reset_mock()
+        self.check_call.side_effect = [
+            subprocess.CalledProcessError(1, [], ''), None]
+        self.target.configure_ceph_keyring(interface)
+        self.check_call.assert_has_calls([
+            mock.call([
+                'ceph-authtool',
+                '/etc/ceph/ceph.client.sarepta.keyring',
+                '--create-keyring', '--name=client.sarepta', '--add-key',
+                'KEY', '--mode', '0600']),
+            mock.call([
+                'ceph-authtool',
+                '/etc/ceph/ceph.client.sarepta.keyring',
+                '--create-keyring', '--name=client.sarepta', '--add-key',
+                'KEY']),
+        ])
+        self.chmod.assert_called_with('/etc/ceph/ceph.client.sarepta.keyring',
+                                      0o600)
 
 
 class TestCephCharm(BaseOpenStackCharmTest):

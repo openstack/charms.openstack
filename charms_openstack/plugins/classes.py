@@ -142,10 +142,20 @@ class BaseOpenStackCephCharm(object):
                                 self.ceph_key_name))
         keyring_absolute_path = os.path.join(self.ceph_keyring_path,
                                              keyring_name)
-        subprocess.check_call([
+        cmd = [
             'ceph-authtool', keyring_absolute_path,
             '--create-keyring', '--name={}'.format(self.ceph_key_name),
-            '--add-key', interface.key, '--mode', '0600'])
+            '--add-key', interface.key, '--mode', '0600',
+        ]
+        try:
+            subprocess.check_call(cmd)
+        except subprocess.CalledProcessError as cp:
+            if not cp.returncode == 1:
+                raise
+            # the version of ceph-authtool on the system does not have
+            # --mode command line argument
+            subprocess.check_call(cmd[:-2])
+            os.chmod(keyring_absolute_path, 0o600)
         shutil.chown(keyring_absolute_path, user=self.user, group=self.group)
         return keyring_absolute_path
 
