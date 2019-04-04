@@ -224,7 +224,7 @@ relationship.
 
 To be completed.
 
-## OpenStacke Upgrade via config
+## OpenStack Upgrade via config
 
 An OpenStack principle charm has an 'openstack-origin' configuration option.
 This is used to setup the package source for a charm. If a user updates this
