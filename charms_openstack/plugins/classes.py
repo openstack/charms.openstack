@@ -121,12 +121,11 @@ class BaseOpenStackCephCharm(object):
         return os.path.join(self.snap_path_prefix,
                             self.ceph_keyring_path_prefix)
 
-    def configure_ceph_keyring(self, interface,
-                               cluster_name=None):
+    def configure_ceph_keyring(self, key, cluster_name=None):
         """Creates or updates a Ceph keyring file.
 
-        :param interface: Interface with ``key`` property.
-        :type interface: Any class that has a property named ``key``.
+        :param key: Key data
+        :type key: str
         :param cluster_name: (Optional) Name of Ceph cluster to operate on.
                              Defaults to value of ``self.ceph_cluster_name``.
         :type cluster_name: str
@@ -145,7 +144,7 @@ class BaseOpenStackCephCharm(object):
         cmd = [
             'ceph-authtool', keyring_absolute_path,
             '--create-keyring', '--name={}'.format(self.ceph_key_name),
-            '--add-key', interface.key, '--mode', '0600',
+            '--add-key', key, '--mode', '0600',
         ]
         try:
             subprocess.check_call(cmd)
@@ -231,10 +230,10 @@ class CephCharm(charms_openstack.charm.OpenStackCharm,
                             self.ceph_keyring_path_prefix,
                             self.ceph_service_name)
 
-    def configure_ceph_keyring(self, interface, cluster_name=None):
+    def configure_ceph_keyring(self, key, cluster_name=None):
         """Override parent function to add symlink in ``/etc/ceph``."""
         keyring_absolute_path = super().configure_ceph_keyring(
-            interface, cluster_name=cluster_name)
+            key, cluster_name=cluster_name)
         symlink_absolute_path = os.path.join(
             '/etc/ceph',
             os.path.basename(keyring_absolute_path))

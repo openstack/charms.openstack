@@ -70,9 +70,8 @@ class TestOpenStackCephConsumingCharm(BaseOpenStackCharmTest):
                           return_value='sarepta')
         self.patch_object(cpl.subprocess, 'check_call')
         self.patch_object(cpl.shutil, 'chown')
-        interface = mock.MagicMock()
-        interface.key = 'KEY'
-        self.assertEqual(self.target.configure_ceph_keyring(interface),
+        key = 'KEY'
+        self.assertEqual(self.target.configure_ceph_keyring(key),
                          '/etc/ceph/ceph.client.sarepta.keyring')
         self.isdir.assert_called_with('/etc/ceph')
         self.mkdir.assert_called_with('/etc/ceph',
@@ -85,7 +84,7 @@ class TestOpenStackCephConsumingCharm(BaseOpenStackCharmTest):
         ])
         self.target.user = 'ceph'
         self.target.group = 'ceph'
-        self.target.configure_ceph_keyring(interface)
+        self.target.configure_ceph_keyring(key)
         self.chown.assert_called_with(
             '/etc/ceph/ceph.client.sarepta.keyring',
             user='ceph', group='ceph')
@@ -94,11 +93,11 @@ class TestOpenStackCephConsumingCharm(BaseOpenStackCharmTest):
         self.check_call.side_effect = [
             subprocess.CalledProcessError(42, [], ''), None]
         with self.assertRaises(subprocess.CalledProcessError):
-            self.target.configure_ceph_keyring(interface)
+            self.target.configure_ceph_keyring(key)
         self.check_call.reset_mock()
         self.check_call.side_effect = [
             subprocess.CalledProcessError(1, [], ''), None]
-        self.target.configure_ceph_keyring(interface)
+        self.target.configure_ceph_keyring(key)
         self.check_call.assert_has_calls([
             mock.call([
                 'ceph-authtool',
@@ -140,13 +139,12 @@ class TestCephCharm(BaseOpenStackCharmTest):
         self.patch_object(cpl.subprocess, 'check_call')
         self.patch_object(cpl.shutil, 'chown')
         self.patch_object(cpl.os, 'symlink')
-        interface = mock.MagicMock()
-        interface.key = 'KEY'
+        key = 'KEY'
         self.patch_object(cpl.os.path, 'exists', return_value=True)
         self.patch_object(cpl.os, 'readlink')
         self.patch_object(cpl.os, 'remove')
         self.readlink.side_effect = OSError
-        self.target.configure_ceph_keyring(interface)
+        self.target.configure_ceph_keyring(key)
         self.isdir.assert_called_with('/var/lib/ceph/sarepta')
         self.mkdir.assert_called_with('/var/lib/ceph/sarepta',
                                       owner='root', group='root', perms=0o750)
@@ -166,7 +164,7 @@ class TestCephCharm(BaseOpenStackCharmTest):
             '/etc/ceph/ceph.client.sarepta.keyring')
         self.readlink.side_effect = None
         self.readlink.return_value = '/some/where/else'
-        self.target.configure_ceph_keyring(interface)
+        self.target.configure_ceph_keyring(key)
         self.remove.assert_called_with('/etc/ceph/ceph.client.sarepta.keyring')
 
     def test_install(self):
