@@ -113,6 +113,16 @@ class TestOpenStackCephConsumingCharm(BaseOpenStackCharmTest):
         self.chmod.assert_called_with('/etc/ceph/ceph.client.sarepta.keyring',
                                       0o600)
 
+    def test_delete_ceph_keyring(self):
+        self.patch_object(cpl.ch_core.hookenv, 'application_name',
+                          return_value='sarepta')
+        self.patch_object(cpl.os, 'remove')
+        keyring_filename = '/etc/ceph/ceph.client.sarepta.keyring'
+        self.assertEqual(self.target.delete_ceph_keyring(), keyring_filename)
+        self.remove.assert_called_once_with(keyring_filename)
+        self.remove.side_effect = OSError
+        self.assertEqual(self.target.delete_ceph_keyring(), '')
+
 
 class TestCephCharm(BaseOpenStackCharmTest):
 
@@ -166,6 +176,14 @@ class TestCephCharm(BaseOpenStackCharmTest):
         self.readlink.return_value = '/some/where/else'
         self.target.configure_ceph_keyring(key)
         self.remove.assert_called_with('/etc/ceph/ceph.client.sarepta.keyring')
+
+    def test_delete_ceph_keyring(self):
+        self.patch_object(cpl.ch_core.hookenv, 'application_name',
+                          return_value='sarepta')
+        self.patch_object(cpl.os, 'remove')
+        self.target.delete_ceph_keyring()
+        self.remove.assert_called_once_with(
+            '/var/lib/ceph/sarepta/ceph.client.sarepta.keyring')
 
     def test_install(self):
         self.patch_object(cpl.subprocess, 'check_output', return_value=b'\n')

@@ -121,6 +121,22 @@ class BaseOpenStackCephCharm(object):
         return os.path.join(self.snap_path_prefix,
                             self.ceph_keyring_path_prefix)
 
+    def ceph_keyring_absolute_path(self, cluster_name=None):
+        """Provide absolute path to keyring file.
+
+        :param cluster_name: (Optional) Name of Ceph cluster to operate on.
+                             Defaults to value of ``self.ceph_cluster_name``.
+        :type cluster_name: str
+        :returns: Absolute path to keyring file
+        :rtype: str
+        """
+        keyring_name = ('{}.{}.keyring'
+                        .format(cluster_name or self.ceph_cluster_name,
+                                self.ceph_key_name))
+        keyring_absolute_path = os.path.join(self.ceph_keyring_path,
+                                             keyring_name)
+        return keyring_absolute_path
+
     def configure_ceph_keyring(self, key, cluster_name=None):
         """Creates or updates a Ceph keyring file.
 
@@ -136,11 +152,8 @@ class BaseOpenStackCephCharm(object):
         if not os.path.isdir(self.ceph_keyring_path):
             ch_core.host.mkdir(self.ceph_keyring_path,
                                owner=self.user, group=self.group, perms=0o750)
-        keyring_name = ('{}.{}.keyring'
-                        .format(cluster_name or self.ceph_cluster_name,
-                                self.ceph_key_name))
-        keyring_absolute_path = os.path.join(self.ceph_keyring_path,
-                                             keyring_name)
+        keyring_absolute_path = self.ceph_keyring_absolute_path(
+            cluster_name=cluster_name)
         cmd = [
             'ceph-authtool', keyring_absolute_path,
             '--create-keyring', '--name={}'.format(self.ceph_key_name),
@@ -157,6 +170,23 @@ class BaseOpenStackCephCharm(object):
             os.chmod(keyring_absolute_path, 0o600)
         shutil.chown(keyring_absolute_path, user=self.user, group=self.group)
         return keyring_absolute_path
+
+    def delete_ceph_keyring(self, cluster_name=None):
+        """Deletes an existing Ceph keyring file.
+
+        :param cluster_name: (Optional) Name of Ceph cluster to operate on.
+                             Defaults to value of ``self.ceph_cluster_name``.
+        :type cluster_name: str
+        :returns: Absolute path to the now removed keyring file or empty string
+        :rtype: str
+        """
+        keyring_absolute_path = self.ceph_keyring_absolute_path(
+            cluster_name=cluster_name)
+        try:
+            os.remove(keyring_absolute_path)
+            return keyring_absolute_path
+        except OSError:
+            return ''
 
 
 class CephCharm(charms_openstack.charm.OpenStackCharm,
