@@ -2,17 +2,13 @@ import sys
 import mock
 
 charmhelpers = None
-apt_pkg = None
 
 
 def mock_charmhelpers():
     # Mock out charmhelpers so that we can test without it.
     # also stops sideeffects from occuring.
     global charmhelpers
-    global apt_pkg
     charmhelpers = mock.MagicMock()
-    apt_pkg = mock.MagicMock()
-    sys.modules['apt_pkg'] = apt_pkg
     sys.modules['charmhelpers'] = charmhelpers
     sys.modules['charmhelpers.core'] = charmhelpers.core
     sys.modules['charmhelpers.core.hookenv'] = charmhelpers.core.hookenv
