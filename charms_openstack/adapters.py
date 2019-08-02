@@ -196,6 +196,7 @@ class RabbitMQRelationAdapter(OpenStackRelationAdapter):
     """
 
     interface_type = "messaging"
+    DEFAULT_PORT = "5672"
 
     def __init__(self, relation):
         add_accessors = ['vhost', 'username']
@@ -233,6 +234,15 @@ class RabbitMQRelationAdapter(OpenStackRelationAdapter):
             hookenv.service_name())
 
     @property
+    def port(self):
+        """Return the AMQP port
+
+        :returns: AMQP port number
+        :rtype: string
+        """
+        return self.ssl_port or self.DEFAULT_PORT
+
+    @property
     def transport_url(self):
         """
         oslo.messaging formatted transport URL
@@ -242,9 +252,10 @@ class RabbitMQRelationAdapter(OpenStackRelationAdapter):
         """
         hosts = self.relation.rabbitmq_hosts()
         transport_url_hosts = ','.join([
-            "{}:{}@{}:5672".format(self.username,
-                                   self.password,
-                                   ch_ip.format_ipv6_addr(host_) or host_)
+            "{}:{}@{}:{}".format(self.username,
+                                 self.password,
+                                 ch_ip.format_ipv6_addr(host_) or host_,
+                                 self.port)
             for host_ in hosts
         ])
         return "rabbit://{}/{}".format(transport_url_hosts, self.vhost)

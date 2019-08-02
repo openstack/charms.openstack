@@ -151,11 +151,12 @@ class TestMemcacheRelationAdapter(unittest.TestCase):
 
 class FakeRabbitMQRelation():
 
-    auto_accessors = ['vip', 'private_address', 'password']
+    auto_accessors = ['vip', 'private_address', 'password', 'ssl_port']
     relation_name = 'amqp'
 
-    def __init__(self, vip=None):
+    def __init__(self, vip=None, ssl=False):
         self._vip = vip
+        self._ssl = ssl
 
     def vip(self):
         return self._vip
@@ -175,6 +176,11 @@ class FakeRabbitMQRelation():
     def password(self):
         return 'password'
 
+    def ssl_port(self):
+        if self._ssl:
+            return '5671'
+        return None
+
 
 class TestRabbitMQRelationAdapter(unittest.TestCase):
 
@@ -193,6 +199,23 @@ class TestRabbitMQRelationAdapter(unittest.TestCase):
             mq.transport_url,
             'rabbit://fakename:password@host1:5672,'
             'fakename:password@host2:5672/vhost'
+        )
+
+    def test_class_ssl(self):
+        fake = FakeRabbitMQRelation(ssl=True)
+        adapters.ch_ip.format_ipv6_addr.side_effect = lambda x: x
+        mq = adapters.RabbitMQRelationAdapter(fake)
+        self.assertEqual(mq.vhost, 'vhost')
+        self.assertEqual(mq.username, 'fakename')
+        self.assertEqual(mq.host, 'private-address')
+        # TODO: can't do the following 2 lines as not dynamic accessors
+        # fake._vip = 'vip1'
+        # self.assertEqual(mq.host, 'vip1')
+        self.assertEqual(mq.hosts, 'host1,host2')
+        self.assertEqual(
+            mq.transport_url,
+            'rabbit://fakename:password@host1:5671,'
+            'fakename:password@host2:5671/vhost'
         )
 
 
