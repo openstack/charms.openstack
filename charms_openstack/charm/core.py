@@ -6,8 +6,6 @@ import os
 import re
 import subprocess
 
-import apt_pkg as apt
-
 import charmhelpers.contrib.openstack.templating as os_templating
 import charmhelpers.contrib.openstack.utils as os_utils
 import charmhelpers.core.hookenv as hookenv
@@ -505,7 +503,7 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
             if not fatal:
                 return None
 
-        vers = apt.upstream_version(pkg.current_ver.ver_str)
+        vers = fetch.apt_pkg.upstream_version(pkg.current_ver.ver_str)
         # x.y match only for 20XX.X
         # and ignore patch level for other packages
         match = re.match('^(\d+)\.(\d+)', vers)
@@ -905,8 +903,8 @@ class BaseOpenStackCharmActions(object):
             cur_vers = self.get_os_version_snap(snap)
         else:
             cur_vers = self.get_os_version_package(package)
-        apt.init()
-        return apt.version_compare(avail_vers, cur_vers) == 1
+        fetch.apt_pkg.init()
+        return fetch.apt_pkg.version_compare(avail_vers, cur_vers) == 1
 
     def run_upgrade(self, interfaces_list=None):
         """Upgrade OpenStack.

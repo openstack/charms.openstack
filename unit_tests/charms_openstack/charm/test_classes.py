@@ -267,7 +267,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_application_version_unspecified(self):
         self.patch_object(chm.os_utils, 'os_release')
-        self.patch_object(chm, 'get_upstream_version',
+        self.patch_object(chm_core.charmhelpers.fetch, 'get_upstream_version',
                           return_value='1.2.3')
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
@@ -277,7 +277,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_application_version_package(self):
         self.patch_object(chm.os_utils, 'os_release')
-        self.patch_object(chm, 'get_upstream_version',
+        self.patch_object(chm_core.charmhelpers.fetch, 'get_upstream_version',
                           return_value='1.2.3')
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
@@ -295,7 +295,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
     def test_application_version_dfs(self):
         self.patch_object(chm.os_utils, 'os_release',
                           return_value='mitaka')
-        self.patch_object(chm, 'get_upstream_version',
+        self.patch_object(chm_core.charmhelpers.fetch, 'get_upstream_version',
                           return_value=None)
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)

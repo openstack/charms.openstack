@@ -765,7 +765,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         pkg_mock = mock.MagicMock()
         self.apt_cache.return_value = {
             'testpkg': pkg_mock}
-        self.patch_object(chm_core.apt, 'upstream_version')
+        self.patch_object(chm_core.charmhelpers.fetch.apt_pkg,
+                          'upstream_version')
         self.patch_object(chm_core.os_utils, 'snap_install_requested',
                           return_value=False)
         self.upstream_version.return_value = '3.0.0~b1'
@@ -800,7 +801,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
     def test_openstack_upgrade_available_package(self):
         self.patch_target('get_os_version_package')
         self.patch_object(chm_core.os_utils, 'get_os_version_install_source')
-        self.patch_object(chm_core, 'apt')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_pkg')
         self.patch_target('config',
                           new={'openstack-origin': 'cloud:natty-folsom'})
         self.patch_object(chm_core.os_utils, 'snap_install_requested',
@@ -808,12 +809,12 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.get_os_version_package.return_value = 2
         self.get_os_version_install_source.return_value = 3
         self.target.openstack_upgrade_available(package='testpkg')
-        self.apt.version_compare.assert_called_once_with(3, 2)
+        self.apt_pkg.version_compare.assert_called_once_with(3, 2)
 
     def test_openstack_upgrade_available_snap(self):
         self.patch_target('get_os_version_snap')
         self.patch_object(chm_core.os_utils, 'get_os_version_install_source')
-        self.patch_object(chm_core, 'apt')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_pkg')
         self.patch_target('config',
                           new={'openstack-origin': 'snap:ocata/stable'})
         self.patch_object(chm_core.os_utils, 'snap_install_requested',
@@ -822,7 +823,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.get_os_version_install_source.return_value = 3
         self.target.openstack_upgrade_available(snap='testsnap')
         self.get_os_version_snap.assert_called_once_with('testsnap')
-        self.apt.version_compare.assert_called_once_with(3, 2)
+        self.apt_pkg.version_compare.assert_called_once_with(3, 2)
 
     def test_upgrade_if_available(self):
         self.patch_target('run_upgrade')

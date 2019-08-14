@@ -24,7 +24,6 @@ from charms_openstack.charm.core import (
     get_snap_version,
 )
 from charms_openstack.charm.utils import (
-    get_upstream_version,
     is_data_changed,
 )
 import charms_openstack.adapters as os_adapters
@@ -201,7 +200,7 @@ class OpenStackCharm(BaseOpenStackCharm,
         else:
             if not self.version_package:
                 self.version_package = self.packages[0]
-            version = get_upstream_version(
+            version = fetch.get_upstream_version(
                 self.version_package
             )
             if not version:
