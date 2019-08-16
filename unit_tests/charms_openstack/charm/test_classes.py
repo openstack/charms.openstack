@@ -211,8 +211,11 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
 
     def test_install_deb(self):
         self.patch_object(chm.subprocess, 'check_call')
+        self.patch_object(chm.fetch, 'get_apt_dpkg_env', return_value={})
         self.target.install_deb('mydeb')
-        self.check_call.assert_called_once_with(['dpkg', '-i', 'mydeb'])
+        self.check_call.assert_called_once_with(
+            ['dpkg', '-i', 'mydeb'],
+            env={})
 
     def test_install_resources(self):
         self.patch_target('install_deb')

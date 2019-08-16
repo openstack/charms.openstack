@@ -139,7 +139,8 @@ class OpenStackCharm(BaseOpenStackCharm,
         """
         # No attempt is made to deal with dependancies. These should be
         # handled by the charms 'packages' list.
-        subprocess.check_call(['dpkg', '-i', deb])
+        subprocess.check_call(['dpkg', '-i', deb],
+                              env=fetch.get_apt_dpkg_env())
 
     def install_resources(self):
         """Install Juju application resources
