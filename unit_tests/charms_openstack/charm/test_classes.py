@@ -321,6 +321,363 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             mock.call('stop', svcs),
             mock.call('start', svcs)])
 
+    def test_configure_cert(self):
+        self.patch_object(chm.ch_host, 'mkdir')
+        self.patch_object(chm.ch_host, 'write_file')
+        self.target.configure_cert('/some/path', 'mycert', 'mykey', cn='mycn')
+        self.mkdir.assert_called_once_with(path='/some/path')
+        calls = [
+            mock.call(
+                path='/some/path/cert_mycn',
+                content=b'mycert', group='root', perms=0o640),
+            mock.call(
+                path='/some/path/key_mycn',
+                content=b'mykey', group='root', perms=0o640)]
+        self.write_file.assert_has_calls(calls)
+        self.write_file.reset_mock()
+        self.patch_object(chm.os_ip, 'resolve_address', 'addr')
+        self.target.configure_cert('/some/path', 'mycert', 'mykey')
+        calls = [
+            mock.call(
+                path='/some/path/cert_addr',
+                content=b'mycert', group='root', perms=0o640),
+            mock.call(
+                path='/some/path/key_addr',
+                content=b'mykey', group='root', perms=0o640)]
+        self.write_file.assert_has_calls(calls)
+
+    def test_get_local_addresses(self):
+        self.patch_object(chm.os_utils, 'get_host_ip', return_value='privaddr')
+        self.patch_object(chm.os_ip, 'resolve_address')
+        addresses = {
+            'admin': 'admin_addr',
+            'int': 'internal_addr',
+            'public': 'public_addr'}
+        self.resolve_address.side_effect = \
+            lambda endpoint_type=None: addresses[endpoint_type]
+        self.assertEqual(
+            self.target.get_local_addresses(),
+            ['admin_addr', 'internal_addr', 'privaddr', 'public_addr'])
+
+    def test_get_certs_and_keys(self):
+        config = {
+            'ssl_key': base64.b64encode(b'key'),
+            'ssl_cert': base64.b64encode(b'cert'),
+            'ssl_ca': base64.b64encode(b'ca')}
+        addresses = {
+            'admin': 'adm_addr',
+            'int': 'int_addr',
+            'public': 'pub_addr'}
+        self.patch_target('config', new=config)
+        self.patch_object(chm.os_ip, 'resolve_address', 'addr')
+        self.resolve_address.side_effect = \
+            lambda endpoint_type=None: addresses[endpoint_type]
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
+        self.assertEqual(
+            self.target.get_certs_and_keys(),
+            [
+                {'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'int_addr'},
+                {'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'adm_addr'},
+                {'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'pub_addr'}])
+
+    def test_get_certs_and_keys_noca(self):
+        config = {
+            'ssl_key': base64.b64encode(b'key'),
+            'ssl_cert': base64.b64encode(b'cert')}
+        addresses = {
+            'admin': 'adm_addr',
+            'int': 'int_addr',
+            'public': 'pub_addr'}
+        self.patch_target('config', new=config)
+        self.patch_object(chm.os_ip, 'resolve_address', 'addr')
+        self.resolve_address.side_effect = \
+            lambda endpoint_type=None: addresses[endpoint_type]
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
+        self.assertEqual(
+            self.target.get_certs_and_keys(),
+            [
+                {'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'int_addr'},
+                {'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'adm_addr'},
+                {'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'pub_addr'}])
+
+    def test_get_certs_and_keys_certs_interface(self):
+        class CertsInterface(object):
+
+            def get_batch_requests(self):
+                req = {
+                    'int_addr': {
+                        'cert': 'int_cert',
+                        'key': 'int_key'},
+                    'priv_addr': {
+                        'cert': 'priv_cert',
+                        'key': 'priv_key'},
+                    'pub_addr': {
+                        'cert': 'pub_cert',
+                        'key': 'pub_key'},
+                    'admin_addr': {
+                        'cert': 'admin_cert',
+                        'key': 'admin_key'}}
+                return req
+
+            def get_ca(self):
+                return 'CA'
+
+            def get_chain(self):
+                return 'CHAIN'
+
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
+        expect = [
+            {
+                'ca': 'CA',
+                'cert': 'admin_cert\nCHAIN',
+                'cn': 'admin_addr',
+                'key': 'admin_key'},
+            {
+                'ca': 'CA',
+                'cert': 'int_cert\nCHAIN',
+                'cn': 'int_addr',
+                'key': 'int_key'},
+            {
+                'ca': 'CA',
+                'cert': 'priv_cert\nCHAIN',
+                'cn': 'priv_addr',
+                'key': 'priv_key'},
+            {
+                'ca': 'CA',
+                'cert': 'pub_cert\nCHAIN',
+                'cn': 'pub_addr',
+                'key': 'pub_key'},
+        ]
+
+        self.assertEqual(
+            self.target.get_certs_and_keys(
+                certificates_interface=CertsInterface()),
+            expect)
+
+    def test_config_defined_certs_and_keys(self):
+        # test that the cached parameters do what we expect
+        config = {
+            'ssl_key': base64.b64encode(b'confkey'),
+            'ssl_cert': base64.b64encode(b'confcert'),
+            'ssl_ca': base64.b64encode(b'confca')}
+        self.patch_target('config', new=config)
+        self.assertEqual(self.target.config_defined_ssl_key, b'confkey')
+        self.assertEqual(self.target.config_defined_ssl_cert, b'confcert')
+        self.assertEqual(self.target.config_defined_ssl_ca, b'confca')
+
+    def test_configure_ssl_rabbit(self):
+        self.patch_target('get_certs_and_keys', return_value=[])
+        self.patch_target('configure_rabbit_cert')
+        self.patch('charms.reactive.bus.set_state', name='set_state')
+        self.patch_object(chm.reactive, 'endpoint_from_flag',
+                          return_value='ssl_int')
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
+        with mock.patch.object(chm.reactive.helpers,
+                               'is_data_changed'):
+            self.target.configure_ssl()
+            self.configure_rabbit_cert.assert_called_once_with('ssl_int')
+
+    def test_configure_rabbit_cert(self):
+        rabbit_int_mock = mock.MagicMock()
+        rabbit_int_mock.get_ssl_cert.return_value = 'rabbit_cert'
+        self.patch_object(chm.os.path, 'exists', return_value=True)
+        self.patch_object(chm.os, 'mkdir')
+        self.patch_object(chm.hookenv, 'service_name', return_value='svc1')
+        with utils.patch_open() as (mock_open, mock_file):
+            self.target.configure_rabbit_cert(rabbit_int_mock)
+            mock_open.assert_called_with(
+                '/var/lib/charm/svc1/rabbit-client-ca.pem',
+                'w')
+            mock_file.write.assert_called_with('rabbit_cert')
+
+    def test_configure_tls(self):
+        tls_objs = [
+            {
+                'cert': 'cert1',
+                'key': 'key1',
+                'ca': 'ca1',
+                'cn': 'cn1'},
+            {
+                'cert': 'cert2',
+                'key': 'key2',
+                'ca': 'ca2',
+                'cn': 'cn2'}]
+        self.patch_target('get_certs_and_keys', return_value=tls_objs)
+        self.patch_target('configure_ca')
+        self.patch('charms.reactive.bus.set_state', name='set_state')
+        ca_calls = [
+            mock.call('ca1'),
+            mock.call('ca2')]
+        self.target.configure_tls()
+        self.configure_ca.assert_has_calls(ca_calls)
+
+    def test_configure_ca(self):
+        self.patch_target('run_update_certs')
+        self.patch_target('install_snap_certs')
+        self.patch_object(chm.hookenv, 'service_name', return_value='svc1')
+        with utils.patch_open() as (mock_open, mock_file):
+            self.target.configure_ca('myca')
+            mock_open.assert_called_with(
+                '/usr/local/share/ca-certificates/svc1.crt',
+                'w')
+            mock_file.write.assert_called_with('myca')
+
+    def test_run_update_certs(self):
+        self.patch_object(chm.subprocess, 'check_call')
+        self.target.run_update_certs()
+        self.check_call.assert_called_once_with(
+            ['update-ca-certificates', '--fresh'])
+
+    def test_install_snap_certs(self):
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=True)
+        self.patch_object(chm.shutil, 'copyfile')
+        self.patch_object(chm.ch_host, 'mkdir')
+        self.patch_object(chm.os.path, 'exists', return_value=True)
+        self.target.snaps = ['mysnap']
+
+        self.target.install_snap_certs()
+
+        self.exists.assert_called_with('/etc/ssl/certs/ca-certificates.crt')
+        self.copyfile.assert_called_with(
+            '/etc/ssl/certs/ca-certificates.crt',
+            '/var/snap/mysnap/common/etc/ssl/certs/ca-certificates.crt',
+        )
+        self.mkdir.assert_called_with('/var/snap/mysnap/common/etc/ssl/certs')
+
+        self.snap_install_requested.reset_mock()
+        self.snap_install_requested.return_value = True
+        self.exists.reset_mock()
+        self.exists.return_value = False
+        self.copyfile.reset_mock()
+        self.mkdir.reset_mock()
+
+        self.target.install_snap_certs()
+
+        self.exists.assert_called_with('/etc/ssl/certs/ca-certificates.crt')
+        self.mkdir.assert_not_called()
+        self.copyfile.assert_not_called()
+
+        self.snap_install_requested.reset_mock()
+        self.snap_install_requested.return_value = False
+        self.exists.reset_mock()
+        self.exists.return_value = True
+        self.copyfile.reset_mock()
+        self.mkdir.reset_mock()
+
+        self.target.install_snap_certs()
+
+        self.exists.assert_not_called()
+        self.mkdir.assert_not_called()
+        self.copyfile.assert_not_called()
+
+    def test_update_central_cacerts(self):
+        self.patch_target('run_update_certs')
+        change_hashes = ['hash1', 'hash2']
+        nochange_hashes = ['hash1', 'hash1']
+
+        def fake_hash(hash_dict):
+            def fake_hash_inner(filename):
+                return hash_dict.pop()
+            return fake_hash_inner
+        self.patch_object(chm.ch_host, 'path_hash')
+        self.path_hash.side_effect = fake_hash(change_hashes)
+        self.patch_object(chm.os_utils, 'snap_install_requested',
+                          return_value=False)
+        with self.target.update_central_cacerts(['file1']):
+            pass
+        self.run_update_certs.assert_called_with()
+        self.run_update_certs.reset_mock()
+        self.path_hash.side_effect = fake_hash(nochange_hashes)
+        with self.target.update_central_cacerts(['file1']):
+            pass
+        self.assertFalse(self.run_update_certs.called)
+
+
+class TestCinderStoragePluginCharm(BaseOpenStackCharmTest):
+
+    def setUp(self):
+        super(TestCinderStoragePluginCharm, self).setUp(
+            chm.CinderStoragePluginCharm,
+            TEST_CONFIG)
+
+    def test_install(self):
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_target('config', new={'driver-source': 'ppa:user/ppa'})
+        self.patch_target('install_resources')
+        self.target.install()
+        self.add_source.assert_called_once_with('ppa:user/ppa', key=None)
+        self.apt_update.assert_called_once_with()
+        self.install_resources.assert_called_once_with()
+
+    def test_install_with_key(self):
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_target('install_resources')
+        self.patch_target(
+            'config',
+            new={
+                'driver-source': 'ppa:user/ppa',
+                'driver-key': 'mykey'})
+        self.target.install()
+        self.add_source.assert_called_once_with('ppa:user/ppa', key='mykey')
+        self.apt_update.assert_called_once_with()
+
+    def test_install_no_additional_source(self):
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_target('install_resources')
+        self.patch_target(
+            'config',
+            new={
+                'driver-source': '',
+                'driver-key': ''})
+        self.target.install()
+        self.assertFalse(self.add_source.called)
+        self.assertFalse(self.apt_update.called)
+
+    def test_install_source_undefined(self):
+        # A charm may be based from this class but not implement the
+        # additonal ppa option.
+        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
+        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_target('config', new={})
+        self.patch_target('install_resources')
+        self.target.install()
+        self.assertFalse(self.add_source.called)
+        self.assertFalse(self.apt_update.called)
+
+    def test_stateless(self):
+        with self.assertRaises(NotImplementedError):
+            self.target.stateless
+
+    def test_service_name(self):
+        self.patch_object(chm.hookenv, 'service_name', return_value='svc1')
+        self.assertEqual(self.target.service_name, 'svc1')
+
+    def test_cinder_configuration(self):
+        with self.assertRaises(NotImplementedError):
+            self.target.cinder_configuration()
+
+    def test_send_storage_backend_data(self):
+        self.patch_object(chm.hookenv, 'service_name', return_value='svc1')
+        ep_mock = mock.MagicMock()
+        self.patch_object(
+            chm.reactive,
+            'endpoint_from_flag',
+            return_value=ep_mock)
+        with self.assertRaises(NotImplementedError):
+            self.target.send_storage_backend_data()
+
 
 class TestOpenStackAPICharm(BaseOpenStackCharmTest):
 
@@ -690,208 +1047,7 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             ['a2enmod', 'proxy_http'])
         self.service_restart.assert_called_once_with('apache2')
 
-    def test_configure_cert(self):
-        self.patch_object(chm.ch_host, 'mkdir')
-        self.patch_object(chm.ch_host, 'write_file')
-        self.patch_object(chm.os_utils, 'snap_install_requested',
-                          return_value=False)
-        self.target.configure_cert('mycert', 'mykey', cn='mycn')
-        self.mkdir.assert_called_once_with(path='/etc/apache2/ssl/charmname')
-        calls = [
-            mock.call(
-                path='/etc/apache2/ssl/charmname/cert_mycn',
-                content=b'mycert', group='root', perms=0o640),
-            mock.call(
-                path='/etc/apache2/ssl/charmname/key_mycn',
-                content=b'mykey', group='root', perms=0o640)]
-        self.write_file.assert_has_calls(calls)
-        self.write_file.reset_mock()
-        self.patch_object(chm.os_ip, 'resolve_address', 'addr')
-        self.target.configure_cert('mycert', 'mykey')
-        calls = [
-            mock.call(
-                path='/etc/apache2/ssl/charmname/cert_addr',
-                content=b'mycert', group='root', perms=0o640),
-            mock.call(
-                path='/etc/apache2/ssl/charmname/key_addr',
-                content=b'mykey', group='root', perms=0o640)]
-        self.write_file.assert_has_calls(calls)
-
-    def test_get_local_addresses(self):
-        self.patch_object(chm.os_utils, 'get_host_ip', return_value='privaddr')
-        self.patch_object(chm.os_ip, 'resolve_address')
-        addresses = {
-            'admin': 'admin_addr',
-            'int': 'internal_addr',
-            'public': 'public_addr'}
-        self.resolve_address.side_effect = \
-            lambda endpoint_type=None: addresses[endpoint_type]
-        self.assertEqual(
-            self.target.get_local_addresses(),
-            ['admin_addr', 'internal_addr', 'privaddr', 'public_addr'])
-
-    def test_get_certs_and_keys(self):
-        config = {
-            'ssl_key': base64.b64encode(b'key'),
-            'ssl_cert': base64.b64encode(b'cert'),
-            'ssl_ca': base64.b64encode(b'ca')}
-        addresses = {
-            'admin': 'adm_addr',
-            'int': 'int_addr',
-            'public': 'pub_addr'}
-        self.patch_target('config', new=config)
-        self.patch_object(chm.os_ip, 'resolve_address', 'addr')
-        self.resolve_address.side_effect = \
-            lambda endpoint_type=None: addresses[endpoint_type]
-        self.patch_object(chm.os_utils, 'snap_install_requested',
-                          return_value=False)
-        self.assertEqual(
-            self.target.get_certs_and_keys(),
-            [
-                {'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'int_addr'},
-                {'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'adm_addr'},
-                {'key': 'key', 'cert': 'cert', 'ca': 'ca', 'cn': 'pub_addr'}])
-
-    def test_get_certs_and_keys_noca(self):
-        config = {
-            'ssl_key': base64.b64encode(b'key'),
-            'ssl_cert': base64.b64encode(b'cert')}
-        addresses = {
-            'admin': 'adm_addr',
-            'int': 'int_addr',
-            'public': 'pub_addr'}
-        self.patch_target('config', new=config)
-        self.patch_object(chm.os_ip, 'resolve_address', 'addr')
-        self.resolve_address.side_effect = \
-            lambda endpoint_type=None: addresses[endpoint_type]
-        self.patch_object(chm.os_utils, 'snap_install_requested',
-                          return_value=False)
-        self.assertEqual(
-            self.target.get_certs_and_keys(),
-            [
-                {'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'int_addr'},
-                {'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'adm_addr'},
-                {'key': 'key', 'cert': 'cert', 'ca': None, 'cn': 'pub_addr'}])
-
-    def test_get_certs_and_keys_ks_interface(self):
-        class KSInterface(object):
-            def get_ssl_key(self, key):
-                keys = {
-                    'int_addr': 'int_key',
-                    'priv_addr': 'priv_key',
-                    'pub_addr': 'pub_key',
-                    'admin_addr': 'admin_key'}
-                return keys[key]
-
-            def get_ssl_cert(self, key):
-                certs = {
-                    'int_addr': 'int_cert',
-                    'priv_addr': 'priv_cert',
-                    'pub_addr': 'pub_cert',
-                    'admin_addr': 'admin_cert'}
-                return certs[key]
-
-            def get_ssl_ca(self):
-                return 'ca'
-
-        self.patch_target(
-            'get_local_addresses',
-            return_value=['int_addr', 'priv_addr', 'pub_addr', 'admin_addr'])
-        self.patch_object(chm.os_utils, 'snap_install_requested',
-                          return_value=False)
-        expect = [
-            {
-                'ca': 'ca',
-                'cert': 'int_cert',
-                'cn': 'int_addr',
-                'key': 'int_key'},
-            {
-                'ca': 'ca',
-                'cert': 'priv_cert',
-                'cn': 'priv_addr',
-                'key': 'priv_key'},
-            {
-                'ca': 'ca',
-                'cert': 'pub_cert',
-                'cn': 'pub_addr',
-                'key': 'pub_key'},
-            {
-                'ca': 'ca',
-                'cert': 'admin_cert',
-                'cn': 'admin_addr',
-                'key': 'admin_key'}]
-
-        self.assertEqual(
-            self.target.get_certs_and_keys(keystone_interface=KSInterface()),
-            expect)
-
-    def test_get_certs_and_keys_certs_interface(self):
-        class CertsInterface(object):
-
-            def get_batch_requests(self):
-                req = {
-                    'int_addr': {
-                        'cert': 'int_cert',
-                        'key': 'int_key'},
-                    'priv_addr': {
-                        'cert': 'priv_cert',
-                        'key': 'priv_key'},
-                    'pub_addr': {
-                        'cert': 'pub_cert',
-                        'key': 'pub_key'},
-                    'admin_addr': {
-                        'cert': 'admin_cert',
-                        'key': 'admin_key'}}
-                return req
-
-            def get_ca(self):
-                return 'CA'
-
-            def get_chain(self):
-                return 'CHAIN'
-
-        self.patch_object(chm.os_utils, 'snap_install_requested',
-                          return_value=False)
-        expect = [
-            {
-                'ca': 'CA',
-                'cert': 'admin_cert\nCHAIN',
-                'cn': 'admin_addr',
-                'key': 'admin_key'},
-            {
-                'ca': 'CA',
-                'cert': 'int_cert\nCHAIN',
-                'cn': 'int_addr',
-                'key': 'int_key'},
-            {
-                'ca': 'CA',
-                'cert': 'priv_cert\nCHAIN',
-                'cn': 'priv_addr',
-                'key': 'priv_key'},
-            {
-                'ca': 'CA',
-                'cert': 'pub_cert\nCHAIN',
-                'cn': 'pub_addr',
-                'key': 'pub_key'},
-        ]
-
-        self.assertEqual(
-            self.target.get_certs_and_keys(
-                certificates_interface=CertsInterface()),
-            expect)
-
-    def test_config_defined_certs_and_keys(self):
-        # test that the cached parameters do what we expect
-        config = {
-            'ssl_key': base64.b64encode(b'confkey'),
-            'ssl_cert': base64.b64encode(b'confcert'),
-            'ssl_ca': base64.b64encode(b'confca')}
-        self.patch_target('config', new=config)
-        self.assertEqual(self.target.config_defined_ssl_key, b'confkey')
-        self.assertEqual(self.target.config_defined_ssl_cert, b'confcert')
-        self.assertEqual(self.target.config_defined_ssl_ca, b'confca')
-
-    def test_configure_ssl(self):
+    def test_configure_tls(self):
         ssl_objs = [
             {
                 'cert': 'cert1',
@@ -908,7 +1064,7 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('configure_cert')
         self.patch_target('configure_ca')
         self.patch('charms.reactive.bus.set_state', name='set_state')
-        self.patch_object(chm.relations, 'endpoint_from_flag',
+        self.patch_object(chm.reactive, 'endpoint_from_flag',
                           return_value=None)
         self.patch_object(chm_core.charmhelpers.fetch,
                           'filter_installed_packages',
@@ -920,8 +1076,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
         cert_calls = [
-            mock.call('cert1', 'key1', cn='cn1'),
-            mock.call('cert2', 'key2', cn='cn2')]
+            mock.call('/etc/apache2/ssl/charmname', 'cert1', 'key1', cn='cn1'),
+            mock.call('/etc/apache2/ssl/charmname', 'cert2', 'key2', cn='cn2')]
         ca_calls = [
             mock.call('ca1'),
             mock.call('ca2')]
@@ -930,212 +1086,27 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             mock.call('ssl.enabled', True)]
         with mock.patch.object(chm, 'is_data_changed') as changed:
             changed.return_value.__enter__.return_value = False
-            self.target.configure_ssl()
+            self.target.configure_tls()
             self.configure_cert.assert_has_calls(cert_calls)
             self.configure_ca.assert_has_calls(ca_calls)
             self.assertFalse(self.configure_apache.called)
             self.set_state.assert_has_calls(set_state_calls)
         with mock.patch.object(chm, 'is_data_changed') as changed:
             changed.return_value.__enter__.return_value = True
-            self.target.configure_ssl()
+            self.target.configure_tls()
             self.configure_cert.assert_has_calls(cert_calls)
             self.configure_ca.assert_has_calls(ca_calls)
             self.configure_apache.called_once_with()
             self.set_state.assert_has_calls(set_state_calls)
 
-    def test_configure_ssl_off(self):
+    def test_configure_tls_off(self):
         self.patch_target('get_certs_and_keys', return_value=[])
         self.patch('charms.reactive.bus.set_state', name='set_state')
-        self.patch_object(chm.relations, 'endpoint_from_flag',
+        self.patch_object(chm.reactive, 'endpoint_from_flag',
                           return_value=None)
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
-        self.target.configure_ssl()
-        self.set_state.assert_called_once_with('ssl.enabled', False)
-
-    def test_configure_ssl_rabbit(self):
-        self.patch_target('get_certs_and_keys', return_value=[])
-        self.patch_target('configure_rabbit_cert')
-        self.patch('charms.reactive.bus.set_state', name='set_state')
-        self.patch_object(chm.relations, 'endpoint_from_flag',
-                          return_value='ssl_int')
-        self.patch_object(chm.os_utils, 'snap_install_requested',
-                          return_value=False)
-        self.target.configure_ssl()
-        self.set_state.assert_called_once_with('ssl.enabled', False)
-        self.configure_rabbit_cert.assert_called_once_with('ssl_int')
-
-    def test_configure_rabbit_cert(self):
-        rabbit_int_mock = mock.MagicMock()
-        rabbit_int_mock.get_ssl_cert.return_value = 'rabbit_cert'
-        self.patch_object(chm.os.path, 'exists', return_value=True)
-        self.patch_object(chm.os, 'mkdir')
-        self.patch_object(chm.hookenv, 'service_name', return_value='svc1')
-        with utils.patch_open() as (mock_open, mock_file):
-            self.target.configure_rabbit_cert(rabbit_int_mock)
-            mock_open.assert_called_with(
-                '/var/lib/charm/svc1/rabbit-client-ca.pem',
-                'w')
-            mock_file.write.assert_called_with('rabbit_cert')
-
-    def test_configure_ca(self):
-        self.patch_target('run_update_certs')
-        self.patch_target('install_snap_certs')
-        with utils.patch_open() as (mock_open, mock_file):
-            self.target.configure_ca('myca')
-            mock_open.assert_called_with(
-                '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt',
-                'w')
-            mock_file.write.assert_called_with('myca')
-
-    def test_run_update_certs(self):
-        self.patch_object(chm.subprocess, 'check_call')
-        self.target.run_update_certs()
-        self.check_call.assert_called_once_with(
-            ['update-ca-certificates', '--fresh'])
-
-    def test_install_snap_certs(self):
-        self.patch_object(chm.os_utils, 'snap_install_requested',
-                          return_value=True)
-        self.patch_object(chm.shutil, 'copyfile')
-        self.patch_object(chm.ch_host, 'mkdir')
-        self.patch_object(chm.os.path, 'exists', return_value=True)
-        self.target.snaps = ['mysnap']
-
-        self.target.install_snap_certs()
-
-        self.exists.assert_called_with('/etc/ssl/certs/ca-certificates.crt')
-        self.copyfile.assert_called_with(
-            '/etc/ssl/certs/ca-certificates.crt',
-            '/var/snap/mysnap/common/etc/ssl/certs/ca-certificates.crt',
-        )
-        self.mkdir.assert_called_with('/var/snap/mysnap/common/etc/ssl/certs')
-
-        self.snap_install_requested.reset_mock()
-        self.snap_install_requested.return_value = True
-        self.exists.reset_mock()
-        self.exists.return_value = False
-        self.copyfile.reset_mock()
-        self.mkdir.reset_mock()
-
-        self.target.install_snap_certs()
-
-        self.exists.assert_called_with('/etc/ssl/certs/ca-certificates.crt')
-        self.mkdir.assert_not_called()
-        self.copyfile.assert_not_called()
-
-        self.snap_install_requested.reset_mock()
-        self.snap_install_requested.return_value = False
-        self.exists.reset_mock()
-        self.exists.return_value = True
-        self.copyfile.reset_mock()
-        self.mkdir.reset_mock()
-
-        self.target.install_snap_certs()
-
-        self.exists.assert_not_called()
-        self.mkdir.assert_not_called()
-        self.copyfile.assert_not_called()
-
-    def test_update_central_cacerts(self):
-        self.patch_target('run_update_certs')
-        change_hashes = ['hash1', 'hash2']
-        nochange_hashes = ['hash1', 'hash1']
-
-        def fake_hash(hash_dict):
-            def fake_hash_inner(filename):
-                return hash_dict.pop()
-            return fake_hash_inner
-        self.patch_object(chm.ch_host, 'path_hash')
-        self.path_hash.side_effect = fake_hash(change_hashes)
-        self.patch_object(chm.os_utils, 'snap_install_requested',
-                          return_value=False)
-        with self.target.update_central_cacerts(['file1']):
-            pass
-        self.run_update_certs.assert_called_with()
-        self.run_update_certs.reset_mock()
-        self.path_hash.side_effect = fake_hash(nochange_hashes)
-        with self.target.update_central_cacerts(['file1']):
-            pass
-        self.assertFalse(self.run_update_certs.called)
-
-
-class TestCinderStoragePluginCharm(BaseOpenStackCharmTest):
-
-    def setUp(self):
-        super(TestCinderStoragePluginCharm, self).setUp(
-            chm.CinderStoragePluginCharm,
-            TEST_CONFIG)
-
-    def test_install(self):
-        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
-        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
-        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
-        self.patch_target('config', new={'driver-source': 'ppa:user/ppa'})
-        self.patch_target('install_resources')
-        self.target.install()
-        self.add_source.assert_called_once_with('ppa:user/ppa', key=None)
-        self.apt_update.assert_called_once_with()
-        self.install_resources.assert_called_once_with()
-
-    def test_install_with_key(self):
-        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
-        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
-        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
-        self.patch_target('install_resources')
-        self.patch_target(
-            'config',
-            new={
-                'driver-source': 'ppa:user/ppa',
-                'driver-key': 'mykey'})
-        self.target.install()
-        self.add_source.assert_called_once_with('ppa:user/ppa', key='mykey')
-        self.apt_update.assert_called_once_with()
-
-    def test_install_no_additional_source(self):
-        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
-        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
-        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
-        self.patch_target('install_resources')
-        self.patch_target(
-            'config',
-            new={
-                'driver-source': '',
-                'driver-key': ''})
-        self.target.install()
-        self.assertFalse(self.add_source.called)
-        self.assertFalse(self.apt_update.called)
-
-    def test_install_source_undefined(self):
-        # A charm may be based from this class but not implement the
-        # additonal ppa option.
-        self.patch_object(chm.subprocess, 'check_output', return_value=b'\n')
-        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
-        self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
-        self.patch_target('config', new={})
-        self.patch_target('install_resources')
-        self.target.install()
-        self.assertFalse(self.add_source.called)
-        self.assertFalse(self.apt_update.called)
-
-    def test_stateless(self):
-        with self.assertRaises(NotImplementedError):
-            self.target.stateless
-
-    def test_service_name(self):
-        self.patch_object(chm.hookenv, 'service_name', return_value='svc1')
-        self.assertEqual(self.target.service_name, 'svc1')
-
-    def test_cinder_configuration(self):
-        with self.assertRaises(NotImplementedError):
-            self.target.cinder_configuration()
-
-    def test_send_storage_backend_data(self):
-        self.patch_object(chm.hookenv, 'service_name', return_value='svc1')
-        ep_mock = mock.MagicMock()
-        self.patch_object(
-            chm.relations,
-            'endpoint_from_flag',
-            return_value=ep_mock)
-        with self.assertRaises(NotImplementedError):
-            self.target.send_storage_backend_data()
+        with mock.patch.object(chm.reactive.helpers,
+                               'is_data_changed'):
+            self.target.configure_tls()
+            self.set_state.assert_called_once_with('ssl.enabled', False)
