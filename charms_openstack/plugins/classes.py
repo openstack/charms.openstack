@@ -22,6 +22,7 @@ import charms_openstack.charm
 from charms_openstack.charm.classes import SNAP_PATH_PREFIX_FORMAT
 
 import charmhelpers.core as ch_core
+import charmhelpers.contrib.openstack.policyd as ch_policyd
 
 
 class BaseOpenStackCephCharm(object):
@@ -288,3 +289,122 @@ class CephCharm(charms_openstack.charm.OpenStackCharm,
         """
         self.configure_source()
         super().install()
+
+
+class PolicydOverridePlugin(object):
+    """The PolicydOverridePlugin is provided to manage the policy.d overrides
+    to charms.openstack charms.  It heavily leans on the
+    charmhelpers.contrib.openstack.policyd to provide the functionality.  The
+    methods provided in this class simply use the functions from charm-helpers
+    so that charm authors can simply include this plugin class into the
+    inheritance list of the charm class.
+
+    It's very important that the PolicyOverridePlugin class appear FIRST in the
+    list of classes when declaring the charm class.  This is to ensure that the
+    config_changed() method in this class gets called first, and it then calls
+    other classes.  Otherwise, the config_changed method in the base class will
+    need to call the config_changed() method in this class manually.  e.g. from
+    Designate:
+
+        class DesignateCharm(ch_plugins.PolicydOverridePlugin,
+                             openstack_charm.HAOpenStackCharm):
+
+    Note that this feature is only available with OpenStack versions of
+    'queens' and later, and Ubuntu versions of 'bionic' and later.  Prior to
+    those versions, the feature will not activate.  This is checked in the
+    charm-helpers policyd implementation functions which are called from this
+    class' implementation.
+
+    This should be read in conjunction with the module
+    charmhelpers.contrib.openstack.policyd which provides further details on
+    the changes that need to be made to a charm to enable this feature.
+
+    Note that the metadata.yaml and config.yaml needs to be updated for the
+    charm to actually be able to use this class.  See the
+    charmhelpers.contrib.openstack.policyd module for further details.
+
+    The following class variables are used to drive the plugin and should be
+    declared on the class:
+
+       policyd_service_name = str
+       policyd_blacklist_paths = Union[None, List[str]]
+       policyd_blacklist_keys = Union[None, List[str]]
+       policyd_template_function = Union[None, Callable[[str], str]]
+       policyd_restart_on_change = Union[None, bool]
+
+    These have the following meanings:
+
+    policyd_service_name:
+        This is the name of the payload that is having an override.  e.g.
+        keystone.  It is used to construct the policy.d directory:
+        /etc/keystone/policy.d/
+
+    policyd_blacklist_paths: (Optional)
+        These are other policyd overrides that exist in the above directory
+        that should not be touched.  It is a list of the FULL path.  e.g.
+        /etc/keystone/policy.d/charm-overrides.yaml
+
+    policyd_blacklist_keys: (Optional)
+        These are keys that should not appear in the YAML files.  e.g. admin.
+
+    policyd_template_function: (Optional)
+        This is an callable that takes a string that returns another string
+        that tis then loaded as the yaml file.  This is intended to allow a
+        charm to modify the proposed yaml file to allow substitution of rules
+        and values under the control of the charm.  The charm needs to supply
+        the substitution function (and thus the variables that will be used).
+
+    policyd_restart_on_change: Optional
+        If set to True, then the service will be restarted using the charm
+        class'  `restart_services` method.
+    """
+
+    def _policyd_function_args(self):
+        """Returns the parameters that need to be passed to the charm-helpers
+        policyd implemenation functions.
+
+        :returns: ([openstack_release, payload_name],
+                   {blacklist_paths=...,
+                    blacklist_keys=...,
+                    template_function=...,
+                    restart_handler=...,})
+        :rtype: Tuple[List[str,str], Dict[str,str]]
+        """
+        blacklist_paths = getattr(self, 'policyd_blacklist_paths', None)
+        blacklist_keys = getattr(self, 'policyd_blacklist_keys', None)
+        template_function = getattr(self, 'policyd_template_function', None)
+        if getattr(self, 'policyd_restart_on_change', False):
+            restart_handler = self.restart_services
+        else:
+            restart_handler = None
+        return ([self.release, self.policyd_service_name],
+                dict(blacklist_paths=blacklist_paths,
+                     blacklist_keys=blacklist_keys,
+                     template_function=template_function,
+                     restart_handler=restart_handler))
+
+    def _maybe_policyd_overrides(self):
+        args, kwargs = self._policyd_function_args()
+        ch_policyd.maybe_do_policyd_overrides(*args, **kwargs)
+
+    def install(self):
+        """Hook into the install"""
+        super().install()
+        self._maybe_policyd_overrides()
+
+    def upgrade_charm(self):
+        """Check the policyd during an upgrade_charm"""
+        super().upgrade_charm()
+        self._maybe_policyd_overrides()
+
+    def config_changed(self):
+        """Note that this is usually a nop, and is only called from the default
+        handler.  Please check that the charm implementation actually uses it.
+        """
+        try:
+            super().config_changed()
+        except Exception:
+            pass
+        args, kwargs = self._policyd_function_args()
+        ch_policyd.maybe_do_policyd_overrides_on_config_changed(
+            *args, **kwargs)
