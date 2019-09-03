@@ -15,7 +15,7 @@ import charmhelpers.contrib.openstack.cert_utils as cert_utils
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charmhelpers.fetch as fetch
-import charms.reactive.relations as relations
+import charms.reactive as reactive
 
 from charms_openstack.charm.core import (
     BaseOpenStackCharm,
@@ -256,29 +256,94 @@ class OpenStackCharm(BaseOpenStackCharm,
         os_utils.manage_payload_services('stop', services)
         os_utils.manage_payload_services('start', services)
 
+    def get_certificate_requests(self):
+        """Return a dict of certificate requests"""
+        return cert_utils.get_certificate_request(
+            json_encode=False).get('cert_requests', {})
+
     @property
     def rabbit_client_cert_dir(self):
-        return '/var/lib/charm/{}'.format(hookenv.service_name())
+        return '/var/lib/charm/{}'.format(self.service_name)
 
     @property
     def rabbit_cert_file(self):
         return '{}/rabbit-client-ca.pem'.format(self.rabbit_client_cert_dir)
 
+    def get_default_cn(self):
+        """Return the default Canonical Name to be used for TLS setup
+
+        :returns: 'canonical_name'
+        :rtype: str
+        """
+        return os_ip.resolve_address(endpoint_type=os_ip.INTERNAL)
+
+    def configure_cert(self, path, cert, key, cn=None):
+        """Write out TLS certificate and key to disk.
+
+        :param path: Directory to place files in
+        :type path: str
+        :param cert: TLS Certificate
+        :type cert: str
+        :param key: TLS Key
+        :type key: str
+        :param cn: Canonical name for service
+        :type cn: Option[None, str]
+        """
+        if not cn:
+            cn = self.get_default_cn()
+
+        ch_host.mkdir(path=path)
+        if cn:
+            cert_filename = 'cert_{}'.format(cn)
+            key_filename = 'key_{}'.format(cn)
+        else:
+            cert_filename = 'cert'
+            key_filename = 'key'
+
+        ch_host.write_file(path=os.path.join(path, cert_filename),
+                           content=cert.encode('utf-8'), group=self.group,
+                           perms=0o640)
+        ch_host.write_file(path=os.path.join(path, key_filename),
+                           content=key.encode('utf-8'), group=self.group,
+                           perms=0o640)
+
+    def get_local_addresses(self):
+        """Return list of local addresses on each configured network
+
+        For each network return an address the local unit has on that network
+        if one exists.
+
+        :returns: [private_addr, admin_addr, public_addr, ...]
+        :rtype: List[str]
+        """
+        addresses = [
+            os_utils.get_host_ip(hookenv.unit_get('private-address'))]
+        for addr_type in os_ip.ADDRESS_MAP.keys():
+            laddr = os_ip.resolve_address(endpoint_type=addr_type)
+            if laddr:
+                addresses.append(laddr)
+        return sorted(list(set(addresses)))
+
     def get_certs_and_keys(self, keystone_interface=None,
                            certificates_interface=None):
-        """Collect SSL config for local endpoints
+        """Collect TLS config for local endpoints
 
-        SSL keys and certs may come from user specified configuration for this
-        charm or they may come directly from Keystone.
+        TLS keys and certs may come from user specified configuration for this
+        charm or they may come directly from the ``certificates`` relation.
 
-        If collecting from keystone there may be a certificate and key per
-        endpoint (public, admin etc).
+        If collecting from ``certificates`` relation there may be a certificate
+        and key per endpoint (public, admin etc).
 
-        @returns [
+        :param keystone_interface: DEPRECATED Functionality removed.
+        :type keystone_interace: Option[None, KeystoneRequires(RelationBase)]
+        :param certificates_interface: Certificates interface object
+        :type certificates_interface: TlsRequires(Endpoint)
+        :returns: [
             {'key': 'key1', 'cert': 'cert1', 'ca': 'ca1', 'cn': 'cn1'}
             {'key': 'key2', 'cert': 'cert2', 'ca': 'ca2', 'cn': 'cn2'}
             ...
         ]
+        :rtype: List[Dict[str,str]]
         """
         if self.config_defined_ssl_key and self.config_defined_ssl_cert:
             ssl_artifacts = []
@@ -290,19 +355,6 @@ class OpenStackCharm(BaseOpenStackCharm,
                            if self.config_defined_ssl_ca else None),
                     'cn': os_ip.resolve_address(endpoint_type=ep_type)})
             return ssl_artifacts
-        elif keystone_interface:
-            keys_and_certs = []
-            for addr in self.get_local_addresses():
-                key = keystone_interface.get_ssl_key(addr)
-                cert = keystone_interface.get_ssl_cert(addr)
-                ca = keystone_interface.get_ssl_ca()
-                if key and cert:
-                    keys_and_certs.append({
-                        'key': key,
-                        'cert': cert,
-                        'ca': ca,
-                        'cn': addr})
-            return keys_and_certs
         elif certificates_interface:
             keys_and_certs = []
             reqs = certificates_interface.get_batch_requests()
@@ -343,51 +395,60 @@ class OpenStackCharm(BaseOpenStackCharm,
         return self._get_b64decode_for('ssl_ca')
 
     def configure_ssl(self, keystone_interface=None):
-        """Configure SSL certificates and keys
+        """DEPRECATED Configure SSL certificates and keys.
 
-        NOTE(AJK): This function tries to minimise the work it does,
-        particularly with writing files and restarting apache.
-
-        @param keystone_interface KeystoneRequires class
+        Please use configure_tls insteaad.
         """
-        keystone_interface = (
-            relations.endpoint_from_flag('identity-service.available.ssl') or
-            relations
-            .endpoint_from_flag('identity-service.available.ssl_legacy'))
-        certificates_interface = relations.endpoint_from_flag(
-            'certificates.batch.cert.available')
-        ssl_objects = self.get_certs_and_keys(
-            keystone_interface=keystone_interface,
-            certificates_interface=certificates_interface)
-        with is_data_changed('configure_ssl.ssl_objects',
-                             ssl_objects) as changed:
-            if ssl_objects:
-                # NOTE(fnordahl): regardless of changes to data we may
-                # have other changes we want to apply to the files.
-                # (e.g. ownership, permissions)
-                #
-                # Also note that c-h.host.write_file used in configure_cert()
-                # has it's own logic to detect data changes.
-                #
-                # LP: #1821314
-                for ssl in ssl_objects:
-                    self.set_state('ssl.requested', True)
-                    self.configure_cert(
-                        ssl['cert'], ssl['key'], cn=ssl['cn'])
-                    self.configure_ca(ssl['ca'])
-                cert_utils.create_ip_cert_links(
-                    os.path.join('/etc/apache2/ssl/', self.name))
-                if not os_utils.snap_install_requested() and changed:
-                    self.configure_apache()
-                    ch_host.service_reload('apache2')
+        hookenv.log('configure_ssl method is DEPRECATED, please use '
+                    'configure_tls instead.', level=hookenv.WARNING)
+        self.configure_tls(
+            certificates_interface=reactive.endpoint_from_flag(
+                'certificates.available'))
 
-                self.remove_state('ssl.requested')
-                self.set_state('ssl.enabled', True)
-            else:
-                self.set_state('ssl.enabled', False)
-        amqp_ssl = relations.endpoint_from_flag('amqp.available.ssl')
+    def configure_tls(self, certificates_interface=None):
+        """Write out TLS certificate data.
+
+        The reactive handler counterpart in ``layer-openstack`` will make
+        sure this helper is called when certificate data is available or
+        changed.
+
+        Note that if your charm uses the OpenStackCharm base class directly
+        and want to write out client/server certificate and key data you will
+        need to override this method and call configure_cert() with a path
+        argument appropriate for the service you are implementing a charm
+        for.
+
+        :param certificates_interface: A certificates relation
+        :type certificates_interface: Option[None, TlsRequires(Endpoint)]
+        :returns: List of certificate data as returned by get_certs_and_keys()
+        :rtype: List[Dict[str,str]]
+        """
+        tls_objects = self.get_certs_and_keys(
+            certificates_interface=certificates_interface)
+        if tls_objects:
+            # NOTE(fnordahl): regardless of changes to data we may
+            # have other changes we want to apply to the files.
+            # (e.g. ownership, permissions)
+            #
+            # Also note that update_central_cacerts() used in configure_ca()
+            # has it's own logic to detect data changes.
+            #
+            # LP: #1821314
+            for tls_object in tls_objects:
+                self.configure_ca(tls_object['ca'])
+
+        # NOTE(fnordahl): Retaining for in-transition compability with current
+        # usage.  The RabbitMQ TLS configuration should be initiated by the
+        # layer code.  Given we have non-API services consuming RabbitMQ we
+        # should probably move the RabbitMQ reactive handling code down to the
+        # ``openstack`` layer too.
+        #
+        # Will address this in separate review.  LP: #1841912
+        amqp_ssl = reactive.endpoint_from_flag('amqp.available.ssl')
         if amqp_ssl:
             self.configure_rabbit_cert(amqp_ssl)
+
+        return tls_objects
 
     def configure_rabbit_cert(self, rabbit_interface):
         if not os.path.exists(self.rabbit_client_cert_dir):
@@ -397,7 +458,7 @@ class OpenStackCharm(BaseOpenStackCharm,
 
     @contextlib.contextmanager
     def update_central_cacerts(self, cert_files, update_certs=True):
-        """Update Central certs info if once of cert_files changes"""
+        """Update Central certs info if one of cert_files changes"""
         checksums = {path: ch_host.path_hash(path)
                      for path in cert_files}
         yield
@@ -411,7 +472,8 @@ class OpenStackCharm(BaseOpenStackCharm,
         """Write Certificate Authority certificate"""
         # TODO(jamespage): work this out for snap based installations
         cert_file = (
-            '/usr/local/share/ca-certificates/keystone_juju_ca_cert.crt')
+            '/usr/local/share/ca-certificates/{}.crt'
+            .format(self.service_name))
         if ca_cert:
             with self.update_central_cacerts([cert_file], update_certs):
                 with open(cert_file, 'w') as crt:
@@ -441,6 +503,10 @@ class OpenStackCharm(BaseOpenStackCharm,
             ca_certs = SNAP_CA_CERTS.format(self.primary_snap)
             ch_host.mkdir(os.path.dirname(ca_certs))
             shutil.copyfile(SYSTEM_CA_CERTS, ca_certs)
+
+    @property
+    def service_name(self):
+        return hookenv.service_name()
 
 
 class OpenStackAPICharm(OpenStackCharm):
@@ -553,12 +619,6 @@ class OpenStackAPICharm(OpenStackCharm):
         raise RuntimeError(
             "get_database_setup() needs to be overridden in the derived "
             "class")
-
-    def get_certificate_requests(self):
-        """Return a dict of certificate requests
-        """
-        return cert_utils.get_certificate_request(
-            json_encode=False).get('cert_requests', {})
 
     @property
     def all_packages(self):
@@ -804,61 +864,51 @@ class HAOpenStackCharm(OpenStackAPICharm):
         if restart:
             ch_host.service_restart('apache2')
 
-    def get_default_cn(self):
-        """Return the default Canonical Name to be used for SSL setup
+    def configure_tls(self, certificates_interface=None):
+        """Configure TLS certificates and keys
 
-        @returns 'canonical_name'
+        NOTE(AJK): This function tries to minimise the work it does,
+        particularly with writing files and restarting apache.
+
+        :param certificates_interface: certificates relation endpoint
+        :type certificates_interface: TlsRequires(Endpoint) object
         """
-        return os_ip.resolve_address(endpoint_type=os_ip.INTERNAL)
+        # this takes care of writing out the CA certificate
+        tls_objects = super().configure_tls(
+            certificates_interface=certificates_interface)
+        with is_data_changed(
+                'configure_ssl.ssl_objects', tls_objects) as changed:
+            if tls_objects:
+                # NOTE(fnordahl): regardless of changes to data we may
+                # have other changes we want to apply to the files.
+                # (e.g. ownership, permissions)
+                #
+                # Also note that c-h.host.write_file used in configure_cert()
+                # has it's own logic to detect data changes.
+                #
+                # LP: #1821314
+                for tls_object in tls_objects:
+                    self.set_state('ssl.requested', True)
+                    if os_utils.snap_install_requested():
+                        path = ('/var/snap/{snap_name}/common/etc/nginx/ssl'
+                                .format(snap_name=self.primary_snap))
+                    else:
+                        path = os.path.join('/etc/apache2/ssl/', self.name)
+                    self.configure_cert(
+                        path,
+                        tls_object['cert'],
+                        tls_object['key'],
+                        cn=tls_object['cn'])
+                    cert_utils.create_ip_cert_links(
+                        os.path.join('/etc/apache2/ssl/', self.name))
+                    if not os_utils.snap_install_requested() and changed:
+                        self.configure_apache()
+                        ch_host.service_reload('apache2')
 
-    def configure_cert(self, cert, key, cn=None):
-        """Configure service SSL cert and key
-
-        Write out service SSL certificate and key for Apache.
-
-        @param cert string SSL Certificate
-        @param key string SSL Key
-        @param cn string Canonical name for service
-        """
-        if os_utils.snap_install_requested():
-            ssl_dir = '/var/snap/{snap_name}/common/etc/nginx/ssl'.format(
-                snap_name=self.primary_snap)
-        else:
-            ssl_dir = os.path.join('/etc/apache2/ssl/', self.name)
-
-        if not cn:
-            cn = self.get_default_cn()
-
-        ch_host.mkdir(path=ssl_dir)
-        if cn:
-            cert_filename = 'cert_{}'.format(cn)
-            key_filename = 'key_{}'.format(cn)
-        else:
-            cert_filename = 'cert'
-            key_filename = 'key'
-
-        ch_host.write_file(path=os.path.join(ssl_dir, cert_filename),
-                           content=cert.encode('utf-8'), group=self.group,
-                           perms=0o640)
-        ch_host.write_file(path=os.path.join(ssl_dir, key_filename),
-                           content=key.encode('utf-8'), group=self.group,
-                           perms=0o640)
-
-    def get_local_addresses(self):
-        """Return list of local addresses on each configured network
-
-        For each network return an address the local unit has on that network
-        if one exists.
-
-        @returns [private_addr, admin_addr, public_addr, ...]
-        """
-        addresses = [
-            os_utils.get_host_ip(hookenv.unit_get('private-address'))]
-        for addr_type in os_ip.ADDRESS_MAP.keys():
-            laddr = os_ip.resolve_address(endpoint_type=addr_type)
-            if laddr:
-                addresses.append(laddr)
-        return sorted(list(set(addresses)))
+                    self.remove_state('ssl.requested')
+                    self.set_state('ssl.enabled', True)
+            else:
+                self.set_state('ssl.enabled', False)
 
     def update_peers(self, cluster):
         """Update peers in the cluster about the addresses that this unit
@@ -938,15 +988,11 @@ class CinderStoragePluginCharm(OpenStackCharm):
     def stateless(self):
         raise NotImplementedError()
 
-    @property
-    def service_name(self):
-        return hookenv.service_name()
-
     def cinder_configuration(self):
         raise NotImplementedError()
 
     def send_storage_backend_data(self):
-        cbend = relations.endpoint_from_flag('storage-backend.connected')
+        cbend = reactive.endpoint_from_flag('storage-backend.connected')
         cbend.configure_principal(
             backend_name=self.service_name,
             configuration=self.cinder_configuration(),
