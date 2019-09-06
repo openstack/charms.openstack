@@ -98,13 +98,13 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.remove_state.assert_called_once_with('hello')
 
     def test_configure_source(self):
-        self.patch_object(chm.os_utils,
-                          'configure_installation_source',
-                          name='cis')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
+        self.patch_object(chm_core.os_utils, 'get_source_and_pgp_key')
         self.patch_target('config', new={'openstack-origin': 'an-origin'})
+        self.get_source_and_pgp_key.return_value = ("an-origin", None)
         self.target.configure_source()
-        self.cis.assert_called_once_with('an-origin')
+        self.add_source.assert_called_once_with('an-origin', None)
         self.apt_update.assert_called_once_with(fatal=True)
 
     def test_region(self):
@@ -691,6 +691,8 @@ class TestOpenStackAPICharm(BaseOpenStackCharmTest):
     def test_upgrade_charm(self):
         self.patch_target('setup_token_cache')
         self.patch_target('update_api_ports')
+        self.patch_object(chm_core.os_utils, 'get_source_and_pgp_key')
+        self.get_source_and_pgp_key.return_value = ("an-origin", None)
         self.target.upgrade_charm()
         self.target.setup_token_cache.assert_called_once_with()
 

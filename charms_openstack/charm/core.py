@@ -640,8 +640,9 @@ class BaseOpenStackCharmActions(object):
         This configures the installation source for deb packages and then
         updates the packages list on the unit.
         """
-        os_utils.configure_installation_source(
+        source, key = os_utils.get_source_and_pgp_key(
             self.config[self.source_config_key])
+        fetch.add_source(source, key)
         fetch.apt_update(fatal=True)
 
     @property
@@ -953,7 +954,9 @@ class BaseOpenStackCharmActions(object):
                     mode=self.snap_mode),
                 refresh=True)
 
-        os_utils.configure_installation_source(new_src)
+        source, key = os_utils.get_source_and_pgp_key(
+            self.config[self.source_config_key])
+        fetch.add_source(source, key)
         fetch.apt_update()
 
         dpkg_opts = [
