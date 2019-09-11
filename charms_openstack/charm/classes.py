@@ -360,6 +360,9 @@ class OpenStackCharm(BaseOpenStackCharm,
             reqs = certificates_interface.get_batch_requests()
             ca = certificates_interface.get_ca()
             chain = certificates_interface.get_chain()
+            if ca and chain:
+                # allow for PKI-based inter-service authentication
+                ca += os.linesep + chain
             for cn, data in sorted(reqs.items()):
                 cert = data['cert']
                 if chain:
