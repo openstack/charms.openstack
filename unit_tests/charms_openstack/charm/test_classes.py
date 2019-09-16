@@ -434,23 +434,27 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                           return_value=False)
         expect = [
             {
-                'ca': 'CA\nCHAIN',
+                'ca': 'CA',
                 'cert': 'admin_cert\nCHAIN',
+                'chain': 'CHAIN',
                 'cn': 'admin_addr',
                 'key': 'admin_key'},
             {
-                'ca': 'CA\nCHAIN',
+                'ca': 'CA',
                 'cert': 'int_cert\nCHAIN',
+                'chain': 'CHAIN',
                 'cn': 'int_addr',
                 'key': 'int_key'},
             {
-                'ca': 'CA\nCHAIN',
+                'ca': 'CA',
                 'cert': 'priv_cert\nCHAIN',
+                'chain': 'CHAIN',
                 'cn': 'priv_addr',
                 'key': 'priv_key'},
             {
-                'ca': 'CA\nCHAIN',
+                'ca': 'CA',
                 'cert': 'pub_cert\nCHAIN',
+                'chain': 'CHAIN',
                 'cn': 'pub_addr',
                 'key': 'pub_key'},
         ]
@@ -508,13 +512,16 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 'cert': 'cert2',
                 'key': 'key2',
                 'ca': 'ca2',
+                'chain': 'chain2',
                 'cn': 'cn2'}]
         self.patch_target('get_certs_and_keys', return_value=tls_objs)
         self.patch_target('configure_ca')
         self.patch('charms.reactive.bus.set_state', name='set_state')
         ca_calls = [
             mock.call('ca1'),
-            mock.call('ca2')]
+            mock.call('ca2'),
+            mock.call('chain2', postfix='chain'),
+        ]
         self.target.configure_tls()
         self.configure_ca.assert_has_calls(ca_calls)
 

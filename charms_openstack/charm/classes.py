@@ -360,9 +360,6 @@ class OpenStackCharm(BaseOpenStackCharm,
             reqs = certificates_interface.get_batch_requests()
             ca = certificates_interface.get_ca()
             chain = certificates_interface.get_chain()
-            if ca and chain:
-                # allow for PKI-based inter-service authentication
-                ca += os.linesep + chain
             for cn, data in sorted(reqs.items()):
                 cert = data['cert']
                 if chain:
@@ -371,6 +368,7 @@ class OpenStackCharm(BaseOpenStackCharm,
                     'key': data['key'],
                     'cert': cert,
                     'ca': ca,
+                    'chain': chain,
                     'cn': cn})
             return keys_and_certs
         else:
@@ -439,6 +437,8 @@ class OpenStackCharm(BaseOpenStackCharm,
             # LP: #1821314
             for tls_object in tls_objects:
                 self.configure_ca(tls_object['ca'])
+                if 'chain' in tls_object:
+                    self.configure_ca(tls_object['chain'], postfix='chain')
 
         # NOTE(fnordahl): Retaining for in-transition compability with current
         # usage.  The RabbitMQ TLS configuration should be initiated by the
@@ -471,12 +471,15 @@ class OpenStackCharm(BaseOpenStackCharm,
             self.run_update_certs()
             self.install_snap_certs()
 
-    def configure_ca(self, ca_cert, update_certs=True):
+    def configure_ca(self, ca_cert, update_certs=True, postfix=''):
         """Write Certificate Authority certificate"""
         # TODO(jamespage): work this out for snap based installations
+        name = self.service_name
+        if postfix:
+            name = '-'.join((name, postfix))
         cert_file = (
             '/usr/local/share/ca-certificates/{}.crt'
-            .format(self.service_name))
+            .format(name))
         if ca_cert:
             with self.update_central_cacerts([cert_file], update_certs):
                 with open(cert_file, 'w') as crt:
