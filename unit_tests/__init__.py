@@ -35,6 +35,8 @@ sys.modules['charmhelpers.contrib.openstack.cert_utils'] = (
     charmhelpers.contrib.openstack.cert_utils)
 sys.modules['charmhelpers.contrib.openstack.utils'] = (
     charmhelpers.contrib.openstack.utils)
+sys.modules['charmhelpers.contrib.openstack.policyd'] = (
+    charmhelpers.contrib.openstack.policyd)
 sys.modules['charmhelpers.contrib.openstack.templating'] = (
     charmhelpers.contrib.openstack.templating)
 sys.modules['charmhelpers.contrib.openstack.context'] = (

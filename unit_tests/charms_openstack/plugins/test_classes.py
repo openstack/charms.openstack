@@ -191,3 +191,101 @@ class TestCephCharm(BaseOpenStackCharmTest):
         self.target.install()
         self.target.configure_source.assert_called()
         self.check_output.assert_called()
+
+
+class MockCharmForPolicydOverrid(object):
+
+    def __init__(self, *args, **kwargs):
+        self._restart_services = False
+        self._install = False
+        self._upgrade_charm = False
+        self._config_changed = False
+        self.release = 'mitaka'
+        self.policyd_service_name = 'aservice'
+        super().__init__(*args, **kwargs)
+
+    def restart_services(self):
+        self._restart_services = True
+
+    def install(self):
+        self._install = True
+
+    def upgrade_charm(self):
+        self._upgrade_charm = True
+
+    def config_changed(self):
+        self._config_changed = True
+
+
+class FakeConsumingPolicydOverride(cpl.PolicydOverridePlugin,
+                                   MockCharmForPolicydOverrid):
+
+    pass
+
+
+class TestPolicydOverridePlugin(BaseOpenStackCharmTest):
+
+    def setUp(self):
+        super(TestPolicydOverridePlugin, self).setUp(
+            FakeConsumingPolicydOverride, TEST_CONFIG)
+
+    def test__policyd_function_args_no_defines(self):
+        args, kwargs = self.target._policyd_function_args()
+        self.assertEqual(args, ['mitaka', 'aservice'])
+        self.assertEqual(kwargs, {
+            'blacklist_paths': None,
+            'blacklist_keys': None,
+            'template_function': None,
+            'restart_handler': None
+        })
+
+    def test__policyd_function_args_with_defines(self):
+        def my_template_fn(s):
+            return "done"
+
+        self.target.policyd_blacklist_paths = ['p1']
+        self.target.policyd_blacklist_keys = ['k1']
+        self.target.policyd_template_function = my_template_fn
+        self.target.policyd_restart_on_change = True
+        args, kwargs = self.target._policyd_function_args()
+        self.assertEqual(args, ['mitaka', 'aservice'])
+        self.assertEqual(kwargs, {
+            'blacklist_paths': ['p1'],
+            'blacklist_keys': ['k1'],
+            'template_function': my_template_fn,
+            'restart_handler': self.target.restart_services
+        })
+
+    def test__maybe_policyd_overrides(self):
+        self.patch_target('_policyd_function_args',
+                          return_value=(["args"], {"kwargs": 1}))
+        self.patch_object(cpl.ch_policyd,
+                          'maybe_do_policyd_overrides',
+                          name='mock_policyd_call')
+        self.target._maybe_policyd_overrides()
+        self.mock_policyd_call.assert_called_once_with(
+            "args", kwargs=1)
+
+    def test_install_calls_policyd(self):
+        self.patch_target('_maybe_policyd_overrides')
+        self.target.install()
+        self.assertTrue(self.target._install)
+        self._maybe_policyd_overrides.assert_called_once_with()
+
+    def test_upgrade_charm_calls_policyd(self):
+        self.patch_target('_maybe_policyd_overrides')
+        self.target.upgrade_charm()
+        self.assertTrue(self.target._upgrade_charm)
+        self._maybe_policyd_overrides.assert_called_once_with()
+
+    def test_config_changed_calls_into_policyd_library(self):
+        self.patch_target('_policyd_function_args',
+                          return_value=(["args"], {"kwargs": 1}))
+        self.patch_object(cpl.ch_policyd,
+                          'maybe_do_policyd_overrides_on_config_changed',
+                          name='mock_policyd_call')
+        self.target.config_changed()
+        self.assertTrue(self.target._config_changed)
+        self._policyd_function_args.assert_called_once_with()
+        self.mock_policyd_call.assert_called_once_with(
+            "args", kwargs=1)

@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 
+import charmhelpers.contrib.openstack.policyd as os_policyd
 import charmhelpers.contrib.openstack.templating as os_templating
 import charmhelpers.contrib.openstack.utils as os_utils
 import charmhelpers.core.hookenv as hookenv
@@ -1080,11 +1081,23 @@ class BaseOpenStackCharmAssessStatus(object):
         workload status in juju.
         """
         # set the application version when we set the status (always)
-        # NOTE(tinwood) this is not, strictly speaking, good code organisation,
-        # as the 'application_version' property is in the classes.py file.
-        # However, as this is ALWAYS a mixin on that class, we can get away
-        # with this.
+        # NOTE(ajkavanagh) this is not, strictly speaking, good code
+        # organisation, as the 'application_version' property is in the
+        # classes.py file.  However, as this is ALWAYS a mixin on that class,
+        # we can get away with this.
         hookenv.application_version_set(self.application_version)
+
+        # NOTE(ajkavanagh) we check for the Policyd override here, even though
+        # most of the work is done in the plugin class PolicydOverridePlugin.
+        # This is a consequence of how the assess status is implemented; we
+        # simply have to get the prefix sorted here and there's no easy way to
+        # get it in without a complete refactor.
+        if self.config.get(os_policyd.POLICYD_CONFIG_NAME, False):
+            os_policyd_prefix = "{} ".format(
+                os_policyd.policyd_status_message_prefix())
+        else:
+            os_policyd_prefix = ""
+
         for f in [self.check_if_paused,
                   self.custom_assess_status_check,
                   self.check_interfaces,
@@ -1092,10 +1105,10 @@ class BaseOpenStackCharmAssessStatus(object):
                   self.check_services_running]:
             state, message = f()
             if state is not None:
-                hookenv.status_set(state, message)
+                hookenv.status_set(state, os_policyd_prefix + message)
                 return
         # No state was particularly set, so assume the unit is active
-        hookenv.status_set('active', 'Unit is ready')
+        hookenv.status_set('active', os_policyd_prefix + 'Unit is ready')
 
     def assess_status(self):
         """This is a deferring version of _assess_status that only runs during

@@ -30,6 +30,8 @@ def mock_charmhelpers():
         charmhelpers.contrib.openstack.cert_utils)
     sys.modules['charmhelpers.contrib.openstack.templating'] = (
         charmhelpers.contrib.openstack.templating)
+    sys.modules['charmhelpers.contrib.openstack.policyd'] = (
+        charmhelpers.contrib.openstack.policyd)
     sys.modules['charmhelpers.contrib.network'] = charmhelpers.contrib.network
     sys.modules['charmhelpers.contrib.network.ip'] = (
         charmhelpers.contrib.network.ip)

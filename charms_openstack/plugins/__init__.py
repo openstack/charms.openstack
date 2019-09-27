@@ -19,10 +19,12 @@ from charms_openstack.plugins.adapters import (
 from charms_openstack.plugins.classes import (
     BaseOpenStackCephCharm,
     CephCharm,
+    PolicydOverridePlugin,
 )
 
 __all__ = (
     "BaseOpenStackCephCharm",
     "CephCharm",
     "CephRelationAdapter",
+    "PolicydOverridePlugin",
 )
