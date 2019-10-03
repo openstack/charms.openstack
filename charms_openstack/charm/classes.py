@@ -101,6 +101,13 @@ class OpenStackCharm(BaseOpenStackCharm,
     # }
     restart_map = {}
 
+    # A dictionary of:
+    # {
+    #     '/etc/init.d/executable': 0o755,
+    #     '/var/lib/super-secret-file': 0o600,
+    # }
+    permission_override_map = {}
+
     # The list of required services that are checked for assess_status
     # e.g. required_relations = ['identity-service', 'shared-db']
     required_relations = []

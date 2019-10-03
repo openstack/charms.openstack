@@ -777,7 +777,7 @@ class BaseOpenStackCharmActions(object):
                     context=adapters_instance,
                     config_template=config_template,
                     group=self.group,
-                    perms=0o640,
+                    perms=self.permission_override_map.get(conf) or 0o640,
                 )
 
     def render_with_interfaces(self, interfaces, configs=None):

@@ -671,7 +671,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 context=mock.ANY,
                 config_template=None,
                 group='root',
-                perms=0o640,
+                perms=0o755,
             ),
             mock.call(
                 source='path4',
@@ -738,7 +738,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 context=mock.ANY,
                 config_template=None,
                 group='root',
-                perms=0o640,
+                perms=0o755,
             ),
             mock.call(
                 source='path4',

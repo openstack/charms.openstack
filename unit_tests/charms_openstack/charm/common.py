@@ -50,6 +50,9 @@ class MyOpenStackCharm(chm_classes.OpenStackCharm):
         'path3': ['s3'],
         'path4': ['s2', 's4'],
     }
+    permission_override_map = {
+        'path3': 0o755,
+    }
     required_relations = []
     sync_cmd = ['my-sync-cmd', 'param1']
     services = ['my-default-service', 'my-second-service']
