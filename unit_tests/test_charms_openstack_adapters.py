@@ -409,6 +409,9 @@ class TestDatabaseRelationAdapter(unittest.TestCase):
             self.assertEqual(
                 db.get_uri('x'),
                 'mysql://username1x:password1x@host1/database1x')
+            self.assertEqual(
+                db.get_password('x'),
+                'password1x')
             # test the ssl feature of the base class
             db = SSLDatabaseRelationAdapter(fake)
             self.assertEqual(
@@ -427,6 +430,9 @@ class TestDatabaseRelationAdapter(unittest.TestCase):
             self.assertEqual(
                 db.get_uri('x'),
                 'mysql+pymysql://username1x:password1x@host1/database1x')
+            self.assertEqual(
+                db.get_password('x'),
+                'password1x')
             # test the ssl feature of the base class
             db = SSLDatabaseRelationAdapter(fake)
             self.assertEqual(
