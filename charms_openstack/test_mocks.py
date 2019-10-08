@@ -62,5 +62,6 @@ def mock_charmhelpers():
         'pike',
         'queens',
         'rocky',
+        'stein',
         'train',
     )
