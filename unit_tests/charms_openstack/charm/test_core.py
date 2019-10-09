@@ -894,8 +894,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_target('config',
                           new={'openstack-origin': 'cloud:natty-kilo'})
         self.patch_object(chm_core.os_utils, 'get_os_codename_install_source')
+        self.patch_object(chm_core.os_utils, 'get_source_and_pgp_key')
         self.patch_object(chm_core.hookenv, 'log')
-        self.patch_object(chm_core.os_utils, 'configure_installation_source')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_upgrade')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_install')
@@ -906,9 +907,10 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                           return_value=['python-notinstalled'])
         self.patch_object(chm_core.os_utils, 'snap_install_requested',
                           return_value=False)
+        self.get_source_and_pgp_key.return_value = ('cloud:natty-kilo', None)
         self.target.do_openstack_pkg_upgrade()
-        self.configure_installation_source.assert_called_once_with(
-            'cloud:natty-kilo')
+        self.add_source.assert_called_once_with(
+            'cloud:natty-kilo', None)
         self.apt_update.assert_called_once_with()
         self.apt_upgrade.assert_called_once_with(
             dist=True, fatal=True,
@@ -933,7 +935,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                           new={'openstack-origin': 'snap:ocata/stable'})
         self.patch_object(chm_core.os_utils, 'get_os_codename_install_source')
         self.patch_object(chm_core.hookenv, 'log')
-        self.patch_object(chm_core.os_utils, 'configure_installation_source')
+        self.patch_object(chm_core.os_utils, 'get_source_and_pgp_key')
+        self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_upgrade')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_install')
@@ -943,9 +946,10 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.os_utils,
                           'get_snaps_install_info_from_origin',
                           return_value=SNAP_MAP)
+        self.get_source_and_pgp_key.return_value = ('snap:ocata/stable', None)
         self.target.do_openstack_pkg_upgrade()
-        self.configure_installation_source.assert_called_once_with(
-            'snap:ocata/stable')
+        self.add_source.assert_called_once_with(
+            'snap:ocata/stable', None)
         self.apt_update.assert_called_once_with()
         self.apt_upgrade.assert_called_once_with(
             dist=True, fatal=True,
