@@ -444,6 +444,9 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
     interface_type = "database"
 
     def __init__(self, relation):
+        # Note: These accessors need closer inspection and potentially need
+        # to be removed. The actual interface implements them as methods with
+        # parameters. See bug: https://bugs.launchpad.net/bugs/1848216.
         add_accessors = ['password', 'username', 'database']
         super(DatabaseRelationAdapter, self).__init__(relation, add_accessors)
         self.config = hookenv.config()
@@ -458,6 +461,11 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
     @property
     def type(self):
         return 'mysql'
+
+    def get_password(self, prefix=None):
+        if prefix:
+            return self.relation.password(prefix=prefix)
+        return self.password
 
     def get_uri(self, prefix=None):
         driver = 'mysql'
