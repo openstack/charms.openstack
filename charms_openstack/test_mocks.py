@@ -32,6 +32,12 @@ def mock_charmhelpers():
         charmhelpers.contrib.openstack.templating)
     sys.modules['charmhelpers.contrib.openstack.policyd'] = (
         charmhelpers.contrib.openstack.policyd)
+    sys.modules['charmhelpers.contrib.storage'] = (
+        charmhelpers.contrib.storage)
+    sys.modules['charmhelpers.contrib.storage.linux'] = (
+        charmhelpers.contrib.storage.linux)
+    sys.modules['charmhelpers.contrib.storage.linux.ceph'] = (
+        charmhelpers.contrib.storage.linux.ceph)
     sys.modules['charmhelpers.contrib.network'] = charmhelpers.contrib.network
     sys.modules['charmhelpers.contrib.network.ip'] = (
         charmhelpers.contrib.network.ip)
