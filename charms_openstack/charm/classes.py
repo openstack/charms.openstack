@@ -238,19 +238,25 @@ class OpenStackCharm(BaseOpenStackCharm,
 
     def pause(self):
         """Pause the charms services."""
+        reactive.set_flag("charm.paused")
         self.run_pause_or_resume('pause')
 
     def resume(self):
         """Resume the charms services."""
+        reactive.clear_flag("charm.paused")
         self.run_pause_or_resume('resume')
 
     def series_upgrade_prepare(self):
         """Prepare to upgrade series"""
+        reactive.set_flag("charm.series-upgrading")
+        reactive.set_flag("charm.paused")
         os_utils.set_unit_upgrading()
         self.run_pause_or_resume('pause')
 
     def series_upgrade_complete(self):
         """Prepare to upgrade series"""
+        reactive.clear_flag("charm.series-upgrading")
+        reactive.clear_flag("charm.paused")
         os_utils.clear_unit_paused()
         os_utils.clear_unit_upgrading()
         self.run_pause_or_resume('resume')
