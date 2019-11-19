@@ -44,6 +44,26 @@ class TestBus(unittest.TestCase):
                 '/x/unit-aodh-1/charm/lib/charm/openstack/aodh.py')]
         _register_handlers_from_file.assert_has_calls(expect_calls)
 
+    @mock.patch.object(bus.os, 'walk')
+    @mock.patch.object(bus, '_register_handlers_from_file')
+    @mock.patch('charmhelpers.core.hookenv.charm_dir')
+    def test_discover_search_path(self, charm_dir,
+                                  _register_handlers_from_file, walk):
+        os.walk.return_value = [(
+            '/x/unit-aodh-1/charm/lib/charms',
+            ['__pycache__'],
+            ['__init__.py', 'aodh.py'])]
+
+        bus.discover(search_path='/x/unit-aodh-1/charm/lib/charms')
+        expect_calls = [
+            mock.call(
+                '/x/unit-aodh-1/charm/lib',
+                '/x/unit-aodh-1/charm/lib/charms/__init__.py'),
+            mock.call(
+                '/x/unit-aodh-1/charm/lib',
+                '/x/unit-aodh-1/charm/lib/charms/aodh.py')]
+        _register_handlers_from_file.assert_has_calls(expect_calls)
+
     @mock.patch.object(bus.importlib, 'import_module')
     def test_load_module(self, import_module):
         import_module.side_effect = lambda x: x

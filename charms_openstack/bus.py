@@ -21,7 +21,7 @@ import charmhelpers.core.hookenv as hookenv
 # Code below is based on charms.reactive.bus
 
 
-def discover():
+def discover(search_path=None):
     """Discover Openstack handlers based on convention.
 
     Handlers will be loaded from the following directory and its
@@ -30,10 +30,14 @@ def discover():
       * ``$CHARM_DIR/lib/charm/openstack``
 
     The Python files will be imported and decorated functions registered.
+
+    :param search_path: Override path to search for handlers.
+    :type search_path: Optional[str]
     """
-    search_path = os.path.join(
-        hookenv.charm_dir(), 'lib', 'charm', 'openstack')
-    base_path = os.path.join(hookenv.charm_dir(), 'lib', 'charm')
+    if not search_path:
+        search_path = os.path.join(
+            hookenv.charm_dir(), 'lib', 'charm', 'openstack')
+    base_path = os.path.dirname(search_path)
     for dirpath, dirnames, filenames in os.walk(search_path):
         for filename in filenames:
             filepath = os.path.join(dirpath, filename)
