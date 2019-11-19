@@ -1070,6 +1070,7 @@ class BaseOpenStackCharmAssessStatus(object):
          3. Check if the interfaces are all present (using the states that are
             set by each interface as it comes 'live'.
          4. Check that services that should be running are running.
+         5. Do a custom_assess_status_last_check() check.
 
         Each sub-function determins what checks are taking place.
 
@@ -1105,7 +1106,8 @@ class BaseOpenStackCharmAssessStatus(object):
                   self.custom_assess_status_check,
                   self.check_interfaces,
                   self.check_mandatory_config,
-                  self.check_services_running]:
+                  self.check_services_running,
+                  self.custom_assess_status_last_check]:
             state, message = f()
             if state is not None:
                 hookenv.status_set(state, os_policyd_prefix + message)
@@ -1130,6 +1132,25 @@ class BaseOpenStackCharmAssessStatus(object):
     def custom_assess_status_check(self):
         """Override this function in a derived class if there are any other
         status checks that need to be done that aren't about relations, etc.
+
+        Return (None, None) if the status is okay (i.e. the unit is active).
+        Return ('active', message) do shortcut and force the unit to the active
+        status.
+        Return (other_status, message) to set the status to desired state.
+
+        :param last_check: Whether we are last in the assess_status sequence
+        :type last_check: bool
+        :returns: None, None - no action in this function.
+        """
+        return None, None
+
+    def custom_assess_status_last_check(self):
+        """Override this function in a derived class if there are any other
+        status checks that need to be done that should be done after all other
+        checks done by this framework.
+
+        This is a good place to put additional information about the running
+        service, such as cluster status etc.
 
         Return (None, None) if the status is okay (i.e. the unit is active).
         Return ('active', message) do shortcut and force the unit to the active
