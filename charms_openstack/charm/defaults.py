@@ -16,6 +16,7 @@ ALLOWED_DEFAULT_HANDLERS = [
     'identity-service.connected',
     'identity-service.available',
     'config.changed',
+    'config.rendered',
     'charm.default-select-release',
     'charm.default-select-package-type',
     'update-status',
@@ -236,3 +237,10 @@ def make_default_update_status_handler():
     or hooks directory.
     """
     reactive.set_state('charms.openstack.do-default-update-status')
+
+
+@_map_default_handler('config.rendered')
+def make_default_config_rendered_handler():
+    """Set the default config.rendered state so that the reactive handler runs.
+    """
+    reactive.set_state('charms.openstack.do-default-config-rendered')

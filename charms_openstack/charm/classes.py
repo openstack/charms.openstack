@@ -215,26 +215,12 @@ class OpenStackCharm(BaseOpenStackCharm,
                 version = os_utils.os_release(self.version_package)
         return version
 
-    def haproxy_enabled(self):
-        """Determine if haproxy is fronting the services
-
-        The OpenStackCharm class may be used for subordinates or charms which
-        do not use haproxy. This method is overriden in the HAOpenStackCharm
-        class where haproxy is utilized.
-
-        @return None
-        """
-        pass
-
     def run_pause_or_resume(self, action):
         """Helper to enable pause/resume action to be processed."""
         actions = {
             'pause': os_utils.pause_unit,
             'resume': os_utils.resume_unit}
-        pause_services = self.services[:]
-        if self.haproxy_enabled():
-            pause_services.append('haproxy')
-        actions[action](self.assess_status, services=pause_services)
+        actions[action](self.assess_status, services=self.full_service_list)
 
     def pause(self):
         """Pause the charms services."""
@@ -261,13 +247,31 @@ class OpenStackCharm(BaseOpenStackCharm,
         os_utils.clear_unit_upgrading()
         self.run_pause_or_resume('resume')
 
+    def enable_services(self):
+        """Enable services
+
+        This method is for charm managed enabling of previously disabled
+        services where the end user is not involved nor informed about the
+        activity.
+
+        Use the pause and resume methods for end user facing activities.
+        """
+        os_utils.manage_payload_services('resume', self.full_service_list)
+
+    def disable_services(self):
+        """Disable services
+
+        This method is for charm managed disabling of services where the end
+        user is not involved nor informed about the activity.
+
+        Use the pause and resume methods for end user facing activities.
+        """
+        os_utils.manage_payload_services('pause', self.full_service_list)
+
     def restart_services(self):
         """Restart services"""
-        services = self.services[:]
-        if self.haproxy_enabled():
-            services.append('haproxy')
-        os_utils.manage_payload_services('stop', services)
-        os_utils.manage_payload_services('start', services)
+        os_utils.manage_payload_services('stop', self.full_service_list)
+        os_utils.manage_payload_services('start', self.full_service_list)
 
     def get_certificate_requests(self):
         """Return a dict of certificate requests"""
@@ -527,6 +531,18 @@ class OpenStackCharm(BaseOpenStackCharm,
     def service_name(self):
         return hookenv.service_name()
 
+    @property
+    def full_service_list(self):
+        """Copy of full list of services managed
+
+        Including those automatically added by framework that charm author may
+        have no knowledge about.
+
+        :returns: Full list of services managed by charm
+        :rtype: List[str]
+        """
+        return self.services[:]
+
 
 class OpenStackAPICharm(OpenStackCharm):
     """The base class for API OS charms -- this just bakes in the default
@@ -670,6 +686,21 @@ class OpenStackAPICharm(OpenStackCharm):
         if self.enable_memcache():
             _restart_map[self.MEMCACHE_CONF] = ['memcached']
         return _restart_map
+
+    @property
+    def full_service_list(self):
+        """Copy of full list of services managed
+
+        Including those automatically added by framework that charm author may
+        have no knowledge about.
+
+        :returns: Full list of services managed by charm
+        :rtype: List[str]
+        """
+        services = super().full_service_list
+        if self.enable_memcache():
+            services.append('memcached')
+        return services
 
 
 class HAOpenStackCharm(OpenStackAPICharm):
@@ -952,6 +983,21 @@ class HAOpenStackCharm(OpenStackAPICharm):
                     cluster.set_address(
                         os_ip.ADDRESS_MAP[addr_type]['binding'],
                         laddr)
+
+    @property
+    def full_service_list(self):
+        """Copy of full list of services managed
+
+        Including those automatically added by framework that charm author may
+        have no knowledge about.
+
+        :returns: Full list of services managed by charm
+        :rtype: List[str]
+        """
+        services = super().full_service_list
+        if self.haproxy_enabled():
+            services.append('haproxy')
+        return services
 
 
 class CinderStoragePluginCharm(OpenStackCharm):

@@ -307,19 +307,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.os_release.assert_called_once_with('p2')
 
     def test_restart_services(self):
-        self.patch_target('haproxy_enabled', return_value=False)
         self.patch_object(chm.os_utils, 'manage_payload_services')
         self.target.restart_services()
         svcs = ['svc1', 'sv2']
-        self.manage_payload_services.assert_has_calls([
-            mock.call('stop', svcs),
-            mock.call('start', svcs)])
-
-    def test_restart_services_haproxy(self):
-        self.patch_target('haproxy_enabled', return_value=True)
-        self.patch_object(chm.os_utils, 'manage_payload_services')
-        self.target.restart_services()
-        svcs = ['svc1', 'sv2', 'haproxy']
         self.manage_payload_services.assert_has_calls([
             mock.call('stop', svcs),
             mock.call('start', svcs)])
@@ -692,7 +682,12 @@ class TestCinderStoragePluginCharm(BaseOpenStackCharmTest):
 class TestOpenStackAPICharm(BaseOpenStackCharmTest):
 
     def setUp(self):
-        super(TestOpenStackAPICharm, self).setUp(chm.OpenStackAPICharm,
+        def make_open_stack_charm():
+            charm = chm.OpenStackAPICharm(['interface1', 'interface2'])
+            charm.services = ['svc1', 'sv2']
+            return charm
+
+        super(TestOpenStackAPICharm, self).setUp(make_open_stack_charm,
                                                  TEST_CONFIG)
 
     def test_upgrade_charm(self):
@@ -803,6 +798,14 @@ class TestOpenStackAPICharm(BaseOpenStackCharmTest):
         self.enable_memcache.return_value = False
         self.assertEqual(self.target.full_restart_map, base_restart_map)
 
+    def test_restart_services(self):
+        self.patch_object(chm.os_utils, 'manage_payload_services')
+        self.target.restart_services()
+        svcs = ['svc1', 'sv2', 'memcached']
+        self.manage_payload_services.assert_has_calls([
+            mock.call('stop', svcs),
+            mock.call('start', svcs)])
+
 
 class TestHAOpenStackCharm(BaseOpenStackCharmTest):
     # Note that this only tests the OpenStackCharm() class, which has not very
@@ -810,7 +813,12 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
     # many mocks, a separate test dervied charm class is used below.
 
     def setUp(self):
-        super(TestHAOpenStackCharm, self).setUp(chm.HAOpenStackCharm,
+        def make_open_stack_charm():
+            charm = chm.HAOpenStackCharm()
+            charm.services = ['svc1', 'sv2']
+            return charm
+
+        super(TestHAOpenStackCharm, self).setUp(make_open_stack_charm,
                                                 TEST_CONFIG)
 
     def test_all_packages(self):
@@ -859,6 +867,15 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
     def test_haproxy_enabled(self):
         self.patch_target('ha_resources', new=['haproxy'])
         self.assertTrue(self.target.haproxy_enabled())
+
+    def test_restart_services(self):
+        self.patch_target('haproxy_enabled', return_value=True)
+        self.patch_object(chm.os_utils, 'manage_payload_services')
+        self.target.restart_services()
+        svcs = ['svc1', 'sv2', 'memcached', 'haproxy']
+        self.manage_payload_services.assert_has_calls([
+            mock.call('stop', svcs),
+            mock.call('start', svcs)])
 
     def test__init__(self):
         # Note cls.setUpClass() creates an OpenStackCharm() instance
