@@ -314,6 +314,18 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             mock.call('stop', svcs),
             mock.call('start', svcs)])
 
+    def test_run_pause_or_resume(self):
+        self.patch_object(chm.os_utils, 'resume_unit')
+        self.patch_target('assess_status')
+        self.patch_object(
+            chm.ch_cluster,
+            'get_managed_services_and_ports',
+            return_value=(['s1'], []))
+        self.target.run_pause_or_resume('resume')
+        self.resume_unit.assert_called_once_with(
+            self.assess_status,
+            services=['s1'])
+
     def test_configure_cert(self):
         self.patch_object(chm.ch_host, 'mkdir')
         self.patch_object(chm.ch_host, 'write_file')

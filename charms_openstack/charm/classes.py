@@ -7,6 +7,7 @@ import shutil
 import string
 import subprocess
 
+import charmhelpers.contrib.hahelpers.cluster as ch_cluster
 import charmhelpers.contrib.network.ip as ch_ip
 import charmhelpers.contrib.openstack.utils as os_utils
 import charmhelpers.contrib.openstack.ha as os_ha
@@ -220,7 +221,10 @@ class OpenStackCharm(BaseOpenStackCharm,
         actions = {
             'pause': os_utils.pause_unit,
             'resume': os_utils.resume_unit}
-        actions[action](self.assess_status, services=self.full_service_list)
+        _services, _ = ch_cluster.get_managed_services_and_ports(
+            self.full_service_list,
+            [])
+        actions[action](self.assess_status, services=_services)
 
     def pause(self):
         """Pause the charms services."""

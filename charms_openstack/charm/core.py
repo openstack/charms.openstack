@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 
+import charmhelpers.contrib.hahelpers.cluster as ch_cluster
 import charmhelpers.contrib.openstack.policyd as os_policyd
 import charmhelpers.contrib.openstack.templating as os_templating
 import charmhelpers.contrib.openstack.utils as os_utils
@@ -1299,6 +1300,9 @@ class BaseOpenStackCharmAssessStatus(object):
         """
         # This returns either a None, None or a status, message if the service
         # is not running or the ports are not open.
+        _services, _ports = ch_cluster.get_managed_services_and_ports(
+            self.services,
+            self.ports_to_check(self.api_ports))
         return os_utils._ows_check_services_running(
-            services=self.services,
-            ports=self.ports_to_check(self.api_ports))
+            services=_services,
+            ports=_ports)

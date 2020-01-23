@@ -313,6 +313,14 @@ class TestBaseOpenStackCharmAssessStatus(BaseOpenStackCharmTest):
              'The following mandatory config is unset: mandconfig3'))
 
     def test_check_assess_status_check_services_running(self):
+        def _svc_and_ports(svc, ports):
+            svc.remove('my-second-service')
+            ports = [p+10 for p in ports]
+            return (svc, ports)
+        self.patch_object(
+            chm_core.ch_cluster,
+            'get_managed_services_and_ports',
+            side_effect=_svc_and_ports)
         # verify that the function calls _ows_check_services_running() with the
         # valid information
         self.patch_object(chm_core.os_utils, '_ows_check_services_running',
@@ -320,8 +328,8 @@ class TestBaseOpenStackCharmAssessStatus(BaseOpenStackCharmTest):
         status, message = self.target.check_services_running()
         self.assertEqual((status, message), ('active', 'that'))
         self._ows_check_services_running.assert_called_once_with(
-            services=['my-default-service', 'my-second-service'],
-            ports=[1, 2, 3, 1234, 2468, 3579])
+            services=['my-default-service'],
+            ports=[11, 12, 13, 1244, 2478, 3589])
 
     def test_check_ports_to_check(self):
         ports = {
