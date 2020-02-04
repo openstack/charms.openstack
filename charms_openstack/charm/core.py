@@ -631,8 +631,12 @@ class BaseOpenStackCharmActions(object):
         # AJK: we set this as charms can use it to detect installed state
         self.set_state('{}-installed'.format(self.name))
         self.update_api_ports()
-        hookenv.status_set('maintenance',
-                           'Installation complete - awaiting next status')
+        if packages:
+            # NOTE(fnordahl): Update status only if we actually performed
+            # package installation to avoid uneccessary status transitions.
+            # LP: #1861775
+            hookenv.status_set('maintenance',
+                               'Installation complete - awaiting next status')
 
     def configure_source(self):
         """Configure installation source using the config item

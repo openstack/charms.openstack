@@ -394,8 +394,8 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.hookenv, 'apt_install')
         self.patch_object(chm_core.subprocess,
                           'check_output', return_value=b'\n')
-        self.patch_object(chm_core.os_utils, 'snap_install_requested',
-                          return_value=True)
+        self.patch_object(chm_core.os_utils, 'snap_install_requested')
+        self.snap_install_requested.return_value = True
         self.patch_object(chm_core.os_utils, 'install_os_snaps')
         self.patch_object(chm_core.os_utils,
                           'get_snaps_install_info_from_origin',
@@ -416,6 +416,11 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             None,
             mode='jailmode'
         )
+        self.status_set.reset_mock()
+        self.fip.side_effect = lambda x: []
+        self.snap_install_requested.return_value = False
+        self.target.install()
+        self.assertFalse(self.status_set.called)
 
     def test_api_port(self):
         self.assertEqual(self.target.api_port('service1'), 1)
