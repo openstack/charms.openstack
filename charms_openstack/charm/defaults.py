@@ -3,6 +3,7 @@ import charmhelpers.core.unitdata as unitdata
 import charms.reactive as reactive
 
 from charms_openstack.charm.classes import OpenStackCharm
+from charms_openstack.charm.core import get_charm_instance
 from charms_openstack.charm.core import register_os_release_selector
 from charms_openstack.charm.core import register_package_type_selector
 from charms_openstack.charm.core import OPENSTACK_RELEASE_KEY
@@ -98,12 +99,21 @@ def make_default_select_release_handler():
         release_version = unitdata.kv().get(OPENSTACK_RELEASE_KEY, None)
         if release_version is None:
             try:
-                pkg = os_utils.get_installed_semantic_versioned_packages()[0]
-            except IndexError:
-                # A non-existent package will cause os_release to try other
-                # tactics for deriving the release.
-                pkg = 'dummy-package'
-            release_version = os_utils.os_release(pkg)
+                # First make an attempt of determining release from a charm
+                # instance defined package codename dictionary.
+                singleton = get_charm_instance()
+                release_version = singleton.get_os_codename_package(
+                    singleton.release_pkg, singleton.package_codenames)
+            except (AttributeError, ValueError):
+                try:
+                    pkgs = os_utils.get_installed_semantic_versioned_packages()
+                    pkg = pkgs[0]
+                except IndexError:
+                    # A non-existent package will cause os_release to try other
+                    # tactics for deriving the release.
+                    pkg = 'dummy-package'
+                release_version = os_utils.os_release(
+                    pkg, source_key=singleton.source_config_key)
             unitdata.kv().set(OPENSTACK_RELEASE_KEY, release_version)
         return release_version
 

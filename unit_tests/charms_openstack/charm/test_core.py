@@ -796,6 +796,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         with self.assertRaises(Exception):
             chm_core.BaseOpenStackCharm.get_os_codename_package(
                 'unknownpkg', codenames, fatal=True)
+        with self.assertRaises(ValueError):
+            chm_core.BaseOpenStackCharm.get_os_codename_package(
+                'unknownpkg', codenames, fatal=True)
 
     def test_get_os_version_package(self):
         self.patch_target('package_codenames')
