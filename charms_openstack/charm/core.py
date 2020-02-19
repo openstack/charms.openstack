@@ -475,8 +475,10 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
     def get_os_codename_package(package, codenames, fatal=True):
         """Derive OpenStack release codename from an installed package.
 
-        :param package: str Package name to lookup (ie. in apt cache)
-        :param codenames: dict of OrderedDict eg (not applicable for snap pkgs)
+        :param package: Package name to lookup (ie. in apt cache)
+        :type package: str
+        :param codenames: Map of package to (version, os_release) tuples.
+            Example:
             {
              'pkg1': collections.OrderedDict([
                  ('2', 'mitaka'),
@@ -487,8 +489,12 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
                  ('13.2', 'newton'),
                  ('14.7', 'ocata'), ]),
             }
-        :param fatal: bool Raise exception if pkg not installed
-        :returns: str OpenStack version name corresponding to package
+        :type codenames: Dict[str,collections.OrderedDict[Tuple(str,str)]]
+        :param fatal: Raise exception if pkg not installed
+        :type fatal: bool
+        :returns: OpenStack version name corresponding to package
+        :rtype: Optional[str]
+        :raises: AttributeError, ValueError
         """
         cache = fetch.apt_cache()
 
@@ -498,9 +504,10 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
             if not fatal:
                 return None
             # the package is unknown to the current apt cache.
-            e = ('Could not determine version of package with no installation '
-                 'candidate: {}'.format(package))
-            raise Exception(e)
+            e = ValueError(
+                'Could not determine version of package with no installation '
+                'candidate: {}'.format(package))
+            raise e
         if not pkg.current_ver:
             if not fatal:
                 return None

@@ -109,6 +109,10 @@ class TestDefaults(BaseOpenStackCharmTest):
             chm.os_utils,
             'get_installed_semantic_versioned_packages',
             return_value=['cinder-common'])
+        singleton = mock.MagicMock()
+        singleton.source_config_key = 'fake-config-key'
+        singleton.get_os_codename_package.side_effect = ValueError
+        self.patch_object(chm, 'get_charm_instance', return_value=singleton)
         # set a release
         kv.get.return_value = 'one'
         release = h.map['function']()
@@ -122,7 +126,15 @@ class TestDefaults(BaseOpenStackCharmTest):
         release = h.map['function']()
         self.assertEqual(release, 'two')
         kv.set.assert_called_once_with(chm.OPENSTACK_RELEASE_KEY, 'two')
-        self.os_release.assert_called_once_with('cinder-common')
+        self.os_release.assert_called_once_with(
+            'cinder-common', source_key='fake-config-key')
+        # No release set, charm class provides package_codenames
+        kv.reset_mock()
+        singleton.get_os_codename_package.side_effect = None
+        singleton.get_os_codename_package.return_value = 'three'
+        release = h.map['function']()
+        self.assertEqual(release, 'three')
+        kv.set.assert_called_once_with(chm.OPENSTACK_RELEASE_KEY, 'three')
 
     def test_default_select_package_type_handler(self):
         self.assertIn('charm.default-select-package-type',
