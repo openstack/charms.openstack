@@ -18,6 +18,8 @@ import unittest
 
 import charmhelpers.core.unitdata as unitdata
 
+import charms_openstack.charm.core as chm_core
+
 
 class PatchHelper(unittest.TestCase):
     """Helper Test Class based on unittest.TestCase which provides an easy way
@@ -155,6 +157,9 @@ class TestRegisteredHooks(PatchHelper):
     def tearDownClass(cls):
         # and fix any breakage we did to the module
         if cls._module:
+            # protect against charm code calling use_defaults in global
+            # scope referencing non-idempotent handlers
+            chm_core._release_selector_function = None
             try:
                 reload(cls._module)
             except NameError:
@@ -193,6 +198,10 @@ class TestRegisteredHooks(PatchHelper):
         # force requires to rerun the mock_hook decorator:
         # try except is Python2/Python3 compatibility as Python3 has moved
         # reload to importlib.
+
+        # protect against charm code calling use_defaults in global
+        # scope referencing non-idempotent handlers
+        chm_core._release_selector_function = None
         try:
             reload(module)
         except NameError:
