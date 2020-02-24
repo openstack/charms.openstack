@@ -17,7 +17,7 @@
 import os
 import unittest
 
-import mock
+from unittest import mock
 
 import charms_openstack.bus as bus
 
