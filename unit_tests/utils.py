@@ -17,7 +17,7 @@
 
 import contextlib
 import io
-import mock
+from unittest import mock
 import unittest
 
 

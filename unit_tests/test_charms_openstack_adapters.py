@@ -22,7 +22,7 @@
 
 import copy
 import unittest
-import mock
+from unittest import mock
 
 import charms.reactive as reactive
 

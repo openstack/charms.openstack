@@ -19,7 +19,7 @@
 # mock out some charmhelpers libraries as they have apt install side effects
 # sys.modules['charmhelpers.contrib.openstack.utils'] = mock.MagicMock()
 # sys.modules['charmhelpers.contrib.network.ip'] = mock.MagicMock()
-import mock
+from unittest import mock
 
 import charms_openstack.devices.pci as pci
 import unit_tests.pci_responses as pci_responses
