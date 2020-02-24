@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import itertools
-import mock
+from unittest import mock
 import unittest
 
 import charmhelpers.core.unitdata as unitdata

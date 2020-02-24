@@ -1,5 +1,5 @@
 import collections
-import mock
+from unittest import mock
 
 import charms_openstack.charm.core as chm_core
 import charms_openstack.charm.defaults as chm
