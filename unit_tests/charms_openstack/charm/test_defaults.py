@@ -111,7 +111,7 @@ class TestDefaults(BaseOpenStackCharmTest):
             return_value=['cinder-common'])
         singleton = mock.MagicMock()
         singleton.source_config_key = 'fake-config-key'
-        singleton.get_os_codename_package.side_effect = ValueError
+        singleton.get_os_codename_package.return_value = None
         self.patch_object(chm, 'get_charm_instance', return_value=singleton)
         # set a release
         kv.get.return_value = 'one'

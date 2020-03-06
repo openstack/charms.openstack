@@ -104,6 +104,13 @@ def make_default_select_release_handler():
                 singleton = get_charm_instance()
                 release_version = singleton.get_os_codename_package(
                     singleton.release_pkg, singleton.package_codenames)
+                if release_version is None:
+                    # Surprisingly get_os_codename_package called with
+                    # ``Fatal=True`` does not raise an error when the charm
+                    # class ``package_codenames`` map does not contain package
+                    # or major version.  We'll handle it here instead of
+                    # changing the API of the method.
+                    raise ValueError
             except (AttributeError, ValueError):
                 try:
                     pkgs = os_utils.get_installed_semantic_versioned_packages()
