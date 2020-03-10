@@ -1116,6 +1116,7 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
                           name='apt_install')
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
+        self.patch_object(chm.cert_utils, 'create_ip_cert_links')
         cert_calls = [
             mock.call('/etc/apache2/ssl/charmname', 'cert1', 'key1', cn='cn1'),
             mock.call('/etc/apache2/ssl/charmname', 'cert2', 'key2', cn='cn2')]
@@ -1132,6 +1133,10 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             self.configure_ca.assert_has_calls(ca_calls)
             self.assertFalse(self.configure_apache.called)
             self.set_state.assert_has_calls(set_state_calls)
+            self.create_ip_cert_links.assert_called_once_with(
+                '/etc/apache2/ssl/charmname')
+
+        self.create_ip_cert_links.reset_mock()
         with mock.patch.object(chm, 'is_data_changed') as changed:
             changed.return_value.__enter__.return_value = True
             self.target.configure_tls()
@@ -1139,6 +1144,8 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             self.configure_ca.assert_has_calls(ca_calls)
             self.configure_apache.called_once_with()
             self.set_state.assert_has_calls(set_state_calls)
+            self.create_ip_cert_links.assert_called_once_with(
+                '/etc/apache2/ssl/charmname')
 
     def test_configure_tls_off(self):
         self.patch_target('get_certs_and_keys', return_value=[])
@@ -1147,7 +1154,9 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
                           return_value=None)
         self.patch_object(chm.os_utils, 'snap_install_requested',
                           return_value=False)
+        self.patch_object(chm.cert_utils, 'create_ip_cert_links')
         with mock.patch.object(chm.reactive.helpers,
                                'is_data_changed'):
             self.target.configure_tls()
             self.set_state.assert_called_once_with('ssl.enabled', False)
+            self.create_ip_cert_links.assert_not_called()
