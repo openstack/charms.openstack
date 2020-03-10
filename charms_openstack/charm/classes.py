@@ -321,6 +321,15 @@ class OpenStackCharm(BaseOpenStackCharm,
             cert_filename = 'cert'
             key_filename = 'key'
 
+        _cert_path = os.path.join(path, cert_filename)
+        _key_path = os.path.join(path, key_filename)
+        if os.path.islink(_cert_path) or os.path.islink(_key_path):
+            hookenv.log(
+                "Certificate or key is a symlink, the following  operation "
+                "will overwrite the link target file. This is unlikley to be "
+                "the desired effect. cert: {}, key: {}"
+                .format(_cert_path, _key_path), level=hookenv.WARNING)
+
         ch_host.write_file(path=os.path.join(path, cert_filename),
                            content=cert.encode('utf-8'), group=self.group,
                            perms=0o640)
@@ -953,14 +962,14 @@ class HAOpenStackCharm(OpenStackAPICharm):
                         tls_object['cert'],
                         tls_object['key'],
                         cn=tls_object['cn'])
-                    cert_utils.create_ip_cert_links(
-                        os.path.join('/etc/apache2/ssl/', self.name))
-                    if not os_utils.snap_install_requested() and changed:
-                        self.configure_apache()
-                        ch_host.service_reload('apache2')
+                cert_utils.create_ip_cert_links(
+                    os.path.join('/etc/apache2/ssl/', self.name))
+                if not os_utils.snap_install_requested() and changed:
+                    self.configure_apache()
+                    ch_host.service_reload('apache2')
 
-                    self.remove_state('ssl.requested')
-                    self.set_state('ssl.enabled', True)
+                self.remove_state('ssl.requested')
+                self.set_state('ssl.enabled', True)
             else:
                 self.set_state('ssl.enabled', False)
 
