@@ -125,6 +125,9 @@ class OpenStackCharm(BaseOpenStackCharm,
     # Useful for charms managing software from UCA and consuming the
     # `openstack` layer directly for re-use of common code, but not being a
     # OpenStack component.
+    #
+    # Subordinate charms should set this to an empty string ('') to activate
+    # special handling of release selection.
     source_config_key = 'openstack-origin'
 
     @property

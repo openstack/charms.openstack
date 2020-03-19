@@ -472,8 +472,9 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         return version_or_codename
 
     @staticmethod
-    def get_os_codename_package(package, codenames, fatal=True):
-        """Derive OpenStack release codename from an installed package.
+    def get_os_codename_package(package, codenames, fatal=True,
+                                apt_cache_sufficient=False):
+        """Derive OpenStack release codename from a package.
 
         :param package: Package name to lookup (ie. in apt cache)
         :type package: str
@@ -492,6 +493,13 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         :type codenames: Dict[str,collections.OrderedDict[Tuple(str,str)]]
         :param fatal: Raise exception if pkg not installed
         :type fatal: bool
+        :param apt_cache_sufficient: When False (the default) version from an
+            installed package will be used, when True version from the systems
+            APT cache will be used.  This is useful for subordinate charms who
+            need working release selection prior to package installation and
+            has no way of using fall back to version of a package the principle
+            charm has installed nor package source configuration option.
+        :type apt_cache_sufficient: bool
         :returns: OpenStack version name corresponding to package
         :rtype: Optional[str]
         :raises: AttributeError, ValueError
@@ -508,11 +516,15 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
                 'Could not determine version of package with no installation '
                 'candidate: {}'.format(package))
             raise e
-        if not pkg.current_ver:
-            if not fatal:
-                return None
 
-        vers = fetch.apt_pkg.upstream_version(pkg.current_ver.ver_str)
+        if apt_cache_sufficient:
+            vers = fetch.apt_pkg.upstream_version(pkg.version)
+        else:
+            if not pkg.current_ver:
+                if not fatal:
+                    return None
+            vers = fetch.apt_pkg.upstream_version(pkg.current_ver.ver_str)
+
         # x.y match only for 20XX.X
         # and ignore patch level for other packages
         match = re.match('^(\d+)\.(\d+)', vers)

@@ -103,7 +103,8 @@ def make_default_select_release_handler():
                 # instance defined package codename dictionary.
                 singleton = get_charm_instance()
                 release_version = singleton.get_os_codename_package(
-                    singleton.release_pkg, singleton.package_codenames)
+                    singleton.release_pkg, singleton.package_codenames,
+                    apt_cache_sufficient=(not singleton.source_config_key))
                 if release_version is None:
                     # Surprisingly get_os_codename_package called with
                     # ``Fatal=True`` does not raise an error when the charm

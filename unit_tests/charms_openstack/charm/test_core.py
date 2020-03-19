@@ -787,6 +787,15 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             chm_core.BaseOpenStackCharm.get_os_codename_package(
                 'testpkg', codenames),
             'newton')
+        self.upstream_version.assert_called_once_with(
+            pkg_mock.current_ver.ver_str)
+        self.upstream_version.reset_mock()
+        self.assertEqual(
+            chm_core.BaseOpenStackCharm.get_os_codename_package(
+                'testpkg', codenames, apt_cache_sufficient=True),
+            'newton')
+        self.upstream_version.assert_called_once_with(
+            pkg_mock.version)
         # Test non-fatal fail
         self.assertEqual(
             chm_core.BaseOpenStackCharm.get_os_codename_package(

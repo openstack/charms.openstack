@@ -130,11 +130,23 @@ class TestDefaults(BaseOpenStackCharmTest):
             'cinder-common', source_key='fake-config-key')
         # No release set, charm class provides package_codenames
         kv.reset_mock()
+        singleton.get_os_codename_package.reset_mock()
         singleton.get_os_codename_package.side_effect = None
         singleton.get_os_codename_package.return_value = 'three'
+        singleton.source_config_key = 'fake-config-key'
         release = h.map['function']()
         self.assertEqual(release, 'three')
+        singleton.get_os_codename_package.assert_called_once_with(
+            mock.ANY, mock.ANY, apt_cache_sufficient=False)
         kv.set.assert_called_once_with(chm.OPENSTACK_RELEASE_KEY, 'three')
+        # No release set, charm class has empty ``source_config_key``
+        singleton.get_os_codename_package.reset_mock()
+        singleton.source_config_key = ''
+        singleton.get_os_codename_package.return_value = 'four'
+        release = h.map['function']()
+        self.assertEqual(release, 'four')
+        singleton.get_os_codename_package.assert_called_once_with(
+            mock.ANY, mock.ANY, apt_cache_sufficient=True)
 
     def test_default_select_package_type_handler(self):
         self.assertIn('charm.default-select-package-type',
