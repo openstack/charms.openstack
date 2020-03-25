@@ -23,6 +23,7 @@ ALLOWED_DEFAULT_HANDLERS = [
     'upgrade-charm',
     'certificates.available',
     'storage-backend.connected',
+    'cluster.available',
 ]
 
 # Where to store the default handler functions for each default state
@@ -244,3 +245,11 @@ def make_default_config_rendered_handler():
     """Set the default config.rendered state so that the reactive handler runs.
     """
     reactive.set_state('charms.openstack.do-default-config-rendered')
+
+
+@_map_default_handler('cluster.available')
+def make_default_cluster_available_handler():
+    """Set the default cluster.available state so that the default handler in
+    layer-openstack-api can run.
+    """
+    reactive.set_state('charms.openstack.do-default-cluster.available')
