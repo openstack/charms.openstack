@@ -519,6 +519,35 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         assert isinstance(context, MyAdapter)
         self.assertEqual(context.interfaces, ['interface1', 'interface2'])
 
+        # test source template provided with filename that represents absoulute
+        # path of target config where path separators has been replaced by
+        # underscores
+        self.render.reset_mock()
+        self.render.side_effect = [LookupError, None]
+        self.target.render_configs(
+            ['/etc/some/path1'],
+            adapters_instance=self.target.adapters_instance)
+        self.render.assert_has_calls([
+            mock.call(
+                source='path1',
+                template_loader='my-loader',
+                target='/etc/some/path1',
+                context=mock.ANY,
+                config_template=None,
+                group='root',
+                perms=0o640,
+            ),
+            mock.call(
+                source='etc_some_path1',
+                template_loader='my-loader',
+                target='/etc/some/path1',
+                context=mock.ANY,
+                config_template=None,
+                group='root',
+                perms=0o640,
+            ),
+        ])
+
     def test_render_configs_construct_adapters_instance(self):
         # give us a way to check that the context manager was called.
         from contextlib import contextmanager

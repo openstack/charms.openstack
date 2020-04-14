@@ -794,16 +794,25 @@ class BaseOpenStackCharmActions(object):
                     # means we need to skip this config to avoid rendering
                     return
 
-                charmhelpers.core.templating.render(
-                    source=os.path.basename(conf),
-                    template_loader=os_templating.get_loader(
-                        'templates/', self.release),
-                    target=conf,
-                    context=adapters_instance,
-                    config_template=config_template,
-                    group=self.group,
-                    perms=self.permission_override_map.get(conf) or 0o640,
-                )
+                def _render(source):
+                    charmhelpers.core.templating.render(
+                        source=source,
+                        template_loader=os_templating.get_loader(
+                            'templates/', self.release),
+                        target=conf,
+                        context=adapters_instance,
+                        config_template=config_template,
+                        group=self.group,
+                        perms=self.permission_override_map.get(conf) or 0o640,
+                    )
+                try:
+                    _render(os.path.basename(conf))
+                except LookupError:
+                    # if no template is found try looking for files named after
+                    # the absolute path of target with path separators replaced
+                    # by underscores.  This convention is useful when charm
+                    # author need to provide templates with ambiguous basenames
+                    _render('_'.join(conf.split(os.path.sep))[1:])
 
     def render_with_interfaces(self, interfaces, configs=None):
         """Render the configs using the interfaces passed; overrides any
