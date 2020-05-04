@@ -101,11 +101,18 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.charmhelpers.fetch, 'add_source')
         self.patch_object(chm_core.charmhelpers.fetch, 'apt_update')
         self.patch_object(chm_core.os_utils, 'get_source_and_pgp_key')
-        self.patch_target('config', new={'openstack-origin': 'an-origin'})
+        self.patch_target('config', new={
+            'openstack-origin': 'an-origin',
+            'some-other-key': 'another-origin',
+        })
         self.get_source_and_pgp_key.return_value = ("an-origin", None)
         self.target.configure_source()
         self.add_source.assert_called_once_with('an-origin', None)
         self.apt_update.assert_called_once_with(fatal=True)
+        self.get_source_and_pgp_key.reset_mock()
+        self.get_source_and_pgp_key.return_value = ('another-origin', None)
+        self.target.configure_source('some-other-key')
+        self.get_source_and_pgp_key.assert_called_once_with('another-origin')
 
     def test_region(self):
         self.patch_target('config', new={'region': 'a-region'})

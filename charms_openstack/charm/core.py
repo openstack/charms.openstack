@@ -657,16 +657,19 @@ class BaseOpenStackCharmActions(object):
             hookenv.status_set('maintenance',
                                'Installation complete - awaiting next status')
 
-    def configure_source(self):
-        """Configure installation source using the config item
-        indicated in the source_config_key class variable
-        (default: 'openstack-origin')
+    def configure_source(self, config_key=None):
+        """Configure installation source.
 
-        This configures the installation source for deb packages and then
-        updates the packages list on the unit.
+        :param config_key: Config item (default: value indicated in the
+                           source_config_key class variable)
+        :type config_key: Optional[str]
+
+        This adds an installation source for deb packages and then updates the
+        packages list on the unit.
         """
+        config_key = config_key or self.source_config_key
         source, key = os_utils.get_source_and_pgp_key(
-            self.config[self.source_config_key])
+            self.config[config_key])
         fetch.add_source(source, key)
         fetch.apt_update(fatal=True)
 
