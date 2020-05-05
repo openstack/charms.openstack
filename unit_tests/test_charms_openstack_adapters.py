@@ -373,6 +373,9 @@ class FakeDatabaseRelation():
     def db_host(self):
         return 'host1'
 
+    def db_port(self):
+        return 3306
+
     def username(self, prefix=''):
         return 'username1{}'.format(prefix)
 
@@ -399,16 +402,17 @@ class TestDatabaseRelationAdapter(unittest.TestCase):
             fake = FakeDatabaseRelation()
             db = adapters.DatabaseRelationAdapter(fake)
             self.assertEqual(db.host, 'host1')
+            self.assertEqual(db.port, 3306)
             self.assertEqual(db.type, 'mysql')
             self.assertEqual(db.password, 'password1')
             self.assertEqual(db.username, 'username1')
             self.assertEqual(db.database, 'database1')
             self.assertEqual(
                 db.uri,
-                'mysql://username1:password1@host1/database1')
+                'mysql://username1:password1@host1:3306/database1')
             self.assertEqual(
                 db.get_uri('x'),
-                'mysql://username1x:password1x@host1/database1x')
+                'mysql://username1x:password1x@host1:3306/database1x')
             self.assertEqual(
                 db.get_password('x'),
                 'password1x')
@@ -416,7 +420,7 @@ class TestDatabaseRelationAdapter(unittest.TestCase):
             db = SSLDatabaseRelationAdapter(fake)
             self.assertEqual(
                 db.uri,
-                'mysql://username1:password1@host1/database1'
+                'mysql://username1:password1@host1:3306/database1'
                 '?ssl_ca=my-ca'
                 '&ssl_cert=my-cert&ssl_key=my-key')
         with mock.patch.object(adapters.ch_utils,
@@ -426,10 +430,10 @@ class TestDatabaseRelationAdapter(unittest.TestCase):
             db = adapters.DatabaseRelationAdapter(fake)
             self.assertEqual(
                 db.uri,
-                'mysql+pymysql://username1:password1@host1/database1')
+                'mysql+pymysql://username1:password1@host1:3306/database1')
             self.assertEqual(
                 db.get_uri('x'),
-                'mysql+pymysql://username1x:password1x@host1/database1x')
+                'mysql+pymysql://username1x:password1x@host1:3306/database1x')
             self.assertEqual(
                 db.get_password('x'),
                 'password1x')
@@ -437,7 +441,7 @@ class TestDatabaseRelationAdapter(unittest.TestCase):
             db = SSLDatabaseRelationAdapter(fake)
             self.assertEqual(
                 db.uri,
-                'mysql+pymysql://username1:password1@host1/database1'
+                'mysql+pymysql://username1:password1@host1:3306/database1'
                 '?ssl_ca=my-ca'
                 '&ssl_cert=my-cert&ssl_key=my-key')
 

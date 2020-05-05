@@ -459,6 +459,13 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
         return self.relation.db_host()
 
     @property
+    def port(self):
+        """
+        Port that should be used to access a database.
+        """
+        return self.relation.db_port()
+
+    @property
     def type(self):
         return 'mysql'
 
@@ -475,19 +482,21 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
                 ch_utils.OPENSTACK_RELEASES.index('stein')):
             driver = 'mysql+pymysql'
         if prefix:
-            uri = '{}://{}:{}@{}/{}'.format(
+            uri = '{}://{}:{}@{}:{}/{}'.format(
                 driver,
                 self.relation.username(prefix=prefix),
                 self.relation.password(prefix=prefix),
                 self.host,
+                self.port,
                 self.relation.database(prefix=prefix),
             )
         else:
-            uri = '{}://{}:{}@{}/{}'.format(
+            uri = '{}://{}:{}@{}:{}/{}'.format(
                 driver,
                 self.username,
                 self.password,
                 self.host,
+                self.port,
                 self.database,
             )
         try:
