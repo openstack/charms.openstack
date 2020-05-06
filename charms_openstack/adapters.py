@@ -482,22 +482,30 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
                 ch_utils.OPENSTACK_RELEASES.index('stein')):
             driver = 'mysql+pymysql'
         if prefix:
+            username = self.relation.username(prefix=prefix)
+            password = self.relation.password(prefix=prefix)
+            database = self.relation.database(prefix=prefix)
+        else:
+            username = self.username
+            password = self.password
+            database = self.database
+        if self.port:
             uri = '{}://{}:{}@{}:{}/{}'.format(
                 driver,
-                self.relation.username(prefix=prefix),
-                self.relation.password(prefix=prefix),
+                username,
+                password,
                 self.host,
                 self.port,
-                self.relation.database(prefix=prefix),
+                database,
             )
         else:
-            uri = '{}://{}:{}@{}:{}/{}'.format(
+            # defensive code if port is not passed
+            uri = '{}://{}:{}@{}/{}'.format(
                 driver,
-                self.username,
-                self.password,
+                username,
+                password,
                 self.host,
-                self.port,
-                self.database,
+                database,
             )
         try:
             if self.ssl_ca:
