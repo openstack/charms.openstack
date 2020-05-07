@@ -941,6 +941,16 @@ class BaseOpenStackCharmActions(object):
             cur_vers = self.get_os_version_snap(snap)
         else:
             cur_vers = self.get_os_version_package(package)
+
+        if cur_vers is None or avail_vers is None:
+            raise RuntimeError(
+                "In charms_openstack.charm.core.openstack_upgrade_available() "
+                "cur_vers={} and avail_vers={}, one of which is None. "
+                "This usually implies that the openstack version is not "
+                "present in the self.package_codenames or "
+                "os_utils.PACKAGE_CODENAMES.  Please re-visit and fix."
+                .format(cur_vers, avail_vers))
+
         fetch.apt_pkg.init()
         return fetch.apt_pkg.version_compare(avail_vers, cur_vers) == 1
 
