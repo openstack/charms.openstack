@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Adapter classes and utilities for use with Reactive interfaces"""
-from __future__ import absolute_import
 
 import collections
 import itertools
