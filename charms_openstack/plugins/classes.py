@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import collections
 import os
 import shutil
@@ -22,7 +23,10 @@ import charms_openstack.charm
 from charms_openstack.charm.classes import SNAP_PATH_PREFIX_FORMAT
 
 import charmhelpers.core as ch_core
+import charmhelpers.fetch as fetch
 import charmhelpers.contrib.openstack.policyd as ch_policyd
+
+import charms.reactive as reactive
 
 
 class BaseOpenStackCephCharm(object):
@@ -408,3 +412,134 @@ class PolicydOverridePlugin(object):
         args, kwargs = self._policyd_function_args()
         ch_policyd.maybe_do_policyd_overrides_on_config_changed(
             *args, **kwargs)
+
+
+TV_MOUNTS = "/var/triliovault-mounts"
+
+
+class NFSShareNotMountedException(Exception):
+    """Signal that the trilio nfs share is not mount"""
+
+    pass
+
+
+class UnitNotLeaderException(Exception):
+    """Signal that the unit is not the application leader"""
+
+    pass
+
+
+class GhostShareAlreadyMountedException(Exception):
+    """Signal that a ghost share is already mounted"""
+
+    pass
+
+
+class TrilioVaultCharm(charms_openstack.charm.HAOpenStackCharm):
+    """The TrilioVaultCharm class provides common specialisation of certain
+    functions for the Trilio charm set and is designed for use alongside
+    other base charms.openstack classes
+    """
+
+    abstract_class = True
+
+    def __init__(self, **kwargs):
+        super(TrilioVaultCharm, self).__init__(**kwargs)
+
+    def configure_source(self):
+        """Configure triliovault specific package sources in addition to
+        any general openstack package sources (via openstack-origin)
+        """
+        with open(
+            "/etc/apt/sources.list.d/trilio-gemfury-sources.list", "w"
+        ) as tsources:
+            tsources.write(ch_core.hookenv.config("triliovault-pkg-source"))
+        super().configure_source()
+
+    def install(self):
+        """Install packages dealing with Trilio nuances for upgrades as well
+
+        Set the 'upgrade.triliovault' flag to ensure that any triliovault
+        packages are upgraded.
+        """
+        self.configure_source()
+        packages = self.all_packages
+        if not reactive.is_flag_set("upgrade.triliovault"):
+            packages = fetch.filter_installed_packages(
+                self.all_packages)
+
+        if packages:
+            ch_core.hookenv.status_set('maintenance',
+                                       'Installing/upgrading packages')
+            fetch.apt_install(packages, fatal=True)
+
+        # AJK: we set this as charms can use it to detect installed state
+        self.set_state('{}-installed'.format(self.name))
+        self.update_api_ports()
+
+        # NOTE(jamespage): clear upgrade flag if set
+        if reactive.is_flag_set("upgrade.triliovault"):
+            reactive.clear_flag('upgrade.triliovault')
+
+    def series_upgrade_complete(self):
+        """Re-configure sources post series upgrade"""
+        super().series_upgrade_complete()
+        self.configure_source()
+
+    def _encode_endpoint(self, backup_endpoint):
+        """base64 encode an backup endpoint for cross mounting support"""
+        return base64.b64encode(backup_endpoint.encode()).decode()
+
+    def ghost_nfs_share(self, ghost_share):
+        """Bind mount the local units nfs share to another sites location
+
+        :param ghost_share: NFS share URL to ghost
+        :type ghost_share: str
+        """
+        nfs_share_path = os.path.join(
+            TV_MOUNTS,
+            self._encode_endpoint(ch_core.hookenv.config("nfs-shares"))
+        )
+        ghost_share_path = os.path.join(
+            TV_MOUNTS, self._encode_endpoint(ghost_share)
+        )
+
+        current_mounts = [mount[0] for mount in ch_core.host.mounts()]
+
+        if nfs_share_path not in current_mounts:
+            # Trilio has not mounted the NFS share so return
+            raise NFSShareNotMountedException(
+                "nfs-shares ({}) not mounted".format(
+                    ch_core.hookenv.config("nfs-shares")
+                )
+            )
+
+        if ghost_share_path in current_mounts:
+            # bind mount already setup so return
+            raise GhostShareAlreadyMountedException(
+                "ghost mountpoint ({}) already bound".format(ghost_share_path)
+            )
+
+        if not os.path.exists(ghost_share_path):
+            os.mkdir(ghost_share_path)
+
+        ch_core.host.mount(nfs_share_path, ghost_share_path, options="bind")
+
+
+class TrilioVaultSubordinateCharm(TrilioVaultCharm):
+    """The TrilioVaultSubordinateCharm class provides common specialisation
+    of certain functions for the Trilio charm set and is designed for usei
+    alongside other base charms.openstack classes for subordinate charms
+    """
+
+    abstract_class = True
+
+    def __init__(self, **kwargs):
+        super(TrilioVaultSubordinateCharm, self).__init__(**kwargs)
+
+    def configure_source(self):
+        """Configure triliovault specific package sources in addition to
+        any general openstack package sources (via openstack-origin)
+        """
+        super().configure_source()
+        fetch.apt_update(fatal=True)
