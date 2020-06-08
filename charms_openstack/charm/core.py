@@ -456,7 +456,7 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         """
         version_or_codename = get_snap_version(snap, fatal)
 
-        match = re.match('^(\d+)\.(\d+)', version_or_codename)
+        match = re.match(r'^(\d+)\.(\d+)', version_or_codename)
         if match:
             version = match.group(0)
             # Generate a major version number for newer semantic
@@ -527,7 +527,7 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
 
         # x.y match only for 20XX.X
         # and ignore patch level for other packages
-        match = re.match('^(\d+)\.(\d+)', vers)
+        match = re.match(r'^(\d+)\.(\d+)', vers)
 
         if match:
             vers = match.group(0)
@@ -910,9 +910,9 @@ class BaseOpenStackCharmActions(object):
             protocol = protocol.lower()
         else:
             protocol = ''
-        lines = [l for l in
+        lines = [line for line in
                  subprocess.check_output(_args).decode('UTF-8').split()
-                 if l]
+                 if line]
         ports = []
         for line in lines:
             p, p_type = line.split('/')

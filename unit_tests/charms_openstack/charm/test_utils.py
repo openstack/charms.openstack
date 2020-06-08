@@ -36,7 +36,7 @@ class TestHelpers(BaseTestCase):
             with utils.is_data_changed('bar', "string") as f:
                 self.assertTrue(f)
                 raise Exception()
-        except:
+        except Exception:
             pass
         self.assertEqual(hash, store.get('charms.openstack.data_changed.bar'))
         # check that raising an exception AND having the flag set causes a
@@ -46,7 +46,7 @@ class TestHelpers(BaseTestCase):
                                        no_change_on_exception=False) as f:
                 self.assertTrue(f)
                 raise Exception()
-        except:
+        except Exception:
             pass
         self.assertNotEqual(hash,
                             store.get('charms.openstack.data_changed.bar'))

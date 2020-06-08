@@ -83,6 +83,7 @@ def _fake_retry(num_retries, base_delay=0, exc_type=Exception):
         return _retry_on_exception_inner_2
     return _retry_on_exception_inner_1
 
+
 mock.patch(
     'charmhelpers.core.decorators.retry_on_exception',
     _fake_retry).start()
@@ -90,6 +91,7 @@ mock.patch(
 
 def _fake_cached(f):
     return f
+
 
 mock.patch(
     'charmhelpers.core.hookenv.cached',
