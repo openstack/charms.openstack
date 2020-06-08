@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import sys
-import mock
+from unittest import mock
 import os
 
 # mock out some charmhelpers libraries as they have apt install side effects
