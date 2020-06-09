@@ -41,6 +41,8 @@ def mock_charmhelpers():
     sys.modules['charmhelpers.contrib.network'] = charmhelpers.contrib.network
     sys.modules['charmhelpers.contrib.network.ip'] = (
         charmhelpers.contrib.network.ip)
+    sys.modules['charmhelpers.contrib.charmsupport'] = (
+        charmhelpers.contrib.charmsupport)
     sys.modules['charmhelpers.fetch'] = charmhelpers.fetch
     sys.modules['charmhelpers.cli'] = charmhelpers.cli
     sys.modules['charmhelpers.contrib.hahelpers'] = (
