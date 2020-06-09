@@ -14,7 +14,17 @@ TEST_CONFIG = {'config': True,
 class FakeOpenStackCephConsumingCharm(
         chm.OpenStackCharm,
         cpl.BaseOpenStackCephCharm):
+
     abstract_class = True
+
+
+class FakeCephCharm(cpl.CephCharm):
+
+    abstract_class = True
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.hostname = 'somehost'
 
 
 class TestOpenStackCephConsumingCharm(BaseOpenStackCharmTest):
@@ -127,7 +137,7 @@ class TestOpenStackCephConsumingCharm(BaseOpenStackCharmTest):
 class TestCephCharm(BaseOpenStackCharmTest):
 
     def setUp(self):
-        super(TestCephCharm, self).setUp(cpl.CephCharm, {'source': None})
+        super(TestCephCharm, self).setUp(FakeCephCharm, {'source': None})
 
     def test_ceph_keyring_path(self):
         self.patch_object(cpl.ch_core.hookenv, 'application_name',
@@ -140,6 +150,16 @@ class TestCephCharm(BaseOpenStackCharmTest):
             self.target.ceph_keyring_path,
             os.path.join(cpl.SNAP_PATH_PREFIX_FORMAT.format('gnocchi'),
                          '/var/lib/ceph/charmname'))
+        self.target.snaps = []
+        self.target.ceph_service_type = self.target.CephServiceType.mds
+        self.assertEqual(
+            self.target.ceph_keyring_path,
+            '/var/lib/ceph/charmname/ceph-somehost')
+        self.target.snaps = ['somecephsnap']
+        self.assertEqual(
+            self.target.ceph_keyring_path,
+            os.path.join(cpl.SNAP_PATH_PREFIX_FORMAT.format('gnocchi'),
+                         '/var/lib/ceph/charmname/ceph-somehost'))
 
     def test_configure_ceph_keyring(self):
         self.patch_object(cpl.os.path, 'isdir', return_value=False)
@@ -154,6 +174,21 @@ class TestCephCharm(BaseOpenStackCharmTest):
         self.patch_object(cpl.os, 'readlink')
         self.patch_object(cpl.os, 'remove')
         self.readlink.side_effect = OSError
+        self.target.ceph_service_type = self.target.CephServiceType.mds
+        self.target.configure_ceph_keyring(key)
+        self.isdir.assert_called_with('/var/lib/ceph/sarepta/ceph-somehost')
+        self.mkdir.assert_called_with('/var/lib/ceph/sarepta/ceph-somehost',
+                                      owner='root', group='root', perms=0o750)
+        self.check_call.assert_called_with([
+            'ceph-authtool',
+            '/var/lib/ceph/sarepta/ceph-somehost/keyring',
+            '--create-keyring', '--name=sarepta', '--add-key', 'KEY',
+            '--mode', '0600',
+        ])
+        self.exists.assert_not_called()
+        self.readlink.assert_not_called()
+        self.symlink.assert_not_called()
+        self.target.ceph_service_type = self.target.CephServiceType.client
         self.target.configure_ceph_keyring(key)
         self.isdir.assert_called_with('/var/lib/ceph/sarepta')
         self.mkdir.assert_called_with('/var/lib/ceph/sarepta',
@@ -184,6 +219,11 @@ class TestCephCharm(BaseOpenStackCharmTest):
         self.target.delete_ceph_keyring()
         self.remove.assert_called_once_with(
             '/var/lib/ceph/sarepta/ceph.client.sarepta.keyring')
+        self.remove.reset_mock()
+        self.target.ceph_service_type = self.target.CephServiceType.mds
+        self.target.delete_ceph_keyring()
+        self.remove.assert_called_once_with(
+            '/var/lib/ceph/sarepta/ceph-somehost/keyring')
 
     def test_install(self):
         self.patch_object(cpl.subprocess, 'check_output', return_value=b'\n')
