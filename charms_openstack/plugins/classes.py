@@ -14,6 +14,7 @@
 
 import base64
 import collections
+import enum
 import os
 import shutil
 import socket
@@ -54,9 +55,27 @@ class BaseOpenStackCephCharm(object):
     # ceph service name is determined from `application_name` property.
     # If this does not fit your use case you can override.
     ceph_service_name_override = ''
+
     # Unless you are writing a charm providing Ceph mon|osd|mgr|mds services
     # this should probably be left as-is.
-    ceph_service_type = 'client'
+
+    class CephServiceType(enum.Enum):
+        """Ceph service type."""
+        client = 'client'
+        mds = 'mds'
+        mgr = 'mgr'
+        mon = 'mon'
+        osd = 'osd'
+
+        def __str__(self):
+            """Return string representation of value.
+
+            :returns: string representation of value.
+            :rtype: str
+            """
+            return self.value
+
+    ceph_service_type = CephServiceType.client
 
     # Path prefix to where the Ceph keyring should be stored.
     ceph_keyring_path_prefix = '/etc/ceph'
@@ -106,9 +125,13 @@ class BaseOpenStackCephCharm(object):
         :returns: Ceph key name
         :rtype: str
         """
-        base_key_name = '{}.{}'.format(
-            self.ceph_service_type,
-            self.ceph_service_name)
+        if self.ceph_service_type == self.CephServiceType.client:
+            base_key_name = '{}.{}'.format(
+                self.ceph_service_type,
+                self.ceph_service_name)
+        else:
+            base_key_name = self.ceph_service_name
+
         if self.ceph_key_per_unit_name:
             return '{}.{}'.format(
                 base_key_name,
@@ -135,9 +158,13 @@ class BaseOpenStackCephCharm(object):
         :returns: Absolute path to keyring file
         :rtype: str
         """
-        keyring_name = ('{}.{}.keyring'
-                        .format(cluster_name or self.ceph_cluster_name,
-                                self.ceph_key_name))
+        if self.ceph_service_type == self.CephServiceType.client:
+            keyring_name = ('{}.{}.keyring'
+                            .format(cluster_name or self.ceph_cluster_name,
+                                    self.ceph_key_name))
+        else:
+            keyring_name = 'keyring'
+
         keyring_absolute_path = os.path.join(self.ceph_keyring_path,
                                              keyring_name)
         return keyring_absolute_path
@@ -220,6 +247,8 @@ class CephCharm(charms_openstack.charm.OpenStackCharm,
             ('10', 'mitaka'),   # 10.2.x Jewel
             ('12', 'pike'),     # 12.2.x Luminous
             ('13', 'rocky'),    # 13.2.x Mimic
+            ('14', 'train'),    # 14.2.x Nautilus
+            ('15', 'ussuri'),   # 15.2.x Octopus
         ]),
     }
 
@@ -254,6 +283,11 @@ class CephCharm(charms_openstack.charm.OpenStackCharm,
     # Path prefix to where the Ceph keyring should be stored.
     ceph_keyring_path_prefix = '/var/lib/ceph'
 
+    def __init__(self, **kwargs):
+        """Initialize class."""
+        super().__init__(**kwargs)
+        self.hostname = socket.gethostname()
+
     @property
     def ceph_keyring_path(self):
         """Provide a path to where the Ceph keyring should be stored.
@@ -261,14 +295,33 @@ class CephCharm(charms_openstack.charm.OpenStackCharm,
         :returns: Path to directory
         :rtype: str
         """
-        return os.path.join(self.snap_path_prefix,
-                            self.ceph_keyring_path_prefix,
-                            self.ceph_service_name)
+        keyring_path_components = (
+            self.snap_path_prefix,
+            self.ceph_keyring_path_prefix,
+            self.ceph_service_name)
+
+        if self.ceph_service_type != self.CephServiceType.client:
+            keyring_path_components = (
+                *keyring_path_components,
+                '{}-{}'.format(self.ceph_cluster_name,
+                               self.hostname))
+
+        return os.path.join(*keyring_path_components)
 
     def configure_ceph_keyring(self, key, cluster_name=None):
-        """Override parent function to add symlink in ``/etc/ceph``."""
+        """Override parent method for Ceph service providing charms.
+
+        :param cluster_name: (Optional) Name of Ceph cluster to operate on.
+                             Defaults to value of ``self.ceph_cluster_name``.
+        :type cluster_name: str
+        :raises: OSError
+        """
         keyring_absolute_path = super().configure_ceph_keyring(
             key, cluster_name=cluster_name)
+        if self.ceph_service_type != self.CephServiceType.client:
+            return
+        # If the service is a client-type sevice (sych as RBD Mirror) add
+        # symlink to key in ``/etc/ceph``.
         symlink_absolute_path = os.path.join(
             '/etc/ceph',
             os.path.basename(keyring_absolute_path))
