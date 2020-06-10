@@ -591,8 +591,10 @@ class TrilioVaultSubordinateCharm(TrilioVaultCharm):
         super(TrilioVaultSubordinateCharm, self).__init__(**kwargs)
 
     def configure_source(self):
-        """Configure triliovault specific package sources in addition to
-        any general openstack package sources (via openstack-origin)
+        """Configure TrilioVault specific package sources
         """
-        super().configure_source()
+        with open(
+            "/etc/apt/sources.list.d/trilio-gemfury-sources.list", "w"
+        ) as tsources:
+            tsources.write(ch_core.hookenv.config("triliovault-pkg-source"))
         fetch.apt_update(fatal=True)
