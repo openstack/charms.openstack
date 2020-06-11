@@ -21,10 +21,18 @@ from charms_openstack.plugins.classes import (
     CephCharm,
     PolicydOverridePlugin,
 )
+from charms_openstack.plugins.trilio import (
+    TrilioVaultCharm,
+    TrilioVaultSubordinateCharm,
+    TrilioVaultCharmGhostAction,
+)
 
 __all__ = (
     "BaseOpenStackCephCharm",
     "CephCharm",
     "CephRelationAdapter",
     "PolicydOverridePlugin",
+    "TrilioVaultCharm",
+    "TrilioVaultSubordinateCharm",
+    "TrilioVaultCharmGhostAction",
 )
