@@ -291,14 +291,13 @@ class CephCharm(charms_openstack.charm.OpenStackCharm,
         :returns: Path to directory
         :rtype: str
         """
-        keyring_path_components = (
+        keyring_path_components = [
             self.snap_path_prefix,
             self.ceph_keyring_path_prefix,
-            self.ceph_service_name)
+            self.ceph_service_name]
 
         if self.ceph_service_type != self.CephServiceType.client:
-            keyring_path_components = (
-                *keyring_path_components,
+            keyring_path_components.append(
                 '{}-{}'.format(self.ceph_cluster_name,
                                self.hostname))
 
