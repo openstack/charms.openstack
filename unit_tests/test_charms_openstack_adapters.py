@@ -385,12 +385,38 @@ class FakeDatabaseRelation():
     def database(self, prefix=''):
         return 'database1{}'.format(prefix)
 
+    def ssl_ca(self):
+        return None
+
+    def ssl_cert(self):
+        return None
+
+    def ssl_key(self):
+        return None
+
+
+class FakeCharmInstance():
+
+    def __init__(self):
+        self.group = "group"
+        self.options = mock.MagicMock()
+        self.options.openstack_origin = "cloud:bionic-rocky"
+
 
 class SSLDatabaseRelationAdapter(adapters.DatabaseRelationAdapter):
 
-    ssl_ca = 'my-ca'
-    ssl_cert = 'my-cert'
-    ssl_key = 'my-key'
+    def __init__(self, relation, ssl_dir=None, charm_instance=None):
+        relation.ssl_ca = lambda: (
+            adapters.base64.b64encode('my-ca'.encode('UTF-8')))
+        relation.ssl_cert = lambda: (
+            adapters.base64.b64encode('my-cert'.encode('UTF-8')))
+        relation.ssl_key = lambda: (
+            adapters.base64.b64encode('my-key'.encode('UTF-8')))
+        if ssl_dir:
+            super().__init__(
+                relation, ssl_dir=ssl_dir, charm_instance=charm_instance)
+        else:
+            super().__init__(relation, charm_instance=charm_instance)
 
 
 class TestDatabaseRelationAdapter(unittest.TestCase):
@@ -400,7 +426,8 @@ class TestDatabaseRelationAdapter(unittest.TestCase):
                                'get_os_codename_install_source',
                                return_value='rocky'):
             fake = FakeDatabaseRelation()
-            db = adapters.DatabaseRelationAdapter(fake)
+            db = adapters.DatabaseRelationAdapter(
+                fake, charm_instance=FakeCharmInstance())
             self.assertEqual(db.host, 'host1')
             self.assertEqual(db.port, 3306)
             self.assertEqual(db.type, 'mysql')
@@ -417,17 +444,21 @@ class TestDatabaseRelationAdapter(unittest.TestCase):
                 db.get_password('x'),
                 'password1x')
             # test the ssl feature of the base class
-            db = SSLDatabaseRelationAdapter(fake)
+            db = SSLDatabaseRelationAdapter(
+                fake, charm_instance=FakeCharmInstance())
             self.assertEqual(
                 db.uri,
                 'mysql://username1:password1@host1:3306/database1'
-                '?ssl_ca=my-ca'
-                '&ssl_cert=my-cert&ssl_key=my-key')
+                '?ssl_ca=/usr/local/share/ca-certificates/db-client.ca'
+                '&ssl_cert=/usr/local/share/ca-certificates/db-client.cert'
+                '&ssl_key=/usr/local/share/ca-certificates/db-client.key')
         with mock.patch.object(adapters.ch_utils,
                                'get_os_codename_install_source',
                                return_value='stein'):
+            ssl_dir = '/ssl/path'
             fake = FakeDatabaseRelation()
-            db = adapters.DatabaseRelationAdapter(fake)
+            db = adapters.DatabaseRelationAdapter(
+                fake, charm_instance=FakeCharmInstance())
             self.assertEqual(
                 db.uri,
                 'mysql+pymysql://username1:password1@host1:3306/database1')
@@ -438,12 +469,14 @@ class TestDatabaseRelationAdapter(unittest.TestCase):
                 db.get_password('x'),
                 'password1x')
             # test the ssl feature of the base class
-            db = SSLDatabaseRelationAdapter(fake)
+            db = SSLDatabaseRelationAdapter(
+                fake, ssl_dir=ssl_dir, charm_instance=FakeCharmInstance())
             self.assertEqual(
                 db.uri,
                 'mysql+pymysql://username1:password1@host1:3306/database1'
-                '?ssl_ca=my-ca'
-                '&ssl_cert=my-cert&ssl_key=my-key')
+                '?ssl_ca={ssl_dir}/db-client.ca'
+                '&ssl_cert={ssl_dir}/db-client.cert'
+                '&ssl_key={ssl_dir}/db-client.key'.format(ssl_dir=ssl_dir))
 
 
 class TestConfigurationAdapter(unittest.TestCase):

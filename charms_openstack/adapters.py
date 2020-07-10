@@ -15,8 +15,10 @@
 """Adapter classes and utilities for use with Reactive interfaces"""
 from __future__ import absolute_import
 
+import base64
 import collections
 import itertools
+import os
 import re
 import weakref
 
@@ -31,6 +33,7 @@ import charmhelpers.core.host as ch_host
 import charms_openstack.ip as os_ip
 
 ADDRESS_TYPES = sorted(os_ip.ADDRESS_MAP.keys(), reverse=True)
+CA_CERTS_DIR = "/usr/local/share/ca-certificates"
 
 # handle declarative adapter properties using a decorator and simple functions
 
@@ -94,7 +97,8 @@ class OpenStackRelationAdapter(object):
     The generic type of the interface the adapter is wrapping.
     """
 
-    def __init__(self, relation=None, accessors=None, relation_name=None):
+    def __init__(self, relation=None, accessors=None, relation_name=None,
+                 charm_instance=None):
         """Class will usually be initialised using the 'relation' option to
            pass in an instance of a interface class. If there is no relation
            class yet available then 'relation_name' can be used instead.
@@ -102,6 +106,7 @@ class OpenStackRelationAdapter(object):
            :param relation: Instance of an interface class
            :param accessors: List of accessible interfaces properties
            :param relation_name: String name of relation
+           :param charm_instance: Instantiation of charm class
         """
         self.relation = relation
         if relation and relation_name:
@@ -111,6 +116,7 @@ class OpenStackRelationAdapter(object):
             self._setup_properties()
         else:
             self._relation_name = relation_name
+        self.charm_instance = charm_instance
 
     @property
     def relation_name(self):
@@ -443,13 +449,14 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
 
     interface_type = "database"
 
-    def __init__(self, relation):
+    def __init__(self, relation, ssl_dir=CA_CERTS_DIR, charm_instance=None):
         # Note: These accessors need closer inspection and potentially need
         # to be removed. The actual interface implements them as methods with
         # parameters. See bug: https://bugs.launchpad.net/bugs/1848216.
         add_accessors = ['password', 'username', 'database']
-        super(DatabaseRelationAdapter, self).__init__(relation, add_accessors)
-        self.config = hookenv.config()
+        super(DatabaseRelationAdapter, self).__init__(
+            relation, add_accessors, charm_instance=charm_instance)
+        self.set_ssl_dir(ssl_dir)
 
     @property
     def host(self):
@@ -469,18 +476,104 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
     def type(self):
         return 'mysql'
 
+    def set_ssl_dir(self, ssl_dir):
+        """
+        Set the SSL dir to a non-default location. It may be desireble to
+        continue using:
+        /etc/apache2/ssl/<charm name>
+
+        :param ssl_dir: Directory to write out certificates/keys
+        :type ssl_dir: string
+        :returns: None
+        "rtype: None
+        """
+        self.ssl_dir = ssl_dir
+
+    @property
+    def database_ssl_ca(self):
+        """
+        Database SSL Certificate Authority
+
+        Write out the CA to disk if it is on the relation.
+
+        :returns: Path to SSL Certificate Authority
+        :rtype: Union[string, None]
+        """
+        if self.relation.ssl_ca():
+            ca_path = os.path.join(self.ssl_dir, 'db-client.ca')
+            # Note: self.charm_instance.group is used to set permissions.
+            # If for some reason the charm has not set the group it defaults
+            # to 'root' group ownership which may not be correct.
+            ch_host.write_file(
+                path=ca_path,
+                content=base64.b64decode(self.relation.ssl_ca()),
+                group=self.charm_instance.group,
+                perms=0o644)
+
+            return ca_path
+
+    @property
+    def database_ssl_cert(self):
+        """
+        Database SSL Certificate
+
+        Write out the certificate to disk if it is on the relation.
+
+        :returns: Path to SSL Certificate
+        :rtype: Union[string, None]
+        """
+        if self.relation.ssl_cert():
+            cert_path = os.path.join(self.ssl_dir, 'db-client.cert')
+            # Note: self.charm_instance.group is used to set permissions.
+            # If for some reason the charm has not set the group it defaults
+            # to 'root' group ownership which may not be correct.
+            ch_host.write_file(
+                path=cert_path,
+                content=base64.b64decode(self.relation.ssl_cert()),
+                group=self.charm_instance.group,
+                perms=0o644)
+
+            return cert_path
+
+    @property
+    def database_ssl_key(self):
+        """
+        Database SSL Key
+
+        Write out the key to disk if it is on the relation.
+
+        :returns: Path to SSL Key
+        :rtype: Union[string, None]
+        """
+        if self.relation.ssl_key():
+            key_path = os.path.join(self.ssl_dir, 'db-client.key')
+            # Note: self.charm_instance.group is used to set permissions.
+            # If for some reason the charm has not set the group it defaults
+            # to 'root' group ownership which may not be correct.
+            ch_host.write_file(
+                path=key_path,
+                content=base64.b64decode(self.relation.ssl_key()),
+                group=self.charm_instance.group,
+                perms=0o640)
+
+            return key_path
+
     def get_password(self, prefix=None):
         if prefix:
             return self.relation.password(prefix=prefix)
         return self.password
 
-    def get_uri(self, prefix=None):
+    @property
+    def driver(self):
         driver = 'mysql'
         release = ch_utils.get_os_codename_install_source(
-            self.config['openstack-origin'])
+            self.charm_instance.options.openstack_origin)
         if (ch_utils.OPENSTACK_RELEASES.index(release) >=
                 ch_utils.OPENSTACK_RELEASES.index('stein')):
             driver = 'mysql+pymysql'
+        return driver
+
+    def get_uri(self, prefix=None):
         if prefix:
             username = self.relation.username(prefix=prefix)
             password = self.relation.password(prefix=prefix)
@@ -491,7 +584,7 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
             database = self.database
         if self.port:
             uri = '{}://{}:{}@{}:{}/{}'.format(
-                driver,
+                self.driver,
                 username,
                 password,
                 self.host,
@@ -501,21 +594,20 @@ class DatabaseRelationAdapter(OpenStackRelationAdapter):
         else:
             # defensive code if port is not passed
             uri = '{}://{}:{}@{}/{}'.format(
-                driver,
+                self.driver,
                 username,
                 password,
                 self.host,
                 database,
             )
-        try:
-            if self.ssl_ca:
-                uri = '{}?ssl_ca={}'.format(uri, self.ssl_ca)
-                if self.ssl_cert:
-                    uri = ('{}&ssl_cert={}&ssl_key={}'
-                           .format(uri, self.ssl_cert, self.ssl_key))
-        except AttributeError:
-            # ignore ssl_ca or ssl_cert if not available
-            pass
+        if self.database_ssl_ca:
+            uri = '{}?ssl_ca={}'.format(uri, self.database_ssl_ca)
+            if self.database_ssl_cert:
+                uri = ('{}&ssl_cert={}&ssl_key={}'
+                       .format(
+                           uri,
+                           self.database_ssl_cert,
+                           self.database_ssl_key))
         return uri
 
     @property
@@ -1203,9 +1295,13 @@ class OpenStackRelationAdapters(object):
         except AttributeError:
             relation_name = relation.relation_name.replace('-', '_')
         try:
-            adapter = self._adapters[relation_name](relation)
+            cls = self._adapters[relation_name]
         except KeyError:
-            adapter = OpenStackRelationAdapter(relation)
+            cls = OpenStackRelationAdapter
+        try:
+            adapter = cls(relation, charm_instance=self.charm_instance)
+        except TypeError:
+            adapter = cls(relation)
         return relation_name, adapter
 
 
