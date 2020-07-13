@@ -13,7 +13,6 @@
 # limitations under the License.
 
 # need/want absolute imports for the package imports to work properly
-from __future__ import absolute_import
 import netaddr
 
 import charmhelpers.core.hookenv as hookenv
