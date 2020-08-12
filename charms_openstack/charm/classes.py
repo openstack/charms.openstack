@@ -751,7 +751,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
             ['a2query', '-s', 'openstack_https_frontend'])
         if check_enabled:
             subprocess.check_call(['a2ensite', 'openstack_https_frontend'])
-            ch_host.service_reload('apache2', restart_on_failure=True)
+            self.service_reload('apache2', restart_on_failure=True)
 
     def configure_apache(self):
         if self.apache_enabled():
@@ -928,7 +928,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
                 subprocess.check_call(['a2enmod', module])
                 restart = True
         if restart:
-            ch_host.service_restart('apache2')
+            self.service_restart('apache2')
 
     def configure_tls(self, certificates_interface=None):
         """Configure TLS certificates and keys
@@ -969,7 +969,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
                     os.path.join('/etc/apache2/ssl/', self.name))
                 if not os_utils.snap_install_requested() and changed:
                     self.configure_apache()
-                    ch_host.service_reload('apache2')
+                    self.service_reload('apache2')
 
                 self.remove_state('ssl.requested')
                 self.set_state('ssl.enabled', True)
