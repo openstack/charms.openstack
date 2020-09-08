@@ -44,6 +44,12 @@ class GhostShareAlreadyMountedException(Exception):
     pass
 
 
+class MismatchedConfigurationException(Exception):
+    """Signal that nfs-shares and ghost-shares are mismatched"""
+
+    pass
+
+
 def _configure_triliovault_source():
     """Configure triliovault specific package sources in addition to
     any general openstack package sources (via openstack-origin)
@@ -155,15 +161,37 @@ class TrilioVaultCharmGhostAction(object):
         """base64 encode an backup endpoint for cross mounting support"""
         return base64.b64encode(backup_endpoint.encode()).decode()
 
-    def ghost_nfs_share(self, ghost_share):
-        """Bind mount the local units nfs share to another sites location
+    def ghost_nfs_share(self, ghost_shares):
+        """Bind mount local NFS shares to remote NFS paths
 
+        :param ghost_shares: Comma separated NFS shares URL to ghost
+        :type ghost_shares: str
+        """
+        ghost_shares = ghost_shares.split(',')
+        nfs_shares = ch_core.hookenv.config("nfs-shares").split(',')
+        try:
+            share_mappings = [
+                (nfs_shares[i], ghost_shares[i])
+                for i in range(0, len(nfs_shares))
+            ]
+        except IndexError:
+            raise MismatchedConfigurationException(
+                "ghost-shares and nfs-shares are different lengths"
+            )
+        for local_share, ghost_share in share_mappings:
+            self._ghost_nfs_share(local_share, ghost_share)
+
+    def _ghost_nfs_share(self, local_share, ghost_share):
+        """Bind mount a local unit NFS share to another sites location
+
+        :param local_share: Local NFS share URL
+        :type local_share: str
         :param ghost_share: NFS share URL to ghost
         :type ghost_share: str
         """
         nfs_share_path = os.path.join(
             TV_MOUNTS,
-            self._encode_endpoint(ch_core.hookenv.config("nfs-shares"))
+            self._encode_endpoint(local_share)
         )
         ghost_share_path = os.path.join(
             TV_MOUNTS, self._encode_endpoint(ghost_share)
@@ -174,8 +202,8 @@ class TrilioVaultCharmGhostAction(object):
         if nfs_share_path not in current_mounts:
             # Trilio has not mounted the NFS share so return
             raise NFSShareNotMountedException(
-                "nfs-shares ({}) not mounted".format(
-                    ch_core.hookenv.config("nfs-shares")
+                "nfs-share ({}) not mounted".format(
+                    local_share
                 )
             )
 
