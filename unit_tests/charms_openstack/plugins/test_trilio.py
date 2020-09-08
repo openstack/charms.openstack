@@ -1,3 +1,4 @@
+import unittest.mock as mock
 import os
 
 from unit_tests.charms_openstack.charm.utils import BaseOpenStackCharmTest
@@ -22,8 +23,8 @@ class TrilioVaultFoobarSubordinate(trilio.TrilioVaultSubordinateCharm):
 
 class TestTrilioCharmGhostAction(BaseOpenStackCharmTest):
 
-    _nfs_shares = "10.20.30.40:/srv/trilioshare"
-    _ghost_shares = "50.20.30.40:/srv/trilioshare"
+    _nfs_share = "10.20.30.40:/srv/trilioshare"
+    _ghost_share = "50.20.30.40:/srv/trilioshare"
 
     def setUp(self):
         super().setUp(trilio.TrilioVaultCharmGhostAction, {})
@@ -36,45 +37,73 @@ class TestTrilioCharmGhostAction(BaseOpenStackCharmTest):
         self.trilio_charm = trilio.TrilioVaultCharmGhostAction()
         self._nfs_path = os.path.join(
             trilio.TV_MOUNTS,
-            self.trilio_charm._encode_endpoint(self._nfs_shares),
+            self.trilio_charm._encode_endpoint(self._nfs_share),
         )
         self._ghost_path = os.path.join(
             trilio.TV_MOUNTS,
-            self.trilio_charm._encode_endpoint(self._ghost_shares),
+            self.trilio_charm._encode_endpoint(self._ghost_share),
         )
 
-    def test_ghost_share(self):
-        self.config.return_value = self._nfs_shares
+    def test__ghost_nfs_share(self):
+        self.config.return_value = self._nfs_share
         self.mounts.return_value = [
             ["/srv/nova", "/dev/sda"],
-            [self._nfs_path, self._nfs_shares],
+            [self._nfs_path, self._nfs_share],
         ]
         self.exists.return_value = False
-        self.trilio_charm.ghost_nfs_share(self._ghost_shares)
+        self.trilio_charm._ghost_nfs_share(self._nfs_share,
+                                           self._ghost_share)
         self.exists.assert_called_once_with(self._ghost_path)
         self.mkdir.assert_called_once_with(self._ghost_path)
         self.mount.assert_called_once_with(
             self._nfs_path, self._ghost_path, options="bind"
         )
 
-    def test_ghost_share_already_bound(self):
-        self.config.return_value = self._nfs_shares
+    def test__ghost_nfs_share_already_bound(self):
+        self.config.return_value = self._nfs_share
         self.mounts.return_value = [
             ["/srv/nova", "/dev/sda"],
-            [self._nfs_path, self._nfs_shares],
-            [self._ghost_path, self._nfs_shares],
+            [self._nfs_path, self._nfs_share],
+            [self._ghost_path, self._nfs_share],
         ]
         with self.assertRaises(trilio.GhostShareAlreadyMountedException):
-            self.trilio_charm.ghost_nfs_share(self._ghost_shares)
+            self.trilio_charm._ghost_nfs_share(self._nfs_share,
+                                               self._ghost_share)
         self.mount.assert_not_called()
 
-    def test_ghost_share_nfs_unmounted(self):
-        self.config.return_value = self._nfs_shares
+    def test__ghost_nfs_share_nfs_unmounted(self):
+        self.config.return_value = self._nfs_share
         self.mounts.return_value = [["/srv/nova", "/dev/sda"]]
         self.exists.return_value = False
         with self.assertRaises(trilio.NFSShareNotMountedException):
-            self.trilio_charm.ghost_nfs_share(self._ghost_shares)
+            self.trilio_charm._ghost_nfs_share(self._nfs_share,
+                                               self._ghost_share)
         self.mount.assert_not_called()
+
+    def test_ghost_nfs_share(self):
+        self.patch_object(self.trilio_charm, "_ghost_nfs_share")
+        self.config.return_value = (
+            "10.20.30.40:/srv/trilioshare,10.20.30.40:/srv/trilioshare2"
+        )
+        self.trilio_charm.ghost_nfs_share(
+            "50.20.30.40:/srv/trilioshare,50.20.30.40:/srv/trilioshare2"
+        )
+        self._ghost_nfs_share.assert_has_calls([
+            mock.call("10.20.30.40:/srv/trilioshare",
+                      "50.20.30.40:/srv/trilioshare"),
+            mock.call("10.20.30.40:/srv/trilioshare2",
+                      "50.20.30.40:/srv/trilioshare2")
+        ])
+
+    def test_ghost_nfs_share_mismatch(self):
+        self.patch_object(self.trilio_charm, "_ghost_nfs_share")
+        self.config.return_value = (
+            "10.20.30.40:/srv/trilioshare,10.20.30.40:/srv/trilioshare2"
+        )
+        with self.assertRaises(trilio.MismatchedConfigurationException):
+            self.trilio_charm.ghost_nfs_share(
+                "50.20.30.40:/srv/trilioshare"
+            )
 
 
 class TestTrilioCommonBehaviours(BaseOpenStackCharmTest):
