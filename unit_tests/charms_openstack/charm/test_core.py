@@ -1066,3 +1066,23 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.target.install.assert_called_once()
         self.target.remove_obsolete_packages.assert_called_once()
         self.target.restart_all.assert_not_called()
+
+    def test_service_stop(self):
+        self.patch_object(chm_core.ch_host, 'service_stop')
+        self.target.service_stop('test-svc')
+        self.service_stop.assert_called_once_with('test-svc')
+
+    def test_service_start(self):
+        self.patch_object(chm_core.ch_host, 'service_start')
+        self.target.service_start('test-svc')
+        self.service_start.assert_called_once_with('test-svc')
+
+    def test_service_restart(self):
+        self.patch_object(chm_core.ch_host, 'service_restart')
+        self.target.service_restart('test-svc')
+        self.service_restart.assert_called_once_with('test-svc')
+
+    def test_service_reload(self):
+        self.patch_object(chm_core.ch_host, 'service_reload')
+        self.target.service_reload('test-svc')
+        self.service_reload.assert_called_once_with('test-svc', False)

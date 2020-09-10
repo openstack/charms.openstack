@@ -685,6 +685,50 @@ class BaseOpenStackCharmActions(object):
         """
         return self.restart_map
 
+    def service_stop(self, service_name):
+        """Stop the specified service.
+
+        Meant to be overridden by child classes in scenarios where clustering
+        software like Pacemaker is used.
+
+        :param service_name: The service to stop.
+        :type service_name: str
+        """
+        ch_host.service_stop(service_name)
+
+    def service_start(self, service_name):
+        """Start the specified service.
+
+        Meant to be overridden by child classes in scenarios where clustering
+        software like Pacemaker is used.
+
+        :param service_name: The service to start.
+        :type service_name: str
+        """
+        ch_host.service_start(service_name)
+
+    def service_restart(self, service_name):
+        """Restart the specified service.
+
+        Meant to be overridden by child classes in scenarios where clustering
+        software like Pacemaker is used.
+
+        :param service_name: The service to restart.
+        :type service_name: str
+        """
+        ch_host.service_restart(service_name)
+
+    def service_reload(self, service_name, restart_on_failure=False):
+        """Reload the specified service.
+
+        Meant to be overridden by child classes in scenarios where clustering
+        software like Pacemaker is used.
+
+        :param service_name: The service to reload.
+        :type service_name: str
+        """
+        ch_host.service_reload(service_name, restart_on_failure)
+
     @contextlib.contextmanager
     def restart_on_change(self):
         """Restart the services in the self.restart_map{} attribute if any of
@@ -704,16 +748,16 @@ class BaseOpenStackCharmActions(object):
                 restarts += self.full_restart_map[path]
         services_list = list(collections.OrderedDict.fromkeys(restarts).keys())
         for service_name in services_list:
-            ch_host.service_stop(service_name)
+            self.service_stop(service_name)
         for service_name in services_list:
-            ch_host.service_start(service_name)
+            self.service_start(service_name)
 
     def restart_all(self):
         """Restart all the services configured in the self.services[]
         attribute.
         """
         for svc in self.services:
-            ch_host.service_restart(svc)
+            self.service_restart(svc)
 
     def render_all_configs(self, adapters_instance=None):
         """Render (write) all of the config files identified as the keys in the
