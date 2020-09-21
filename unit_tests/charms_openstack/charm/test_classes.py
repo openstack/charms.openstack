@@ -510,6 +510,22 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                 'w')
             mock_file.write.assert_called_with('rabbit_cert')
 
+    def test_config_changed(self):
+        self.patch_target('configure_tls')
+        self.target.config_changed()
+        self.configure_tls.assert_called_once_with(certificates_interface=None)
+
+        self.configure_tls.reset_mock()
+        ep_mock = mock.MagicMock()
+        self.patch_object(
+            chm.reactive,
+            'endpoint_from_flag',
+            return_value=ep_mock)
+        self.patch_target('configure_tls')
+        self.target.config_changed()
+        self.target.configure_tls.assert_called_once_with(
+            certificates_interface=ep_mock)
+
     def test_configure_tls(self):
         tls_objs = [
             {

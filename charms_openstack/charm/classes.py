@@ -428,6 +428,10 @@ class OpenStackCharm(BaseOpenStackCharm,
     def config_defined_ssl_ca(self):
         return self._get_b64decode_for('ssl_ca')
 
+    def config_changed(self):
+        tls = reactive.endpoint_from_flag('certificates.available')
+        self.configure_tls(certificates_interface=tls)
+
     def configure_ssl(self, keystone_interface=None):
         """DEPRECATED Configure SSL certificates and keys.
 
