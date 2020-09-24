@@ -582,14 +582,14 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
 
         class TestCharm(object):
 
-            api_ports = TestAPIConfigurationAdapter.api_ports
+            active_api_ports = TestAPIConfigurationAdapter.api_ports
             name = 'test-charm'
 
         with mock.patch.object(adapters.hookenv, 'config', new=lambda: {}), \
                 mock.patch.object(adapters.APIConfigurationAdapter,
                                   'get_network_addresses'):
             c = adapters.APIConfigurationAdapter(charm_instance=TestCharm())
-            self.assertEqual(c.port_map, TestCharm.api_ports)
+            self.assertEqual(c.port_map, TestCharm.active_api_ports)
             self.assertEqual(c.service_name, 'test-charm')
 
     def test_ipv4_mode(self):
@@ -853,7 +853,7 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
     def test_memcache_ctx(self):
 
         class MockCharmInstance(object):
-            api_ports = {}
+            active_api_ports = {}
             name = 'hello'
 
             def __init__(self, release):
@@ -974,7 +974,7 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
         class ChInstance1(object):
             name = 'test-name'
             wsgi_script = 'test-script'
-            api_ports = {}
+            api_ports = active_api_ports = {}
 
         class ChInstance2(object):
             name = 'test-name'
@@ -984,7 +984,7 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             wsgi_process_weight = 0.5
             wsgi_admin_process_weight = 0.1
             wsgi_public_process_weight = 0.4
-            api_ports = {}
+            api_ports = active_api_ports = {}
 
         class ChInstance3(object):
             name = 'test-name'
@@ -994,7 +994,7 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
             wsgi_process_weight = None
             wsgi_admin_process_weight = 0.1
             wsgi_public_process_weight = 0.4
-            api_ports = {}
+            api_ports = active_api_ports = {}
 
         class FakeWSGIWorkerConfigContext():
             copy_kwargs = None

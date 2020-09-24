@@ -727,7 +727,7 @@ class APIConfigurationAdapter(ConfigurationAdapter):
                 "APIConfigurationAdapter.__init__()", level=hookenv.WARNING)
             self.port_map = port_map
         elif self.charm_instance is not None:
-            self.port_map = self.charm_instance.api_ports
+            self.port_map = self.charm_instance.active_api_ports
         else:
             self.port_map = None
         if service_name is not None:
