@@ -23,6 +23,7 @@ import charms_openstack.charm
 from charms_openstack.charm.classes import SNAP_PATH_PREFIX_FORMAT
 
 import charmhelpers.core as ch_core
+import charmhelpers.contrib.openstack.context as ch_context
 import charmhelpers.contrib.openstack.policyd as ch_policyd
 
 
@@ -216,9 +217,78 @@ class BaseOpenStackCephCharm(object):
         except OSError:
             return ''
 
+    @staticmethod
+    def _get_bluestore_compression():
+        """Get BlueStore Compression charm configuration if present.
 
-class CephCharm(charms_openstack.charm.OpenStackCharm,
-                BaseOpenStackCephCharm):
+        :returns: Dictionary of options suitable for passing on as keyword
+                  arguments or None.
+        :rtype: Optional[Dict[str,any]]
+        :raises: ValueError
+        """
+        try:
+            bluestore_compression = (
+                ch_context.CephBlueStoreCompressionContext())
+            bluestore_compression.validate()
+        except KeyError:
+            # The charm does not have BlueStore Compression options defined
+            bluestore_compression = None
+        if bluestore_compression:
+            return bluestore_compression.get_kwargs()
+
+    def states_to_check(self, required_relations=None):
+        """Augment states to check handling.
+
+        Validates Ceph specific configuration options and adds end user
+        feedback through juju status.
+
+        :param required_relations: List of relations which overrides
+                                   self.relations
+        :type required_relations: Optional[List[str]]
+        :returns: Map of relations and their states to check
+        :rtype: Dict[str,List[Tuple[str,str,str]]]
+        """
+        states_to_check = super().states_to_check(
+            required_relations=required_relations)
+        try:
+            self._get_bluestore_compression()
+        except ValueError as e:
+            # we add a made up relation to have the library set the status for
+            # us.
+            states_to_check['charm.bluestore_compression'] = [
+                ('charm.bluestore_compression',
+                 'blocked',
+                 'Invalid configuration: {}'.format(str(e))),
+            ]
+        return states_to_check
+
+    def create_pool(self, ceph_interface):
+        """Request pool for service.
+
+        :param ceph_interface: Ceph interface instance
+        :type ceph_interface: CephRequires
+        """
+        try:
+            bluestore_compression = self._get_bluestore_compression()
+        except ValueError as e:
+            # One or more of the values provided for the configuration options
+            # is invalid, do not attempt to create pool. The end user will be
+            # informed about the condition through juju status
+            # (see the ``states_to_check`` method above).
+            ch_core.hookenv.log('Invalid value(s) provided for Ceph BlueStore '
+                                'compression: "{}"'
+                                .format(str(e)))
+            return
+        kwargs = {
+            'name': self.name,
+        }
+        if bluestore_compression:
+            kwargs.update(bluestore_compression)
+        ceph_interface.create_replicated_pool(**kwargs)
+
+
+class CephCharm(BaseOpenStackCephCharm,
+                charms_openstack.charm.OpenStackCharm):
     """Class for charms deploying Ceph services.
 
     It provides useful defaults to make release detection work when no

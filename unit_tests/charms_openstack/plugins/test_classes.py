@@ -13,8 +13,8 @@ TEST_CONFIG = {'config': True,
 
 
 class FakeOpenStackCephConsumingCharm(
-        chm.OpenStackCharm,
-        cpl.BaseOpenStackCephCharm):
+        cpl.BaseOpenStackCephCharm,
+        chm.OpenStackCharm):
 
     abstract_class = True
 
@@ -133,6 +133,44 @@ class TestOpenStackCephConsumingCharm(BaseOpenStackCharmTest):
         self.remove.assert_called_once_with(keyring_filename)
         self.remove.side_effect = OSError
         self.assertEqual(self.target.delete_ceph_keyring(), '')
+
+    def test__get_bluestore_compression(self):
+        self.patch_object(cpl.ch_context, 'CephBlueStoreCompressionContext')
+        bluestore_compression = mock.MagicMock()
+        expect = {'fake': 'value'}
+        bluestore_compression.get_kwargs.return_value = expect
+        self.CephBlueStoreCompressionContext.return_value = (
+            bluestore_compression)
+        bluestore_compression.validate.side_effect = KeyError
+        self.assertEquals(self.target._get_bluestore_compression(), None)
+        bluestore_compression.validate.side_effect = None
+        self.assertDictEqual(
+            self.target._get_bluestore_compression(),
+            expect)
+
+    def test_states_to_check(self):
+        self.patch_object(chm.OpenStackCharm, 'states_to_check',
+                          name='parent_states_to_check')
+        expect = {'fake': [('state', 'message')]}
+        self.parent_states_to_check.return_value = expect
+        self.patch_target('_get_bluestore_compression')
+        self.assertDictEqual(self.target.states_to_check(), expect)
+        self._get_bluestore_compression.side_effect = ValueError
+        result = self.target.states_to_check()
+        self.assertIn('fake', result)
+        self.assertIn('charm.bluestore_compression', result)
+
+    def test_create_pool(self):
+        ceph_interface = mock.MagicMock()
+        self.patch_target('_get_bluestore_compression')
+        self._get_bluestore_compression.side_effect = ValueError
+        self.target.create_pool(ceph_interface)
+        self.assertFalse(ceph_interface.create_replicated_pool.called)
+        self._get_bluestore_compression.side_effect = None
+        self._get_bluestore_compression.return_value = {'fake': 'value'}
+        self.target.create_pool(ceph_interface)
+        ceph_interface.create_replicated_pool.assert_called_once_with(
+            name='charmname', fake='value')
 
 
 class TestCephCharm(BaseOpenStackCharmTest):
