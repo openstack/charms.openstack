@@ -119,6 +119,12 @@ class TestDefaults(BaseOpenStackCharmTest):
         self.assertEqual(release, 'one')
         kv.set.assert_not_called()
         kv.get.assert_called_once_with(chm.OPENSTACK_RELEASE_KEY, None)
+        # No release_pkg set, ensure a RuntimeError raised
+        kv.get.return_value = None
+        singleton.release_pkg = None
+        with self.assertRaises(RuntimeError):
+            h.map['function']()
+        singleton.release_pkg = "my-pkg"
         # No release set, ensure it calls os_release
         kv.reset_mock()
         kv.get.return_value = None

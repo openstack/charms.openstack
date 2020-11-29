@@ -103,6 +103,8 @@ def make_default_select_release_handler():
                 # First make an attempt of determining release from a charm
                 # instance defined package codename dictionary.
                 singleton = get_charm_instance()
+                if singleton.release_pkg is None:
+                    raise RuntimeError("release_pkg is not set")
                 release_version = singleton.get_os_codename_package(
                     singleton.release_pkg, singleton.package_codenames,
                     apt_cache_sufficient=(not singleton.source_config_key))
