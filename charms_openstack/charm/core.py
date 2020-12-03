@@ -489,6 +489,48 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         return version_or_codename
 
     @staticmethod
+    def get_package_version(package, apt_cache_sufficient=False):
+        """Derive OpenStack release codename from a package.
+
+        :param package: Package name to lookup (ie. in apt cache)
+        :type package: str
+        :param apt_cache_sufficient: When False (the default) version from an
+            installed package will be used, when True version from the systems
+            APT cache will be used.  This is useful for subordinate charms who
+            need working release selection prior to package installation and
+            has no way of using fall back to version of a package the principle
+            charm has installed nor package source configuration option.
+        :type apt_cache_sufficient: bool
+        :returns: OpenStack version name corresponding to package
+        :rtype: Optional[str]
+        :raises: AttributeError, ValueError
+        """
+        cache = fetch.apt_cache()
+
+        try:
+            pkg = cache[package]
+        except KeyError:
+            # the package is unknown to the current apt cache.
+            e = ValueError(
+                'Could not determine version of package with no installation '
+                'candidate: {}'.format(package))
+            raise e
+
+        if apt_cache_sufficient:
+            vers = fetch.apt_pkg.upstream_version(pkg.version)
+        else:
+            vers = fetch.apt_pkg.upstream_version(pkg.current_ver.ver_str)
+
+        # x.y match only for 20XX.X
+        # and ignore patch level for other packages
+        match = re.match(r'^(\d+)\.(\d+)', vers)
+
+        if match:
+            vers = match.group(0)
+
+        return vers
+
+    @staticmethod
     def get_os_codename_package(package, codenames, fatal=True,
                                 apt_cache_sufficient=False):
         """Derive OpenStack release codename from a package.
@@ -521,37 +563,18 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         :rtype: Optional[str]
         :raises: AttributeError, ValueError
         """
-        cache = fetch.apt_cache()
-
         try:
-            pkg = cache[package]
-        except KeyError:
-            if not fatal:
+            vers = BaseOpenStackCharm.get_package_version(
+                package,
+                apt_cache_sufficient=apt_cache_sufficient)
+            # Generate a major version number for newer semantic
+            # versions of openstack projects
+            major_vers = vers.split('.')[0]
+        except Exception:
+            if fatal:
+                raise
+            else:
                 return None
-            # the package is unknown to the current apt cache.
-            e = ValueError(
-                'Could not determine version of package with no installation '
-                'candidate: {}'.format(package))
-            raise e
-
-        if apt_cache_sufficient:
-            vers = fetch.apt_pkg.upstream_version(pkg.version)
-        else:
-            if not pkg.current_ver:
-                if not fatal:
-                    return None
-            vers = fetch.apt_pkg.upstream_version(pkg.current_ver.ver_str)
-
-        # x.y match only for 20XX.X
-        # and ignore patch level for other packages
-        match = re.match(r'^(\d+)\.(\d+)', vers)
-
-        if match:
-            vers = match.group(0)
-
-        # Generate a major version number for newer semantic
-        # versions of openstack projects
-        major_vers = vers.split('.')[0]
         if (package in codenames and
                 major_vers in codenames[package]):
             return codenames[package][major_vers]
