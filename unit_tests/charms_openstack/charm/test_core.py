@@ -57,6 +57,36 @@ class TestRegisterOSReleaseSelector(unittest.TestCase):
         chm_core._release_selector_function = save_rsf
 
 
+class TestRegisterGetCharmInstance(unittest.TestCase):
+
+    def test_register(self):
+        save_rsf = chm_core._get_charm_instance_function
+        chm_core._get_charm_instance_function = None
+
+        @chm_core.register_get_charm_instance
+        def test_func():
+            pass
+
+        self.assertEqual(chm_core._get_charm_instance_function, test_func)
+        chm_core._get_charm_instance_function = save_rsf
+
+    def test_cant_register_more_than_once(self):
+        save_rsf = chm_core._get_charm_instance_function
+        chm_core._get_charm_instance_function = None
+
+        @chm_core.register_get_charm_instance
+        def test_func1():
+            pass
+
+        with self.assertRaises(RuntimeError):
+            @chm_core.register_get_charm_instance
+            def test_func2():
+                pass
+
+        self.assertEqual(chm_core._get_charm_instance_function, test_func1)
+        chm_core._get_charm_instance_function = save_rsf
+
+
 class TestBaseOpenStackCharmMeta(BaseOpenStackCharmTest):
 
     def setUp(self):
@@ -103,6 +133,7 @@ class TestFunctions(BaseOpenStackCharmTest):
     def setUp(self):
         super().setUp(chm_core.BaseOpenStackCharm, TEST_CONFIG)
         self.patch_object(chm_core, '_releases', new={})
+        chm_core._get_charm_instance_function = None
 
         class TestC1(chm_core.BaseOpenStackCharm):
             release = 'icehouse'

@@ -45,6 +45,10 @@ _singleton = None
 # This is to enable the defining code to define which release is used.
 _release_selector_function = None
 
+# `_get_charm_instance_function` holds a function that takes optionally takes a
+# release and returns the corresponding charm class.
+_get_charm_instance_function = None
+
 # `_package_type_selector_function` holds a function that optionally takes a
 # package type and commutes it to another package type or just returns a
 # package type. This is to enable the defining code to define which
@@ -100,7 +104,8 @@ class provide_charm_instance(object):
         return False
 
 
-def get_charm_instance(release=None, package_type='deb', *args, **kwargs):
+def default_get_charm_instance(release=None, package_type='deb', *args,
+                               **kwargs):
     """Get an instance of the charm based on the release (or use the
     default if release is None).
 
@@ -147,6 +152,24 @@ def get_charm_instance(release=None, package_type='deb', *args, **kwargs):
     return cls(release=release, *args, **kwargs)
 
 
+def get_charm_instance(release=None, package_type='deb', *args, **kwargs):
+    """Get an instance of the charm based on the release (or use the
+    default if release is None).
+
+    Use a bespoke method if one is registered otherwise uses the default
+    default_get_charm_instance.
+
+    :param release: lc string representing release wanted.
+    :param package_type: string representing the package type required
+    :returns: BaseOpenStackCharm() derived class according to cls.releases
+    """
+    return (_get_charm_instance_function or default_get_charm_instance)(
+        release=release,
+        package_type=package_type,
+        *args,
+        **kwargs)
+
+
 def register_os_release_selector(f):
     """Register a function that determines what the release is for the
     invocation run.  This allows the charm to define HOW the release is
@@ -167,6 +190,31 @@ def register_os_release_selector(f):
     else:
         raise RuntimeError(
             "Only a single release_selector_function is supported."
+            " Called with {}".format(f.__name__))
+    return f
+
+
+def register_get_charm_instance(f):
+    """Register a function that supplies a charm class for a given
+    release.
+
+    Usage:
+
+        @register_get_charm_instance
+        def my_get_charm_instance(release=None, *args, **kwargs):
+            if release == X:
+                cls = CharmClassX
+            return cls(release=release, *args, **kwargs)
+
+    The function should return a string which is an OS release.
+    """
+    global _get_charm_instance_function
+    if _get_charm_instance_function is None:
+        # we can only do this once in a system invocation.
+        _get_charm_instance_function = f
+    else:
+        raise RuntimeError(
+            "Only a single get_charm_instance is supported."
             " Called with {}".format(f.__name__))
     return f
 
