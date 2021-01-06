@@ -375,21 +375,11 @@ class TestBaseOpenStackCharmAssessStatus(BaseOpenStackCharmTest):
 class TestMyOpenStackCharm(BaseOpenStackCharmTest):
 
     def setUp(self):
-        self.save_rsf = chm_core._release_selector_function
-        chm_core._release_selector_function = None
-        self.save_cif = chm_core._get_charm_instance_function
-        chm_core._get_charm_instance_function = None
-
         def make_open_stack_charm():
             return MyOpenStackCharm(['interface1', 'interface2'])
 
         super(TestMyOpenStackCharm, self).setUp(make_open_stack_charm,
                                                 TEST_CONFIG)
-
-    def tearDown(self):
-        chm_core._release_selector_function = self.save_rsf
-        chm_core._get_charm_instance_function = self.save_cif
-        super().tearDown()
 
     def test_singleton(self):
         # because we have two releases, we expect this to be the latter.
