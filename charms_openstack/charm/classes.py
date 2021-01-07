@@ -280,10 +280,14 @@ class OpenStackCharm(BaseOpenStackCharm,
         os_utils.manage_payload_services('stop', self.full_service_list)
         os_utils.manage_payload_services('start', self.full_service_list)
 
-    def get_certificate_requests(self):
-        """Return a dict of certificate requests"""
+    def get_certificate_requests(self, bindings=None):
+        """Return a dict of certificate requests
+
+        :param bindings: List of binding string names for cert requests
+        :type bindings: List[str]
+        """
         return cert_utils.get_certificate_request(
-            json_encode=False).get('cert_requests', {})
+            json_encode=False, bindings=bindings).get('cert_requests', {})
 
     @property
     def rabbit_client_cert_dir(self):
