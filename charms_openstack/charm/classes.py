@@ -13,6 +13,7 @@ import charmhelpers.contrib.openstack.utils as os_utils
 import charmhelpers.contrib.openstack.ha as os_ha
 import charmhelpers.contrib.openstack.ha.utils as os_ha_utils
 import charmhelpers.contrib.openstack.cert_utils as cert_utils
+import charmhelpers.contrib.openstack.ip as ch_os_ip
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.host as ch_host
 import charmhelpers.fetch as fetch
@@ -354,7 +355,8 @@ class OpenStackCharm(BaseOpenStackCharm,
         :rtype: List[str]
         """
         addresses = [
-            os_utils.get_host_ip(hookenv.unit_get('private-address'))]
+            os_utils.get_host_ip(ch_os_ip.local_address(
+                unit_get_fallback='private-address'))]
         for addr_type in os_ip.ADDRESS_MAP.keys():
             laddr = os_ip.resolve_address(endpoint_type=addr_type)
             if laddr:

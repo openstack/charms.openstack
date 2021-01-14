@@ -601,7 +601,7 @@ class TestAPIConfigurationAdapter(unittest.TestCase):
                                return_value='10.0.0.10'), \
                 mock.patch.object(adapters.hookenv, 'config',
                                   new=lambda: test_config), \
-                mock.patch.object(adapters.hookenv, 'unit_get',
+                mock.patch.object(adapters.ch_os_ip, 'local_address',
                                   return_value='10.0.0.20'), \
                 mock.patch.object(adapters.APIConfigurationAdapter,
                                   'get_network_addresses'):

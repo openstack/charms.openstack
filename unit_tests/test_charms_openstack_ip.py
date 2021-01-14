@@ -56,6 +56,7 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         self.patch_object(ip.net_ip, 'get_ipv6_addr')
         self.patch_object(ip.hookenv, 'unit_get')
         self.patch_object(ip.net_ip, 'get_address_in_network')
+        self.patch_object(ip.ch_os_ip, 'local_address')
 
         # define a fake_config() that returns predictable results and remembers
         # what it was called with.
@@ -78,11 +79,11 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         # Juju pre 2.0 behaviour where network-get is not implemented
         self.network_get_primary_address.side_effect = NotImplementedError
 
-        # first test, if no VIP, that the function uses unit_get() and
+        # first test, if no VIP, that the function uses local_address() and
         # get_address_in_network to get a real address.
         # for the default PUBLIC endpoint
         self.get_address_in_network.return_value = 'got-address'
-        self.unit_get.return_value = 'unit-get-address'
+        self.local_address.return_value = 'unit-get-address'
         addr = ip.resolve_address()
         self.assertEqual(addr, 'got-address')
         self.assertEqual(calls_list,
@@ -90,7 +91,8 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
                           ('vip',),
                           ('os-public-network',),
                           ('prefer-ipv6',)])
-        self.unit_get.assert_called_once_with('public-address')
+        self.local_address.assert_called_once_with(
+            unit_get_fallback='public-address')
         self.get_address_in_network.assert_called_once_with(
             'the-public-network', 'unit-get-address')
 
@@ -142,9 +144,9 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         self.patch_object(ip.hookenv, 'network_get_primary_address')
         self.patch_object(ip.net_ip, 'is_address_in_network')
         self.patch_object(ip.net_ip, 'get_ipv6_addr')
-        self.patch_object(ip.hookenv, 'unit_get')
         self.patch_object(ip.net_ip, 'get_address_in_network')
         self.patch_object(ip, '_resolve_network_cidr')
+        self.patch_object(ip.ch_os_ip, 'local_address')
 
         # define a fake_config() that returns predictable results and remembers
         # what it was called with.
@@ -169,7 +171,7 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
         # for the default PUBLIC endpoint
         self.network_get_primary_address.return_value = 'got-address'
         self._resolve_network_cidr.return_value = 'cidr'
-        self.unit_get.return_value = 'unit-get-address'
+        self.local_address.return_value = 'unit-get-address'
         addr = ip.resolve_address()
         self.assertEqual(addr, 'got-address')
         self.assertEqual(calls_list,
@@ -177,7 +179,8 @@ class TestCharmOpenStackIp(utils.BaseTestCase):
                           ('vip',),
                           ('os-public-network',),
                           ('prefer-ipv6',)])
-        self.unit_get.assert_called_once_with('public-address')
+        self.local_address.assert_called_once_with(
+            unit_get_fallback='public-address')
         self.network_get_primary_address.assert_called_with(
             'public'
         )

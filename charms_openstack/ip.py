@@ -17,6 +17,7 @@ import netaddr
 
 import charmhelpers.core.hookenv as hookenv
 import charmhelpers.contrib.network.ip as net_ip
+import charmhelpers.contrib.openstack.ip as ch_os_ip
 import charms.reactive.bus
 
 PUBLIC = 'public'
@@ -162,7 +163,8 @@ def resolve_address(endpoint_type=PUBLIC, override=True):
         if hookenv.config('prefer-ipv6'):
             fallback_addr = net_ip.get_ipv6_addr(exc_list=vips)[0]
         else:
-            fallback_addr = hookenv.unit_get(net_fallback)
+            fallback_addr = ch_os_ip.local_address(
+                unit_get_fallback=net_fallback)
 
         if net_addr:
             resolved_address = net_ip.get_address_in_network(net_addr,
