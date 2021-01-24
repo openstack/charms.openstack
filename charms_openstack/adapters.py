@@ -303,13 +303,18 @@ class PeerHARelationAdapter(OpenStackRelationAdapter):
         self.api_config_adapter = APIConfigurationAdapter()
         self.local_address = self.api_config_adapter.local_address
         self.local_unit_name = self.api_config_adapter.local_unit_name
-        # Note(AJK) - bug #1698814 - cluster_hosts needs to be ordered so that
-        # re-writes with no changed data don't cause a restart (dictionaries
-        # are 'randomly' ordered)
+        # Note(ajkavanagh) - bug #1698814 - cluster_hosts needs to be ordered
+        # so that re-writes with no changed data don't cause a restart
+        # (dictionaries are 'randomly' ordered)
         self.cluster_hosts = collections.OrderedDict()
         if relation:
-            self.add_network_split_addresses()
+            # NOTE(ajkavanagh) BUG: #1912505
+            # do add_default_addresses first, then add_network_split_addresses
+            # as otherwise it will inadvertently overwrite the correct
+            # addresses with the private-addresses of the remove units (rather
+            # the the address that is required)
             self.add_default_addresses()
+            self.add_network_split_addresses()
 
     @property
     def internal_addresses(self):
