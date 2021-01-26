@@ -381,12 +381,18 @@ class OpenStackCharm(BaseOpenStackCharm,
         if self.config_defined_ssl_key and self.config_defined_ssl_cert:
             ssl_artifacts = []
             for ep_type in [os_ip.INTERNAL, os_ip.ADMIN, os_ip.PUBLIC]:
+                # Not all charms have all bindings to skip if unavailable
+                try:
+                    cn = os_ip.resolve_address(endpoint_type=ep_type)
+                except hookenv.NoNetworkBinding:
+                    continue
+
                 ssl_artifacts.append({
                     'key': self.config_defined_ssl_key.decode('utf-8'),
                     'cert': self.config_defined_ssl_cert.decode('utf-8'),
                     'ca': (self.config_defined_ssl_ca.decode('utf-8')
                            if self.config_defined_ssl_ca else None),
-                    'cn': os_ip.resolve_address(endpoint_type=ep_type)})
+                    'cn': cn})
             return ssl_artifacts
         elif certificates_interface:
             keys_and_certs = []
