@@ -26,7 +26,7 @@ class Tox(TestCommand):
         import tox
         import shlex
         args = self.tox_args
-        # remove the 'test' arg from argv as tox passes it to ostestr which
+        # remove the 'test' arg from argv as tox passes it to stestr which
         # breaks it.
         sys.argv.pop()
         if args:
