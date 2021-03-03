@@ -76,4 +76,5 @@ def mock_charmhelpers():
         'train',
         'ussuri',
         'victoria',
+        'wallaby',
     )
