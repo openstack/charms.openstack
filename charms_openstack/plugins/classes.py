@@ -262,11 +262,19 @@ class BaseOpenStackCephCharm(object):
             ]
         return states_to_check
 
-    def create_pool(self, ceph_interface):
+    def create_pool(self, ceph_interface, pool_name=None):
         """Request pool for service.
+
+        The pool created will be a replicated pool and will adopt standard
+        BlueStore compression options that are configured for the charm.
+        Charms that do not have provide BlueStore compression options will
+        create pools using the Ceph storage configured defaults.
 
         :param ceph_interface: Ceph interface instance
         :type ceph_interface: CephRequires
+        :param pool_name: (Optional) name of the pool to create.
+                          Defaults to the name of the application deployed.
+        :type pool_name: str
         """
         try:
             bluestore_compression = self._get_bluestore_compression()
@@ -280,7 +288,7 @@ class BaseOpenStackCephCharm(object):
                                 .format(str(e)))
             return
         kwargs = {
-            'name': self.name,
+            'name': pool_name or self.application_name,
         }
         if bluestore_compression:
             kwargs.update(bluestore_compression)

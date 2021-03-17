@@ -166,11 +166,19 @@ class TestOpenStackCephConsumingCharm(BaseOpenStackCharmTest):
         self._get_bluestore_compression.side_effect = ValueError
         self.target.create_pool(ceph_interface)
         self.assertFalse(ceph_interface.create_replicated_pool.called)
+
+        self.patch_object(cpl.ch_core.hookenv, 'application_name',
+                          return_value='svc1')
         self._get_bluestore_compression.side_effect = None
         self._get_bluestore_compression.return_value = {'fake': 'value'}
         self.target.create_pool(ceph_interface)
         ceph_interface.create_replicated_pool.assert_called_once_with(
-            name='charmname', fake='value')
+            name='svc1', fake='value')
+
+        ceph_interface.create_replicated_pool.reset_mock()
+        self.target.create_pool(ceph_interface, pool_name='custom_pool')
+        ceph_interface.create_replicated_pool.assert_called_once_with(
+            name='custom_pool', fake='value')
 
 
 class TestCephCharm(BaseOpenStackCharmTest):
