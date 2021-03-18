@@ -127,6 +127,53 @@ class TestBaseOpenStackCharmMeta(BaseOpenStackCharmTest):
             class TestC2(chm_core.BaseOpenStackCharm):
                 release = 'liberty'
 
+    def test_releases_packages_map(self):
+        self.maxDiff = None
+        self.patch_object(chm_core, '_releases', new={})
+
+        class TestC1(chm_core.BaseOpenStackCharm):
+            release = 'liberty'
+            packages = ['l_inst_one', 'l_inst_two']
+            purge_packages = ['l_purge']
+
+        class TestC2(chm_core.BaseOpenStackCharm):
+            release = 'mitaka'
+            packages = ['m_inst_one', 'm_inst_two']
+            purge_packages = ['m_purge']
+
+        class TestC3(chm_core.BaseOpenStackCharm):
+            release = 'ocata'
+            package_type = 'snap'
+            snaps = ['o_snap_one', 'o_snap_two']
+
+        # from any charm release instance we see package_type / install_purge
+        # lists registered by all other charm release instances
+        for cls in (TestC1, TestC2, TestC3):
+            instance = cls()
+            self.assertDictEqual(
+                instance.releases_packages_map,
+                {
+                    'liberty': {
+                        'deb': {
+                            'install': ['l_inst_one', 'l_inst_two'],
+                            'purge': ['l_purge']
+                        }
+                    },
+                    'mitaka': {
+                        'deb': {
+                            'install': ['m_inst_one', 'm_inst_two'],
+                            'purge': ['m_purge']
+                        }
+                    },
+                    'ocata': {
+                        'snap': {
+                            'install': ['o_snap_one', 'o_snap_two'],
+                            'purge': []
+                        }
+                    }
+                }
+            )
+
 
 class TestFunctions(BaseOpenStackCharmTest):
 
