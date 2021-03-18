@@ -1,5 +1,4 @@
 import collections
-import contextlib
 import functools
 import itertools
 import os
@@ -817,28 +816,26 @@ class BaseOpenStackCharmActions(object):
         """
         ch_host.service_reload(service_name, restart_on_failure)
 
-    @contextlib.contextmanager
     def restart_on_change(self):
         """Restart the services in the self.restart_map{} attribute if any of
         the files identified by the keys changes for the wrapped call.
 
-        This function is a @decorator that checks if the wrapped function
-        changes any of the files identified by the keys in the
-        self.restart_map{} and, if they change, restarts the services in the
-        corresponding list.
+        Usage:
+
+           @restart_on_change(restart_map, ...)
+           def function_that_might_trigger_a_restart(...)
+               ...
+
+        Or:
+
+           with restart_on_change(restart_map, ...):
+               do_stuff_that_might_trigger_a_restart()
+               ...
         """
-        checksums = {path: ch_host.path_hash(path)
-                     for path in self.full_restart_map.keys()}
-        yield
-        restarts = []
-        for path in self.full_restart_map:
-            if ch_host.path_hash(path) != checksums[path]:
-                restarts += self.full_restart_map[path]
-        services_list = list(collections.OrderedDict.fromkeys(restarts).keys())
-        for service_name in services_list:
-            self.service_stop(service_name)
-        for service_name in services_list:
-            self.service_start(service_name)
+        return ch_host.restart_on_change(
+            self.full_restart_map,
+            stopstart=True,
+            restart_functions=getattr(self, 'restart_functions', None))
 
     def restart_all(self):
         """Restart all the services configured in the self.services[]

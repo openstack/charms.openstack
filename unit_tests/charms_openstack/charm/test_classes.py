@@ -119,52 +119,13 @@ class TestOpenStackCharm(BaseOpenStackCharmTest):
         self.assertEqual(self.target.region, 'a-region')
 
     def test_restart_on_change(self):
-        from collections import OrderedDict
-        hashs = OrderedDict([
-            ('path1', 100),
-            ('path2', 200),
-            ('path3', 300),
-            ('path4', 400),
-        ])
-        self.target.restart_map = {
-            'path1': ['s1'],
-            'path2': ['s2'],
-            'path3': ['s3'],
-            'path4': ['s2', 's4'],
-        }
-        self.patch_object(chm.ch_host, 'path_hash')
-        self.path_hash.side_effect = lambda x: hashs[x]
-        self.patch_object(chm.ch_host, 'service_stop')
-        self.patch_object(chm.ch_host, 'service_start')
-        # slightly awkard, in that we need to test a context manager
-        with self.target.restart_on_change():
-            # test with no restarts
-            pass
-        self.assertEqual(self.service_stop.call_count, 0)
-        self.assertEqual(self.service_start.call_count, 0)
-
-        with self.target.restart_on_change():
-            # test with path1 and path3 restarts
-            for k in ['path1', 'path3']:
-                hashs[k] += 1
-        self.assertEqual(self.service_stop.call_count, 2)
-        self.assertEqual(self.service_start.call_count, 2)
-        self.service_stop.assert_any_call('s1')
-        self.service_stop.assert_any_call('s3')
-        self.service_start.assert_any_call('s1')
-        self.service_start.assert_any_call('s3')
-
-        # test with path2 and path4 and that s2 only gets restarted once
-        self.service_stop.reset_mock()
-        self.service_start.reset_mock()
-        with self.target.restart_on_change():
-            for k in ['path2', 'path4']:
-                hashs[k] += 1
-        self.assertEqual(self.service_stop.call_count, 2)
-        self.assertEqual(self.service_start.call_count, 2)
-        calls = [mock.call('s2'), mock.call('s4')]
-        self.service_stop.assert_has_calls(calls)
-        self.service_start.assert_has_calls(calls)
+        self.patch_object(chm.ch_host, 'restart_on_change')
+        self.restart_on_change.__enter__.return_value.name = 'a'
+        self.target.restart_on_change()
+        self.restart_on_change.assert_called_once_with(
+            {},
+            stopstart=True,
+            restart_functions=None)
 
     def test_restart_all(self):
         self.patch_object(chm.ch_host, 'service_restart')
