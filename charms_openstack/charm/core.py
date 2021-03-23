@@ -390,6 +390,40 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         # Note refers back to the Metaclass property for this charm.
         return self.__class__.singleton
 
+    @property
+    def releases_packages_map(self):
+        """Provide a map of all supported releases and their packages.
+
+        :returns: Map of release, package type and install / purge packages.
+            Example:
+            {
+                'mitaka': {
+                    'deb': {
+                        'install': ['python-ldappool'],
+                        'purge': []
+                    }
+                },
+                'rocky': {
+                    'deb': {
+                        'install': ['python3-ldap', 'python3-ldappool'],
+                        'purge': ['python-ldap', 'python-ldappool']}
+                }
+            }
+        :rtype: Dict[str,Dict[str,List[str]]]
+        """
+        return {
+            release: {
+                package_type: {
+                    'install': (instance.packages if package_type == 'deb'
+                                else instance.snaps),
+                    'purge': (instance.purge_packages if package_type == 'deb'
+                              else []),
+                },
+            }
+            for release, pkg_instance in _releases.items()
+            for package_type, instance in pkg_instance.items()
+        }
+
     def __init__(self, interfaces=None, config=None, release=None):
         """Instantiate an instance of the class.
 
