@@ -899,6 +899,9 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                           'upstream_version')
         self.patch_object(chm_core.os_utils, 'snap_install_requested',
                           return_value=False)
+        self.patch_object(chm_core.os_utils, 'get_installed_os_version')
+        self.get_installed_os_version.return_value = None
+        self.upstream_version.return_value = '3.0.0~b1'
         self.upstream_version.return_value = '3.0.0~b1'
         self.assertEqual(
             chm_core.BaseOpenStackCharm.get_os_codename_package(
@@ -913,7 +916,14 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
             'newton')
         self.upstream_version.assert_called_once_with(
             pkg_mock.version)
+        # Test Wallaby
+        self.get_installed_os_version.return_value = 'wallaby'
+        self.assertEqual(
+            chm_core.BaseOpenStackCharm.get_os_codename_package(
+                'testpkg', codenames),
+            'wallaby')
         # Test non-fatal fail
+        self.get_installed_os_version.return_value = None
         self.assertEqual(
             chm_core.BaseOpenStackCharm.get_os_codename_package(
                 'unknownpkg', codenames, fatal=False),
