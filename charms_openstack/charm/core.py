@@ -616,6 +616,14 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
                                 apt_cache_sufficient=False):
         """Derive OpenStack release codename from a package.
 
+
+        Initially, see if the openstack-release pkg is available (by trying
+        to install it) and use it instead.
+
+        If it isn't then it falls back to the existing method of checking the
+        version of the package passed and then resolving the version from that
+        using lookup tables.
+
         :param package: Package name to lookup (ie. in apt cache)
         :type package: str
         :param codenames: Map of package to (version, os_release) tuples.
@@ -644,6 +652,11 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         :rtype: Optional[str]
         :raises: AttributeError, ValueError
         """
+
+        codename = os_utils.get_installed_os_version()
+        if codename:
+            return codename
+
         try:
             vers = BaseOpenStackCharm.get_package_version(
                 package,
