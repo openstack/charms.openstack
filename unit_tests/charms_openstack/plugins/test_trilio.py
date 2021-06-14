@@ -181,6 +181,19 @@ class TestTrilioCommonBehaviours(BaseOpenStackCharmTest):
             trilio.trilio_properties(cls_mock),
             {'db_type': 'legacy', 'transport_type': 'legacy'})
 
+    def test_trilio_s3_cert_config(self):
+        cls_mock = mock.MagicMock()
+        self.config.return_value = 'QSBjZXJ0Cg=='
+        self.assertEqual(
+            trilio.trilio_s3_cert_config(cls_mock),
+            {
+                'cert_file': '/usr/share/ca-certificates/charm-s3.cert',
+                'cert_data': 'A cert\n'})
+        self.config.return_value = None
+        self.assertEqual(
+            trilio.trilio_s3_cert_config(cls_mock),
+            {})
+
     def test_get_trilio_codename_install_source(self):
         self.assertEqual(
             trilio.get_trilio_codename_install_source(

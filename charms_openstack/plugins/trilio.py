@@ -31,6 +31,9 @@ import charms.reactive as reactive
 
 TV_MOUNTS = "/var/triliovault-mounts"
 
+# Location of the certificate file to use when talking to S3 endpoint.
+S3_SSL_CERT_FILE = '/usr/share/ca-certificates/charm-s3.cert'
+
 # Used to store the discovered release version for caching between invocations
 TRILIO_RELEASE_KEY = 'charmers.trilio-release-version'
 
@@ -62,6 +65,22 @@ def trilio_properties(cls):
         return {
             'db_type': 'legacy',
             'transport_type': 'legacy'}
+
+
+@charms_openstack.adapters.config_property
+def trilio_s3_cert_config(cls):
+    """Trilio S3 certificate config
+
+    :param cls: Configuration Adapter class
+    :type cls: charms_openstack.adapters.DefaultConfigurationAdapter
+    """
+    s3_cert_config = {}
+    config = ch_core.hookenv.config('tv-s3-ssl-cert')
+    if config:
+        s3_cert_config = {
+            'cert_file': S3_SSL_CERT_FILE,
+            'cert_data': base64.b64decode(config).decode('utf-8')}
+    return s3_cert_config
 
 
 class AptPkgVersion():
