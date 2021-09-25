@@ -15,7 +15,7 @@ We use the openstack-charmers mailing-lists for developer and user discussions, 
 find and subscribe here: https://lists.ubuntu.com/openstack-charmers.
 
 If you prefer live discussions, some of us also hang out in
-[#juju](http://webchat.freenode.net/?channels=#juju) on irc.freenode.net.
+[#juju](https://chat.charmhub.io/charmhub/channels/juju) on Charmhub chat.
 
 # Bug reports
 
