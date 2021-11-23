@@ -369,10 +369,10 @@ class TestPolicydOverridePlugin(BaseOpenStackCharmTest):
         self.patch_target('_policyd_function_args',
                           return_value=(["args"], {"kwargs": 1}))
         self.patch_object(cpl.ch_policyd,
-                          'maybe_do_policyd_overrides_on_config_changed',
+                          'maybe_do_policyd_overrides',
                           name='mock_policyd_call')
         self.target.config_changed()
         self.assertTrue(self.target._config_changed)
         self._policyd_function_args.assert_called_once_with()
         self.mock_policyd_call.assert_called_once_with(
-            "args", kwargs=1)
+            "args", kwargs=1, config_changed=True)

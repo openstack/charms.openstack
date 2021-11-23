@@ -536,5 +536,6 @@ class PolicydOverridePlugin(object):
         except Exception:
             pass
         args, kwargs = self._policyd_function_args()
-        ch_policyd.maybe_do_policyd_overrides_on_config_changed(
-            *args, **kwargs)
+        if 'config_changed' not in kwargs.keys():
+            kwargs['config_changed'] = True
+        ch_policyd.maybe_do_policyd_overrides(*args, **kwargs)
