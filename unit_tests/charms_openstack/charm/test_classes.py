@@ -2,7 +2,10 @@ import base64
 import mock
 
 import unit_tests.utils as utils
-from unit_tests.charms_openstack.charm.utils import BaseOpenStackCharmTest
+from unit_tests.charms_openstack.charm.utils import (
+    BaseOpenStackCharmTest,
+    TestConfig,
+)
 from unit_tests.charms_openstack.charm.common import MyOpenStackCharm
 
 import charms_openstack.charm.classes as chm
@@ -816,6 +819,7 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
 
         super(TestHAOpenStackCharm, self).setUp(make_open_stack_charm,
                                                 TEST_CONFIG)
+        self.test_config = TestConfig()
 
     def test_all_packages(self):
         self.patch_target('packages', new=['pkg1'])
@@ -895,9 +899,10 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
         nics = {
             'vip1': ('eth1', 'netmask1', False),
             'vip2': ('eth2', 'netmask2', False)}
+        self.test_config.set('vip', 'vip1 vip2')
         interface_mock = mock.Mock()
         self.patch_target('name', new='myservice')
-        self.patch_target('config', new={'vip': 'vip1 vip2'})
+        self.patch_target('config', new=self.test_config)
         self.patch_object(chm.os_ha_utils, 'get_vip_settings')
         self.get_vip_settings.side_effect = lambda x: nics[x]
         self.target._add_ha_vips_config(interface_mock)
@@ -910,13 +915,36 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             mock.call('res_myservice_eth2_vip')]
         interface_mock.delete_resource.assert_has_calls(add_vip_calls)
 
+    def test__add_ha_vips_config_changed(self):
+        nics = {
+            'vip1': ('eth1', 'netmask1', False),
+            'vip2': ('eth2', 'netmask2', False)}
+        self.test_config.set('vip', 'vip1 vip2')
+        self.test_config.set_previous('vip', 'vip1 vip3')
+        interface_mock = mock.Mock()
+        self.patch_target('name', new='myservice')
+        self.patch_target('config', new=self.test_config)
+        self.patch_object(chm.os_ha_utils, 'get_vip_settings')
+        self.get_vip_settings.side_effect = lambda x: nics[x]
+        self.target._add_ha_vips_config(interface_mock)
+        add_vip_calls = [
+            mock.call('myservice', 'vip1'),
+            mock.call('myservice', 'vip2')]
+        interface_mock.add_vip.assert_has_calls(add_vip_calls)
+        interface_mock.remove_vip.assert_called_with('myservice', 'vip3')
+        add_vip_calls = [
+            mock.call('res_myservice_eth1_vip'),
+            mock.call('res_myservice_eth2_vip')]
+        interface_mock.delete_resource.assert_has_calls(add_vip_calls)
+
     def test__add_ha_vips_config_fallback(self):
         nics = {
             'vip1': ('eth1', 'netmask1', True),
             'vip2': ('eth2', 'netmask2', True)}
+        self.test_config.set('vip', 'vip1 vip2')
         interface_mock = mock.Mock()
         self.patch_target('name', new='myservice')
-        self.patch_target('config', new={'vip': 'vip1 vip2'})
+        self.patch_target('config', new=self.test_config)
         self.patch_object(chm.os_ha_utils, 'get_vip_settings')
         self.get_vip_settings.side_effect = lambda x: nics[x]
         self.target._add_ha_vips_config(interface_mock)

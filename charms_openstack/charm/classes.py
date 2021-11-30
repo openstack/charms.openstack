@@ -868,7 +868,20 @@ class HAOpenStackCharm(OpenStackAPICharm):
         """
         if not self.config.get(VIP_KEY):
             return
-        for vip in self.config[VIP_KEY].split():
+
+        vips = self.config[VIP_KEY].split()
+
+        # the `vip` config option has changed and there was a value previously
+        # set, the principle needs to ask hacluster to remove it from
+        # pacemaker's configuration (LP: #1952363).
+        if self.config.changed(VIP_KEY) and self.config.previous(VIP_KEY):
+            old_vips = self.config.previous(VIP_KEY).split()
+            vips_to_del = set(old_vips) - set(vips)
+            for vip in vips_to_del:
+                hookenv.log("Registering %s for deletion" % vip)
+                hacluster.remove_vip(self.name, vip)
+
+        for vip in vips:
             iface, netmask, fallback = os_ha_utils.get_vip_settings(vip)
             if fallback:
                 hacluster.add_vip(
