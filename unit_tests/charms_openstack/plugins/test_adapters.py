@@ -21,7 +21,7 @@
 # sys.modules['charmhelpers.contrib.network.ip'] = mock.MagicMock()
 
 import unittest
-import mock
+from unittest import mock
 
 import charms_openstack.adapters as c_adapters
 import charms_openstack.plugins.adapters as pl_adapters

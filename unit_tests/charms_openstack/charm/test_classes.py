@@ -1,5 +1,5 @@
 import base64
-import mock
+from unittest import mock
 
 import unit_tests.utils as utils
 from unit_tests.charms_openstack.charm.utils import (

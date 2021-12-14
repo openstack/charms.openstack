@@ -6,5 +6,4 @@ flake8>=2.2.4
 stestr
 paramiko<2.0
 charms.reactive
-mock>=1.2
 coverage>=3.6
