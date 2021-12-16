@@ -77,4 +77,6 @@ def mock_charmhelpers():
         'ussuri',
         'victoria',
         'wallaby',
+        'xena',
+        'yoga',
     )
