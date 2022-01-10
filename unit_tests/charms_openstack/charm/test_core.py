@@ -997,7 +997,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
                           new={'action-managed-upgrade': True})
         self.assertFalse(self.run_upgrade.called)
 
-    def test_run_upgrade(self):
+    def test_run_openstack_upgrade(self):
         self.patch_object(chm_core.hookenv, 'status_set')
         self.patch_target('do_openstack_upgrade_db_migration')
         self.patch_target('do_openstack_pkg_upgrade')
@@ -1008,10 +1008,33 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core, 'get_charm_instance')
         target_charm = mock.MagicMock()
         self.get_charm_instance.return_value = target_charm
+
         self.target.run_upgrade('int_list')
         self.status_set.assert_called_once_with('maintenance',
                                                 'Running openstack upgrade')
-        target_charm.do_openstack_pkg_upgrade.assert_called_once_with()
+        target_charm.do_openstack_pkg_upgrade.assert_called_once_with(
+            upgrade_openstack=True)
+        (target_charm.do_openstack_upgrade_config_render.
+            assert_called_once_with('int_list'))
+        (target_charm.do_openstack_upgrade_db_migration.
+            assert_called_once_with())
+
+    def test_run_pkg_upgrade(self):
+        self.patch_object(chm_core.hookenv, 'status_set')
+        self.patch_target('do_openstack_upgrade_db_migration')
+        self.patch_target('do_openstack_pkg_upgrade')
+        self.patch_target('do_openstack_upgrade_config_render')
+        self.patch_target('do_openstack_upgrade_db_migration')
+        self.patch_target('config',
+                          new={'openstack-origin': 'snap:ocata/stable'})
+        self.patch_object(chm_core, 'get_charm_instance')
+        target_charm = mock.MagicMock()
+        self.get_charm_instance.return_value = target_charm
+        self.target.run_upgrade('int_list', upgrade_openstack=False)
+        self.status_set.assert_called_once_with('maintenance',
+                                                'Running package upgrade')
+        target_charm.do_openstack_pkg_upgrade.assert_called_once_with(
+            upgrade_openstack=False)
         (target_charm.do_openstack_upgrade_config_render.
             assert_called_once_with('int_list'))
         (target_charm.do_openstack_upgrade_db_migration.
