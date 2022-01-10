@@ -1130,18 +1130,25 @@ class BaseOpenStackCharmActions(object):
         fetch.apt_pkg.init()
         return fetch.apt_pkg.version_compare(avail_vers, cur_vers) == 1
 
-    def run_upgrade(self, interfaces_list=None):
+    def run_upgrade(self, interfaces_list=None, upgrade_openstack=True):
         """Upgrade OpenStack.
 
         :param interfaces_list: List of instances of interface classes
+        :param upgrade_openstack: True for upgrade to new openstack release,
+            False for package upgrade within current openstack release.
         :returns: None
         """
-        hookenv.status_set('maintenance', 'Running openstack upgrade')
         new_src = self.config[self.source_config_key]
         new_os_rel = os_utils.get_os_codename_install_source(new_src)
-        unitdata.kv().set(OPENSTACK_RELEASE_KEY, new_os_rel)
-        target_charm = get_charm_instance(new_os_rel)
-        target_charm.do_openstack_pkg_upgrade()
+        if upgrade_openstack:
+            hookenv.status_set('maintenance', 'Running openstack upgrade')
+            unitdata.kv().set(OPENSTACK_RELEASE_KEY, new_os_rel)
+            target_charm = get_charm_instance(new_os_rel)
+            target_charm.do_openstack_pkg_upgrade(upgrade_openstack=True)
+        else:
+            hookenv.status_set('maintenance', 'Running package upgrade')
+            target_charm = get_charm_instance(new_os_rel)
+            target_charm.do_openstack_pkg_upgrade(upgrade_openstack=False)
         target_charm.do_openstack_upgrade_config_render(interfaces_list)
         target_charm.do_openstack_upgrade_db_migration()
 
@@ -1159,27 +1166,35 @@ class BaseOpenStackCharmActions(object):
             else:
                 self.run_upgrade(interfaces_list=interfaces_list)
 
-    def do_openstack_pkg_upgrade(self):
+    def do_openstack_pkg_upgrade(self, upgrade_openstack=True):
         """Upgrade OpenStack packages and snaps
 
+        :param upgrade_openstack: True for upgrade to new openstack release,
+            False for package upgrade within current openstack release.
         :returns: None
         """
-        new_src = self.config[self.source_config_key]
-        new_os_rel = os_utils.get_os_codename_install_source(new_src)
-        hookenv.log('Performing OpenStack upgrade to %s.' % (new_os_rel))
+        new_os_rel = None
 
-        # TODO(jamespage): Deal with deb->snap->deb migrations
-        if os_utils.snap_install_requested() and self.all_snaps:
-            os_utils.install_os_snaps(
-                snaps=os_utils.get_snaps_install_info_from_origin(
-                    self.all_snaps,
-                    self.config[self.source_config_key],
-                    mode=self.snap_mode),
-                refresh=True)
+        if upgrade_openstack:
+            new_src = self.config[self.source_config_key]
+            new_os_rel = os_utils.get_os_codename_install_source(new_src)
+            hookenv.log('Performing OpenStack upgrade to %s.' % (new_os_rel))
 
-        source, key = os_utils.get_source_and_pgp_key(
-            self.config[self.source_config_key])
-        fetch.add_source(source, key)
+            # TODO(jamespage): Deal with deb->snap->deb migrations
+            if os_utils.snap_install_requested() and self.all_snaps:
+                os_utils.install_os_snaps(
+                    snaps=os_utils.get_snaps_install_info_from_origin(
+                        self.all_snaps,
+                        self.config[self.source_config_key],
+                        mode=self.snap_mode),
+                    refresh=True)
+
+            source, key = os_utils.get_source_and_pgp_key(
+                self.config[self.source_config_key])
+            fetch.add_source(source, key)
+        else:
+            hookenv.log('Performing package upgrade.')
+
         fetch.apt_update()
 
         dpkg_opts = [
@@ -1195,7 +1210,9 @@ class BaseOpenStackCharmActions(object):
             options=dpkg_opts,
             fatal=True)
         self.remove_obsolete_packages()
-        self.release = new_os_rel
+
+        if upgrade_openstack:
+            self.release = new_os_rel
 
     def remove_obsolete_packages(self):
         """Remove any packages that are no longer needed for operation
