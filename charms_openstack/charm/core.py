@@ -1187,11 +1187,17 @@ class BaseOpenStackCharmActions(object):
         :raises: AttributeError, ValueError
         """
 
-        codename = os_utils.get_installed_os_version()
-        if codename:
-            return codename
-
         try:
+            # The purpose of the UCA ``openstack-release`` package is to
+            # relieve the charm and test code from maintining version maps.
+            #
+            # The ``get_installed_os_version`` helper will attempt to install
+            # it, and that can only happen if the UCA is configured first.
+            self.configure_source()
+            codename = os_utils.get_installed_os_version()
+            if codename:
+                return codename
+
             vers = self.get_package_version(
                 package,
                 apt_cache_sufficient=apt_cache_sufficient)

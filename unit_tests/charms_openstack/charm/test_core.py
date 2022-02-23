@@ -902,12 +902,14 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.os_utils, 'get_installed_os_version')
         self.get_installed_os_version.return_value = None
         self.upstream_version.return_value = '3.0.0~b1'
+        self.patch_object(self.target, 'configure_source')
         self.assertEqual(
             self.target.get_os_codename_package(
                 'testpkg', codenames),
             'newton')
         self.upstream_version.assert_called_once_with(
             pkg_mock.current_ver.ver_str)
+        self.configure_source.assert_called_once()
         self.upstream_version.reset_mock()
         self.assertEqual(
             self.target.get_os_codename_package(
