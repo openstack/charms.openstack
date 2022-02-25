@@ -533,186 +533,6 @@ class BaseOpenStackCharm(object, metaclass=BaseOpenStackCharmMeta):
         """proxy for charms.reactive.bus.get_state()"""
         return reactive.bus.get_state(state)
 
-    @staticmethod
-    def get_os_codename_snap(snap, codenames, fatal=True):
-        """Derive OpenStack release codename from an installed snap.
-
-        :param package: str Snap name to lookup (ie. in snap list)
-        :param codenames: dict of OrderedDict
-            {
-             'snap1': collections.OrderedDict([
-                 ('2', 'mitaka'),
-                 ('3', 'newton'),
-                 ('4', 'ocata'), ]),
-             'snap2': collections.OrderedDict([
-                 ('12', 'mitaka'),
-                 ('13', 'newton'),
-                 ('14', 'ocata'), ]),
-            }
-        :param fatal: bool Raise exception if snap not installed
-        :returns: str OpenStack version name corresponding to package
-        """
-        version_or_codename = get_snap_version(snap, fatal)
-
-        match = re.match(r'^(\d+)\.(\d+)', version_or_codename)
-        if match:
-            version = match.group(0)
-            # Generate a major version number for newer semantic
-            # versions of openstack projects
-            major_vers = version.split('.')[0]
-            try:
-                return codenames[snap][major_vers]
-            except KeyError:
-                # NOTE(jamespage): fallthrough to codename assumption
-                pass
-
-        # NOTE(jamespage): fallback to codename assumption
-        return version_or_codename
-
-    @staticmethod
-    def get_package_version(package, apt_cache_sufficient=False):
-        """Derive OpenStack release codename from a package.
-
-        :param package: Package name to lookup (ie. in apt cache)
-        :type package: str
-        :param apt_cache_sufficient: When False (the default) version from an
-            installed package will be used, when True version from the systems
-            APT cache will be used.  This is useful for subordinate charms who
-            need working release selection prior to package installation and
-            has no way of using fall back to version of a package the principle
-            charm has installed nor package source configuration option.
-        :type apt_cache_sufficient: bool
-        :returns: OpenStack version name corresponding to package
-        :rtype: Optional[str]
-        :raises: AttributeError, ValueError
-        """
-        cache = fetch.apt_cache()
-
-        try:
-            pkg = cache[package]
-        except KeyError:
-            # the package is unknown to the current apt cache.
-            e = ValueError(
-                'Could not determine version of package with no installation '
-                'candidate: {}'.format(package))
-            raise e
-
-        if apt_cache_sufficient:
-            vers = fetch.apt_pkg.upstream_version(pkg.version)
-        else:
-            vers = fetch.apt_pkg.upstream_version(pkg.current_ver.ver_str)
-
-        # x.y match only for 20XX.X
-        # and ignore patch level for other packages
-        match = re.match(r'^(\d+)\.(\d+)', vers)
-
-        if match:
-            vers = match.group(0)
-
-        return vers
-
-    @staticmethod
-    def get_os_codename_package(package, codenames, fatal=True,
-                                apt_cache_sufficient=False):
-        """Derive OpenStack release codename from a package.
-
-
-        Initially, see if the openstack-release pkg is available (by trying
-        to install it) and use it instead.
-
-        If it isn't then it falls back to the existing method of checking the
-        version of the package passed and then resolving the version from that
-        using lookup tables.
-
-        :param package: Package name to lookup (ie. in apt cache)
-        :type package: str
-        :param codenames: Map of package to (version, os_release) tuples.
-            Example:
-            {
-             'pkg1': collections.OrderedDict([
-                 ('2', 'mitaka'),
-                 ('3', 'newton'),
-                 ('4', 'ocata'), ]),
-             'pkg2': collections.OrderedDict([
-                 ('12.6', 'mitaka'),
-                 ('13.2', 'newton'),
-                 ('14.7', 'ocata'), ]),
-            }
-        :type codenames: Dict[str,collections.OrderedDict[Tuple(str,str)]]
-        :param fatal: Raise exception if pkg not installed
-        :type fatal: bool
-        :param apt_cache_sufficient: When False (the default) version from an
-            installed package will be used, when True version from the systems
-            APT cache will be used.  This is useful for subordinate charms who
-            need working release selection prior to package installation and
-            has no way of using fall back to version of a package the principle
-            charm has installed nor package source configuration option.
-        :type apt_cache_sufficient: bool
-        :returns: OpenStack version name corresponding to package
-        :rtype: Optional[str]
-        :raises: AttributeError, ValueError
-        """
-
-        codename = os_utils.get_installed_os_version()
-        if codename:
-            return codename
-
-        try:
-            vers = BaseOpenStackCharm.get_package_version(
-                package,
-                apt_cache_sufficient=apt_cache_sufficient)
-            # Generate a major version number for newer semantic
-            # versions of openstack projects
-            major_vers = vers.split('.')[0]
-        except Exception:
-            if fatal:
-                raise
-            else:
-                return None
-        if (package in codenames and
-                major_vers in codenames[package]):
-            return codenames[package][major_vers]
-
-    def get_os_version_snap(self, snap, fatal=True):
-        """Derive OpenStack version number from an installed snap.
-
-        :param package: str Snap name to lookup in snap list
-        :param fatal: bool Raise exception if snap not installed
-        :returns: str OpenStack version number corresponding to snap
-        """
-        if os_utils.snap_install_requested():
-            codename = self.get_os_codename_snap(snap,
-                                                 self.snap_codenames,
-                                                 fatal=fatal)
-            if not codename:
-                return None
-
-            for version, cname in os_utils.OPENSTACK_CODENAMES.items():
-                if cname == codename:
-                    return version
-
-        return None
-
-    def get_os_version_package(self, package, fatal=True):
-        """Derive OpenStack version number from an installed package.
-
-        :param package: str Package name to lookup in apt cache
-        :param fatal: bool Raise exception if pkg not installed
-        :returns: str OpenStack version number corresponding to package
-        """
-        if not os_utils.snap_install_requested():
-            codename = self.get_os_codename_package(
-                package, self.package_codenames or os_utils.PACKAGE_CODENAMES,
-                fatal=fatal)
-            if not codename:
-                return None
-
-            for version, cname in os_utils.OPENSTACK_CODENAMES.items():
-                if cname == codename:
-                    return version
-
-        return None
-
 
 class BaseOpenStackCharmActions(object):
     """Default actions that an OpenStack charm can expect to have to do.
@@ -1264,6 +1084,185 @@ class BaseOpenStackCharmActions(object):
         :returns: None
         """
         return self.config[self.source_config_key].startswith('snap:')
+
+    @staticmethod
+    def get_os_codename_snap(snap, codenames, fatal=True):
+        """Derive OpenStack release codename from an installed snap.
+
+        :param package: str Snap name to lookup (ie. in snap list)
+        :param codenames: dict of OrderedDict
+            {
+             'snap1': collections.OrderedDict([
+                 ('2', 'mitaka'),
+                 ('3', 'newton'),
+                 ('4', 'ocata'), ]),
+             'snap2': collections.OrderedDict([
+                 ('12', 'mitaka'),
+                 ('13', 'newton'),
+                 ('14', 'ocata'), ]),
+            }
+        :param fatal: bool Raise exception if snap not installed
+        :returns: str OpenStack version name corresponding to package
+        """
+        version_or_codename = get_snap_version(snap, fatal)
+
+        match = re.match(r'^(\d+)\.(\d+)', version_or_codename)
+        if match:
+            version = match.group(0)
+            # Generate a major version number for newer semantic
+            # versions of openstack projects
+            major_vers = version.split('.')[0]
+            try:
+                return codenames[snap][major_vers]
+            except KeyError:
+                # NOTE(jamespage): fallthrough to codename assumption
+                pass
+
+        # NOTE(jamespage): fallback to codename assumption
+        return version_or_codename
+
+    @staticmethod
+    def get_package_version(package, apt_cache_sufficient=False):
+        """Derive OpenStack release codename from a package.
+
+        :param package: Package name to lookup (ie. in apt cache)
+        :type package: str
+        :param apt_cache_sufficient: When False (the default) version from an
+            installed package will be used, when True version from the systems
+            APT cache will be used.  This is useful for subordinate charms who
+            need working release selection prior to package installation and
+            has no way of using fall back to version of a package the principle
+            charm has installed nor package source configuration option.
+        :type apt_cache_sufficient: bool
+        :returns: OpenStack version name corresponding to package
+        :rtype: Optional[str]
+        :raises: AttributeError, ValueError
+        """
+        cache = fetch.apt_cache()
+
+        try:
+            pkg = cache[package]
+        except KeyError:
+            # the package is unknown to the current apt cache.
+            e = ValueError(
+                'Could not determine version of package with no installation '
+                'candidate: {}'.format(package))
+            raise e
+
+        if apt_cache_sufficient:
+            vers = fetch.apt_pkg.upstream_version(pkg.version)
+        else:
+            vers = fetch.apt_pkg.upstream_version(pkg.current_ver.ver_str)
+
+        # x.y match only for 20XX.X
+        # and ignore patch level for other packages
+        match = re.match(r'^(\d+)\.(\d+)', vers)
+
+        if match:
+            vers = match.group(0)
+
+        return vers
+
+    def get_os_codename_package(self, package, codenames, fatal=True,
+                                apt_cache_sufficient=False):
+        """Derive OpenStack release codename from a package.
+
+
+        Initially, see if the openstack-release pkg is available (by trying
+        to install it) and use it instead.
+
+        If it isn't then it falls back to the existing method of checking the
+        version of the package passed and then resolving the version from that
+        using lookup tables.
+
+        :param package: Package name to lookup (ie. in apt cache)
+        :type package: str
+        :param codenames: Map of package to (version, os_release) tuples.
+            Example:
+            {
+             'pkg1': collections.OrderedDict([
+                 ('2', 'mitaka'),
+                 ('3', 'newton'),
+                 ('4', 'ocata'), ]),
+             'pkg2': collections.OrderedDict([
+                 ('12.6', 'mitaka'),
+                 ('13.2', 'newton'),
+                 ('14.7', 'ocata'), ]),
+            }
+        :type codenames: Dict[str,collections.OrderedDict[Tuple(str,str)]]
+        :param fatal: Raise exception if pkg not installed
+        :type fatal: bool
+        :param apt_cache_sufficient: When False (the default) version from an
+            installed package will be used, when True version from the systems
+            APT cache will be used.  This is useful for subordinate charms who
+            need working release selection prior to package installation and
+            has no way of using fall back to version of a package the principle
+            charm has installed nor package source configuration option.
+        :type apt_cache_sufficient: bool
+        :returns: OpenStack version name corresponding to package
+        :rtype: Optional[str]
+        :raises: AttributeError, ValueError
+        """
+
+        codename = os_utils.get_installed_os_version()
+        if codename:
+            return codename
+
+        try:
+            vers = self.get_package_version(
+                package,
+                apt_cache_sufficient=apt_cache_sufficient)
+            # Generate a major version number for newer semantic
+            # versions of openstack projects
+            major_vers = vers.split('.')[0]
+        except Exception:
+            if fatal:
+                raise
+            else:
+                return None
+        if (package in codenames and
+                major_vers in codenames[package]):
+            return codenames[package][major_vers]
+
+    def get_os_version_snap(self, snap, fatal=True):
+        """Derive OpenStack version number from an installed snap.
+
+        :param package: str Snap name to lookup in snap list
+        :param fatal: bool Raise exception if snap not installed
+        :returns: str OpenStack version number corresponding to snap
+        """
+        if os_utils.snap_install_requested():
+            codename = self.get_os_codename_snap(snap,
+                                                 self.snap_codenames,
+                                                 fatal=fatal)
+            if not codename:
+                return None
+
+            for version, cname in os_utils.OPENSTACK_CODENAMES.items():
+                if cname == codename:
+                    return version
+
+        return None
+
+    def get_os_version_package(self, package, fatal=True):
+        """Derive OpenStack version number from an installed package.
+
+        :param package: str Package name to lookup in apt cache
+        :param fatal: bool Raise exception if pkg not installed
+        :returns: str OpenStack version number corresponding to package
+        """
+        if not os_utils.snap_install_requested():
+            codename = self.get_os_codename_package(
+                package, self.package_codenames or os_utils.PACKAGE_CODENAMES,
+                fatal=fatal)
+            if not codename:
+                return None
+
+            for version, cname in os_utils.OPENSTACK_CODENAMES.items():
+                if cname == codename:
+                    return version
+
+        return None
 
 
 class BaseOpenStackCharmAssessStatus(object):

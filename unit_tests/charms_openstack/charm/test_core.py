@@ -903,14 +903,14 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.get_installed_os_version.return_value = None
         self.upstream_version.return_value = '3.0.0~b1'
         self.assertEqual(
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            self.target.get_os_codename_package(
                 'testpkg', codenames),
             'newton')
         self.upstream_version.assert_called_once_with(
             pkg_mock.current_ver.ver_str)
         self.upstream_version.reset_mock()
         self.assertEqual(
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            self.target.get_os_codename_package(
                 'testpkg', codenames, apt_cache_sufficient=True),
             'newton')
         self.upstream_version.assert_called_once_with(
@@ -918,21 +918,21 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         # Test Wallaby
         self.get_installed_os_version.return_value = 'wallaby'
         self.assertEqual(
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            self.target.get_os_codename_package(
                 'testpkg', codenames),
             'wallaby')
         # Test non-fatal fail
         self.get_installed_os_version.return_value = None
         self.assertEqual(
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            self.target.get_os_codename_package(
                 'unknownpkg', codenames, fatal=False),
             None)
         # Test fatal fail
         with self.assertRaises(Exception):
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            self.target.get_os_codename_package(
                 'unknownpkg', codenames, fatal=True)
         with self.assertRaises(ValueError):
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            self.target.get_os_codename_package(
                 'unknownpkg', codenames, fatal=True)
 
     def test_get_os_version_package(self):
