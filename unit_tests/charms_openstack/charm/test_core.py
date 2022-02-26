@@ -903,6 +903,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.get_installed_os_version.return_value = None
         self.upstream_version.return_value = '3.0.0~b1'
         self.patch_object(self.target, 'configure_source')
+        self.configure_source.side_effect = KeyError
         self.assertEqual(
             self.target.get_os_codename_package(
                 'testpkg', codenames),
@@ -910,6 +911,7 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.upstream_version.assert_called_once_with(
             pkg_mock.current_ver.ver_str)
         self.configure_source.assert_called_once()
+        self.configure_source.side_effect = None
         self.upstream_version.reset_mock()
         self.assertEqual(
             self.target.get_os_codename_package(

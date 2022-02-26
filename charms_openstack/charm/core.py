@@ -1193,7 +1193,12 @@ class BaseOpenStackCharmActions(object):
             #
             # The ``get_installed_os_version`` helper will attempt to install
             # it, and that can only happen if the UCA is configured first.
-            self.configure_source()
+            try:
+                self.configure_source()
+            except KeyError:
+                # Some charms, for example subordinate charms, do not provide
+                # a source configuration option.
+                pass
             codename = os_utils.get_installed_os_version()
             if codename:
                 return codename
