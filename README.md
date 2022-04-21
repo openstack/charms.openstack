@@ -73,7 +73,7 @@ to the charm author_, and can be signalled to `OpenStackCharm` in two ways.
     case, there is no need to register multiple charms and provide a _chooser_
     to determine which class to use.
 
- 2. Write muliple `OpenStackCharm` derived classes which map to each difference
+ 2. Write multiple `OpenStackCharm` derived classes which map to each difference
     in charm functionality depending on the release, and register a _chooser_
     function using the `@register_os_release_selector` decorator.
 
@@ -123,7 +123,7 @@ of OpenStack.
 ## Using the relation adapter classes - OpenStackRelationAdapter
 
 The relation adapter classes adapt a reactive interface for use in the
-rendering functions.  Their pricipal use is to provide an iterator of the
+rendering functions.  Their principal use is to provide an iterator of the
 attributes declared in the `assessors` attribute of the instance.
 
 A reactive `BaseRelation` derived instance has an `auto_accessors` attribute
@@ -183,7 +183,7 @@ overridden `__init__()` method.
 ## The `ConfigurationAdapter`
 
 The `ConfigurationAdapter` class simply provides _snapshot_ of the
-configuration opentions for the current charm, such that they can be accessed
+configuration options for the current charm, such that they can be accessed
 as attributes of an instance of the class.  e.g. rather than `config('vip')`
 then user can use `c_adapter.vip`.
 
@@ -216,7 +216,7 @@ class MyRelationAdapters(OpenStackRelationAdapters):
     }
 ```
 
-This enables custome relation adapters to be mapped to particular relations
+This enables custom relation adapters to be mapped to particular relations
 such that custom functionality can be implemented for a particular reactive
 relationship.
 
@@ -269,7 +269,7 @@ statuses are supported:
    relation is not yet _complete_ in that some data is missing still.
  * blocked - a relation is not yet connected, or some other blocking
    condition.
- * paused - (Not yet availble) - the unit has been put into the paused state.
+ * paused - (Not yet available) - the unit has been put into the paused state.
 
 The default is for charms to support workload status, and the default
 installation method sets the status to maintenance with an install message.
