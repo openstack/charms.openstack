@@ -25,6 +25,7 @@ from charms_openstack.plugins.trilio import (
     TrilioVaultCharm,
     TrilioVaultSubordinateCharm,
     TrilioVaultCharmGhostAction,
+    TrilioVault42CharmGhostAction,
 )
 
 __all__ = (
@@ -35,4 +36,5 @@ __all__ = (
     "TrilioVaultCharm",
     "TrilioVaultSubordinateCharm",
     "TrilioVaultCharmGhostAction",
+    "TrilioVault42CharmGhostAction",
 )

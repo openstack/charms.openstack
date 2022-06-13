@@ -598,6 +598,20 @@ class TrilioVaultCharmGhostAction(object):
         for local_share, ghost_share in share_mappings:
             self._ghost_nfs_share(local_share, ghost_share)
 
+    def trilio_share_mounted(self, share_path):
+        """Check if share_path is mounted
+
+        :param local_share: Local NFS share URL
+        :type local_share: str
+        :returns: Whether share is mounted
+        :rtype: bool
+        """
+        _share_path = os.path.join(
+            TV_MOUNTS,
+            self._encode_endpoint(share_path))
+        current_mounts = [mount[0] for mount in ch_core.host.mounts()]
+        return _share_path in current_mounts
+
     def _ghost_nfs_share(self, local_share, ghost_share):
         """Bind mount a local unit NFS share to another sites location
 
@@ -614,9 +628,7 @@ class TrilioVaultCharmGhostAction(object):
             TV_MOUNTS, self._encode_endpoint(ghost_share)
         )
 
-        current_mounts = [mount[0] for mount in ch_core.host.mounts()]
-
-        if nfs_share_path not in current_mounts:
+        if not self.trilio_share_mounted(local_share):
             # Trilio has not mounted the NFS share so return
             raise NFSShareNotMountedException(
                 "nfs-share ({}) not mounted".format(
@@ -624,7 +636,7 @@ class TrilioVaultCharmGhostAction(object):
                 )
             )
 
-        if ghost_share_path in current_mounts:
+        if self.trilio_share_mounted(ghost_share):
             # bind mount already setup so return
             raise GhostShareAlreadyMountedException(
                 "ghost mountpoint ({}) already bound".format(ghost_share_path)
@@ -634,3 +646,39 @@ class TrilioVaultCharmGhostAction(object):
             os.mkdir(ghost_share_path)
 
         ch_core.host.mount(nfs_share_path, ghost_share_path, options="bind")
+
+
+class TrilioVault42CharmGhostAction(TrilioVaultCharmGhostAction):
+
+    def _encode_endpoint_uri(self, backup_endpoint):
+        """base64 encode a backup uri for cross mounting support"""
+        return base64.b64encode(backup_endpoint.encode()).decode()
+
+    def _encode_endpoint_path(self, backup_endpoint):
+        """base64 encode an backup path for cross mounting support"""
+        return base64.b64encode(
+            str.encode(urlparse(backup_endpoint).path)).decode()
+
+    def _encode_endpoint(self, backup_endpoint):
+        """base64 encode an backup endpoint for cross mounting support"""
+        return self._encode_endpoint_path(backup_endpoint)
+
+    def trilio_share_mounted(self, share_path):
+        """Check if share_path is mounted
+
+        :param local_share: Local NFS share URL
+        :type local_share: str
+        :returns: Whether share is mounted
+        :rtype: bool
+        """
+        mount_paths = [
+            os.path.join(
+                TV_MOUNTS,
+                self._encode_endpoint_path(share_path)
+            ),
+            os.path.join(
+                TV_MOUNTS,
+                self._encode_endpoint_uri(share_path)
+            )]
+        current_mounts = [mount[0] for mount in ch_core.host.mounts()]
+        return any(m in current_mounts for m in mount_paths)
