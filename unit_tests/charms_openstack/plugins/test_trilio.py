@@ -255,16 +255,32 @@ class TestTrilioCommonBehaviours(BaseOpenStackCharmTest):
             _file.write.assert_called_once_with('testsource')
 
     def test_trilio_properties(self):
+        def _version_compare(a, b):
+            if a > b:
+                return 1
+            if a == b:
+                return 0
+            if a < b:
+                return -1
         cls_mock = mock.MagicMock()
         cls_mock.charm_instance.release_pkg_version = lambda: '4.0'
-        self.version_compare.return_value = 0
+        self.version_compare.side_effect = _version_compare
         self.assertEqual(
             trilio.trilio_properties(cls_mock),
-            {'db_type': 'dedicated', 'transport_type': 'dmapi'})
-        self.version_compare.return_value = -1
+            {
+                'db_type': 'legacy',
+                'transport_type': 'legacy',
+                'trilio_compat_version': 4.0})
+        cls_mock.charm_instance.release_pkg_version = lambda: '4.1'
         self.assertEqual(
             trilio.trilio_properties(cls_mock),
-            {'db_type': 'legacy', 'transport_type': 'legacy'})
+            {
+                'db_type': 'dedicated',
+                'transport_type': 'dmapi',
+                'trilio_compat_version': 4.1})
+        cls_mock.charm_instance.release_pkg_version = lambda: 'a4.1.1'
+        with self.assertRaises(ValueError):
+            trilio.trilio_properties(cls_mock)
 
     def test_trilio_s3_cert_config(self):
         cls_mock = mock.MagicMock()

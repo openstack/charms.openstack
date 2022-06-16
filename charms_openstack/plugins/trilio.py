@@ -55,16 +55,24 @@ def trilio_properties(cls):
     :param cls: Configuration Adapter class
     :type cls: charms_openstack.adapters.DefaultConfigurationAdapter
     """
+    properties = {}
     cur_ver = cls.charm_instance.release_pkg_version()
-    comp = fetch.apt_pkg.version_compare(cur_ver, '4.1')
-    if comp >= 0:
-        return {
-            'db_type': 'dedicated',
-            'transport_type': 'dmapi'}
+    # The 'trilio_compat_version' property is a float that can be used in
+    # templates for comparing Trilio MAJOR.MINOR versions.
+    match = re.match(r'^(\d+)\.(\d+)', cur_ver)
+    if match:
+        properties['trilio_compat_version'] = float(match.group(0))
     else:
-        return {
+        raise ValueError("Unexpected package version {}".format(cur_ver))
+    if properties['trilio_compat_version'] >= 4.1:
+        properties.update({
+            'db_type': 'dedicated',
+            'transport_type': 'dmapi'})
+    else:
+        properties.update({
             'db_type': 'legacy',
-            'transport_type': 'legacy'}
+            'transport_type': 'legacy'})
+    return properties
 
 
 @charms_openstack.adapters.config_property
