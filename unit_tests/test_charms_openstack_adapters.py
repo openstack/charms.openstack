@@ -51,6 +51,66 @@ class TestCustomProperties(unittest.TestCase):
             self.assertTrue(adapters._custom_config_properties['test_func'],
                             test_func)
 
+    def test_user_config_flags(self):
+        cfg = {
+            'config-flags': "a = b,c=d, e= f",
+        }
+        cls_mock = mock.MagicMock()
+        with mock.patch.object(adapters.hookenv,
+                               'config',
+                               new=cfg):
+
+            conf = adapters.config_flags(cls_mock)
+            self.assertEqual(conf['a'], 'b')
+            self.assertEqual(conf['c'], 'd')
+            self.assertEqual(conf['e'], 'f')
+
+    def test_user_config_flags_parsing_error_1(self):
+        cfg = {
+            'config-flags': "a = b, c = d e= f",
+        }
+        cls_mock = mock.MagicMock()
+        with mock.patch.object(adapters.hookenv,
+                               'config',
+                               new=cfg):
+
+            with self.assertRaises(RuntimeError):
+                adapters.config_flags(cls_mock)
+
+    def test_user_config_flags_parsing_error_2(self):
+        cfg = {
+            'config-flags': "a = b, c  d, e= f",
+        }
+        cls_mock = mock.MagicMock()
+        with mock.patch.object(adapters.hookenv,
+                               'config',
+                               new=cfg):
+
+            with self.assertRaises(RuntimeError):
+                adapters.config_flags(cls_mock)
+
+    def test_user_config_flags_missing(self):
+        cfg = {
+            'other-flags': 1
+        }
+        cls_mock = mock.MagicMock()
+        with mock.patch.object(adapters.hookenv,
+                               'config',
+                               new=cfg):
+
+            conf = adapters.config_flags(cls_mock)
+            self.assertEqual(conf, {})
+
+    def test_user_config_none(self):
+        cfg = None
+        cls_mock = mock.MagicMock()
+        with mock.patch.object(adapters.hookenv,
+                               'config',
+                               new=cfg):
+
+            conf = adapters.config_flags(cls_mock)
+            self.assertEqual(conf, {})
+
 
 class MyRelation(object):
 
