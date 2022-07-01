@@ -86,22 +86,23 @@ def config_property(f):
 
 
 @config_property
-def config_flags(cls):
-    """Decorator to add a custom configuration property with
+def user_config_flags(cls):
+    """adding custom configuration property with
     config-flags to add extra options.
 
     :param cls: Configuration Adapter class
     :type cls: charms_openstack.adapters.DefaultConfigurationAdapter
     """
     cf_config = {}
-    config = hookenv.config
-    if config and 'config-flags' in config:
-        # match 0 or multiple time any pair of character a=b divide by a coma
+    config = hookenv.config('config-flags')
+    if config:
+        # match 0 or multiple time any pair of character a=b divide by a comma
         # zero or one spaces are allows between tokens
-        parsing_regex = r"^(?:\s{0,1}[^=]\s{0,1}=\s{0,1}[^,]\s{0,1}(?:,|$))*$"
-        if re.match(parsing_regex, config['config-flags']):
+        parsing_regex = r"^(?:\s{0,1}[^=\s]+\s{0,1}=\s{0,1}"\
+                        r"[^,\s]+\s{0,1}(?:,|$))*$"
+        if re.match(parsing_regex, config):
             cf_config = dict(map(lambda x: [s.strip() for s in x.split('=')],
-                                 config['config-flags']
+                                 config
                                  .split(',')))
         else:
             raise RuntimeError("config-flags string error: {}".format(config))

@@ -58,9 +58,9 @@ class TestCustomProperties(unittest.TestCase):
         cls_mock = mock.MagicMock()
         with mock.patch.object(adapters.hookenv,
                                'config',
-                               new=cfg):
+                               new=lambda x: cfg[x]):
 
-            conf = adapters.config_flags(cls_mock)
+            conf = adapters.user_config_flags(cls_mock)
             self.assertEqual(conf['a'], 'b')
             self.assertEqual(conf['c'], 'd')
             self.assertEqual(conf['e'], 'f')
@@ -72,10 +72,10 @@ class TestCustomProperties(unittest.TestCase):
         cls_mock = mock.MagicMock()
         with mock.patch.object(adapters.hookenv,
                                'config',
-                               new=cfg):
+                               new=lambda x: cfg[x]):
 
             with self.assertRaises(RuntimeError):
-                adapters.config_flags(cls_mock)
+                adapters.user_config_flags(cls_mock)
 
     def test_user_config_flags_parsing_error_2(self):
         cfg = {
@@ -84,31 +84,27 @@ class TestCustomProperties(unittest.TestCase):
         cls_mock = mock.MagicMock()
         with mock.patch.object(adapters.hookenv,
                                'config',
-                               new=cfg):
+                               new=lambda x: cfg[x]):
 
             with self.assertRaises(RuntimeError):
-                adapters.config_flags(cls_mock)
+                adapters.user_config_flags(cls_mock)
 
     def test_user_config_flags_missing(self):
-        cfg = {
-            'other-flags': 1
-        }
         cls_mock = mock.MagicMock()
         with mock.patch.object(adapters.hookenv,
                                'config',
-                               new=cfg):
+                               new=lambda x: {}):
 
-            conf = adapters.config_flags(cls_mock)
+            conf = adapters.user_config_flags(cls_mock)
             self.assertEqual(conf, {})
 
     def test_user_config_none(self):
-        cfg = None
         cls_mock = mock.MagicMock()
         with mock.patch.object(adapters.hookenv,
                                'config',
-                               new=cfg):
+                               new=lambda x: None):
 
-            conf = adapters.config_flags(cls_mock)
+            conf = adapters.user_config_flags(cls_mock)
             self.assertEqual(conf, {})
 
 
