@@ -167,8 +167,8 @@ def make_default_amqp_connection_handler():
 
 @_map_default_handler('certificates.available')
 def make_default_certificates_available_handler():
-    """Set the default certificates.available state so that the default handler in
-    layer-openstack can run.
+    """Set the default certificates.available state so that the default handler
+    in layer-openstack can run.
     Convoluted, because charms.reactive will only run handlers in the reactive
     or hooks directory.
     """
