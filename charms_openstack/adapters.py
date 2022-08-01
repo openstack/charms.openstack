@@ -1333,22 +1333,22 @@ class OpenStackAPIRelationAdapters(OpenStackRelationAdapters):
             options=options,
             options_instance=options_instance,
             charm_instance=charm_instance)
+        self._resolved_cluster = None
         if 'cluster' not in self._relations:
             # cluster has not been passed through already, so try to resolve it
             # automatically when it is accessed.
-            self.__resolved_cluster = None
             # add a property for the cluster to resolve it
             self._relations.add('cluster')
             setattr(self.__class__, 'cluster',
-                    property(lambda x: x.__cluster()))
+                    property(lambda x: x._cluster()))
 
-    def __cluster(self):
+    def _cluster(self):
         """The cluster relations is auto added onto adapters instance"""
-        if not self.__resolved_cluster:
-            self.__resolved_cluster = self.__resolve_cluster()
-        return self.__resolved_cluster
+        if not self._resolved_cluster:
+            self._resolved_cluster = self._resolve_cluster()
+        return self._resolved_cluster
 
-    def __resolve_cluster(self):
+    def _resolve_cluster(self):
         """ Resolve what the cluster adapter is.
 
         LY: The cluster interface only gets initialised if there are more
