@@ -136,6 +136,16 @@ class MyEndpointRelation(reactive.Endpoint):
         return self.value
 
 
+class MyEndpointAutoAccessorsRelation(
+        MyEndpointRelation,
+        metaclass=reactive.relations.AutoAccessors):
+
+    auto_accessors = ['foo', 'bar']
+
+    def get_remote(self, key):
+        return key
+
+
 class TestOpenStackRelationAdapter(unittest.TestCase):
 
     def test_class(self):
@@ -183,6 +193,17 @@ class TestOpenStackRelationAdapter(unittest.TestCase):
         self.assertEqual(ad.a_property, 'can change after instantiation')
         with self.assertRaises(AttributeError):
             self.assertFalse(ad.a_function)
+
+    def test_class_with_endpoint_auto_accessors_relation(self):
+        er = MyEndpointAutoAccessorsRelation('my-name')
+        ad = adapters.OpenStackRelationAdapter(er)
+        self.assertEqual(ad.a_property, 'has value in config rendering')
+        er.value = 'can change after instantiation'
+        self.assertEqual(ad.a_property, 'can change after instantiation')
+        with self.assertRaises(AttributeError):
+            self.assertFalse(ad.a_function)
+        self.assertEqual(ad.foo, 'foo')
+        self.assertEqual(ad.bar, 'bar')
 
 
 class FakeMemcacheRelation():
