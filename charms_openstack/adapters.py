@@ -867,6 +867,15 @@ class APIConfigurationAdapter(ConfigurationAdapter):
         return charms.reactive.bus.get_state('haproxy.stat.password')
 
     @property
+    def haproxy_healthcheck(self):
+        """HAProxy healthcheck options if the charm defines them
+
+        @return healthcheck
+        """
+        charm_instance = self.charm_instance or {}
+        return getattr(charm_instance, 'healthcheck', {})
+
+    @property
     def service_ports(self):
         """Dict of service names and the ports they listen on
 
