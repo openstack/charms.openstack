@@ -113,6 +113,7 @@ class TestDefaults(BaseOpenStackCharmTest):
         singleton.source_config_key = 'fake-config-key'
         singleton.get_os_codename_package.return_value = None
         self.patch_object(chm, 'get_charm_instance', return_value=singleton)
+        self.patch_object(chm.hookenv, 'is_subordinate', return_value=False)
         # set a release
         kv.get.return_value = 'one'
         release = h.map['function']()
@@ -153,6 +154,19 @@ class TestDefaults(BaseOpenStackCharmTest):
         self.assertEqual(release, 'four')
         singleton.get_os_codename_package.assert_called_once_with(
             mock.ANY, mock.ANY, apt_cache_sufficient=True)
+        # Test subordinate charm
+        kv.reset_mock()
+        kv.get.return_value = None
+        singleton.get_os_codename_package.reset_mock()
+        singleton.get_os_codename_package.return_value = 'five'
+        chm.hookenv.is_subordinate.reset_mock()
+        chm.hookenv.is_subordinate.return_value = True
+        self.os_release.reset_mock()
+        self.os_release.return_value = 'five'
+        release = h.map['function']()
+        self.assertEqual(release, 'five')
+        kv.set.assert_not_called()
+        kv.get.assert_not_called()
 
     def test_default_select_package_type_handler(self):
         self.assertIn('charm.default-select-package-type',

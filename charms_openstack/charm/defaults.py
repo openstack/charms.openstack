@@ -1,4 +1,5 @@
 import charmhelpers.contrib.openstack.utils as os_utils
+import charmhelpers.core.hookenv as hookenv
 import charmhelpers.core.unitdata as unitdata
 import charms.reactive as reactive
 
@@ -97,7 +98,15 @@ def make_default_select_release_handler():
         that it doesn't need to keep going and getting it from the package
         information.
         """
-        release_version = unitdata.kv().get(OPENSTACK_RELEASE_KEY, None)
+        release_version = None
+        # Using the cached OpenStack version will cause undesired behaviors
+        # if the charm is a subordinate. The charm local cache is firstly
+        # populated during the charm install and after that, only during the
+        # openstack upgrades. If the charm is a subordinate, the version will
+        # always remain the same.
+        if not hookenv.is_subordinate():
+            release_version = unitdata.kv().get(OPENSTACK_RELEASE_KEY, None)
+
         if release_version is None:
             try:
                 # First make an attempt of determining release from a charm
@@ -125,7 +134,11 @@ def make_default_select_release_handler():
                     pkg = 'dummy-package'
                 release_version = os_utils.os_release(
                     pkg, source_key=singleton.source_config_key)
-            unitdata.kv().set(OPENSTACK_RELEASE_KEY, release_version)
+
+            # Skip caching the release if the charm is a subordinate.
+            if not hookenv.is_subordinate():
+                unitdata.kv().set(OPENSTACK_RELEASE_KEY, release_version)
+
         return release_version
 
 
