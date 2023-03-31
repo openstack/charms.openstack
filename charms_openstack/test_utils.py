@@ -78,6 +78,27 @@ class PatchHelper(unittest.TestCase):
         self._patches_start[name] = started
         setattr(self, name, started)
 
+    def patch_dict(self, obj, _dict, name, **kwargs):
+        """Patch a patchable thing.  Uses mock.patch.dict() to do the work.
+        Automatically unpatches at the end of the test.
+
+        The mock gets added to the test object (self) using 'name' or the attr
+        passed in the arguments.
+
+        :param obj: dic-like object that needs to have an attribute patched.
+        :param _dict: <dict> that represents the dict to apply on existing
+        mocked object.
+        :param name: optional <string> name to call the mock.
+        :param **kwargs: any other args to pass to mock.patch()
+        """
+        mocked = mock.patch.dict(obj, _dict, **kwargs)
+        # if name is None:
+        #    name = obj.__name__.split('.')[-1]
+        started = mocked.start()
+        self._patches[name] = mocked
+        self._patches_start[name] = started
+        setattr(self, name, started)
+
     def patch_release(self, release):
         """Patch the unitdata.kv.get() function to always return the release
 
