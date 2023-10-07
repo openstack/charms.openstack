@@ -1,0 +1,9 @@
+simplejson
+requests
+httpretty
+pep8
+flake8>=2.2.4
+stestr
+paramiko<2.0
+charms.reactive
+coverage>=3.6
