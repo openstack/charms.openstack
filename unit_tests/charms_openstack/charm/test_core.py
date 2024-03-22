@@ -399,13 +399,13 @@ class TestBaseOpenStackCharmAssessStatus(BaseOpenStackCharmTest):
             chm_core.ch_cluster,
             'get_managed_services_and_ports',
             side_effect=_svc_and_ports)
-        # verify that the function calls _ows_check_services_running() with the
+        # verify that the function calls ows_check_services_running() with the
         # valid information
-        self.patch_object(chm_core.os_utils, '_ows_check_services_running',
+        self.patch_object(chm_core.os_utils, 'ows_check_services_running',
                           return_value=('active', 'that'))
         status, message = self.target.check_services_running()
         self.assertEqual((status, message), ('active', 'that'))
-        self._ows_check_services_running.assert_called_once_with(
+        self.ows_check_services_running.assert_called_once_with(
             services=['my-default-service'],
             ports=[11, 12, 13, 1244, 2478, 3589])
 

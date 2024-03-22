@@ -1551,6 +1551,6 @@ class BaseOpenStackCharmAssessStatus(object):
         _services, _ports = ch_cluster.get_managed_services_and_ports(
             self.services,
             self.ports_to_check(self.active_api_ports))
-        return os_utils._ows_check_services_running(
+        return os_utils.ows_check_services_running(
             services=_services,
             ports=_ports)
