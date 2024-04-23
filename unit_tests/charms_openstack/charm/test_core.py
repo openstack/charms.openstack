@@ -885,7 +885,94 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         for call in self.render.call_args_list:
             self.assertTrue(call[1]['context'])
 
+    def test_get_closest_release_match(self):
+        # this is mocked universally in unit_tests/__init__.py so we have
+        # to apply to not so great mock on top to allow the method to be
+        # called.
+
+        def fake_version_compare(a, b):
+            if a > b:
+                return 1
+            elif a < b:
+                return -1
+
+            return 0
+
+        self.patch_object(chm_core.charmhelpers.fetch.apt_pkg,
+                          'version_compare')
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.side_effect = \
+            fake_version_compare
+
+        codenames = collections.OrderedDict([('3.9', 'ussuri'),
+                                             ('4.0', 'victoria'),
+                                             ('4.0.1', 'yoga')])
+
+        pkg_ver = '4'
+        release = self.target.get_closest_release_match(pkg_ver, codenames)
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.assert_has_calls([
+            mock.call('4.0.1', pkg_ver), mock.call('4.0', pkg_ver)])
+        self.assertEqual(release, None)
+
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.reset_mock()
+        pkg_ver = '4.0'
+        release = self.target.get_closest_release_match(pkg_ver, codenames)
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.assert_has_calls([
+            mock.call('4.0.1', pkg_ver), mock.call('4.0', pkg_ver)])
+        self.assertEqual(release, ('4.0', 'victoria'))
+
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.reset_mock()
+        pkg_ver = '4.0.1'
+        release = self.target.get_closest_release_match(pkg_ver, codenames)
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.assert_has_calls([
+            mock.call('4.0.1', pkg_ver)])
+        self.assertEqual(release, ('4.0.1', 'yoga'))
+
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.reset_mock()
+        pkg_ver = '4.0.2'
+        release = self.target.get_closest_release_match(pkg_ver, codenames)
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.assert_has_calls([
+            mock.call('4.0.1', pkg_ver)])
+        self.assertEqual(release, ('4.0.1', 'yoga'))
+
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.reset_mock()
+        codenames['4.0.3'] = 'antelope'
+        pkg_ver = '4.0.2'
+        release = self.target.get_closest_release_match(pkg_ver, codenames)
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.assert_has_calls([
+            mock.call('4.0.3', pkg_ver), mock.call('4.0.1', pkg_ver)])
+        self.assertEqual(release, ('4.0.1', 'yoga'))
+
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.reset_mock()
+        release = self.target.get_closest_release_match('4.0.1.1', codenames)
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.assert_has_calls([
+            mock.call('4.0.1', '4.0.1.1')])
+        self.assertEqual(release, ('4.0.1', 'yoga'))
+
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.reset_mock()
+        pkg_ver = '4.4.1+git2022033113.2339b9e9-0ubuntu1'
+        release = self.target.get_closest_release_match(pkg_ver, codenames)
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.assert_has_calls([
+            mock.call('4.0.3', pkg_ver)])
+        self.assertEqual(release, ('4.0.3', 'antelope'))
+
     def test_get_os_codename_package(self):
+        # this is mocked universally in unit_tests/__init__.py so we have
+        # to apply to not so great mock on top to allow the method to be
+        # called.
+
+        def fake_version_compare(a, b):
+            if a > b:
+                return 1
+            elif a < b:
+                return -1
+
+            return 0
+
+        self.patch_object(chm_core.charmhelpers.fetch.apt_pkg,
+                          'version_compare')
+        chm_core.charmhelpers.fetch.apt_pkg.version_compare.side_effect = \
+            fake_version_compare
+
         codenames = {
             'testpkg': collections.OrderedDict([
                 ('2', 'mitaka'),
@@ -902,15 +989,20 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         self.patch_object(chm_core.os_utils, 'get_installed_os_version')
         self.get_installed_os_version.return_value = None
         self.upstream_version.return_value = '3.0.0~b1'
+        self.patch_object(self.target, 'get_closest_release_match')
+        self.get_closest_release_match.return_value = (3, 'newton')
+        self.patch_object(self.target, 'configure_source')
+        self.configure_source.side_effect = KeyError
+
         self.assertEqual(
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            chm_core.BaseOpenStackCharm().get_os_codename_package(
                 'testpkg', codenames),
             'newton')
         self.upstream_version.assert_called_once_with(
             pkg_mock.current_ver.ver_str)
         self.upstream_version.reset_mock()
         self.assertEqual(
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            chm_core.BaseOpenStackCharm().get_os_codename_package(
                 'testpkg', codenames, apt_cache_sufficient=True),
             'newton')
         self.upstream_version.assert_called_once_with(
@@ -918,21 +1010,21 @@ class TestMyOpenStackCharm(BaseOpenStackCharmTest):
         # Test Wallaby
         self.get_installed_os_version.return_value = 'wallaby'
         self.assertEqual(
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            chm_core.BaseOpenStackCharm().get_os_codename_package(
                 'testpkg', codenames),
             'wallaby')
         # Test non-fatal fail
         self.get_installed_os_version.return_value = None
         self.assertEqual(
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            chm_core.BaseOpenStackCharm().get_os_codename_package(
                 'unknownpkg', codenames, fatal=False),
             None)
         # Test fatal fail
         with self.assertRaises(Exception):
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            chm_core.BaseOpenStackCharm().get_os_codename_package(
                 'unknownpkg', codenames, fatal=True)
         with self.assertRaises(ValueError):
-            chm_core.BaseOpenStackCharm.get_os_codename_package(
+            chm_core.BaseOpenStackCharm().get_os_codename_package(
                 'unknownpkg', codenames, fatal=True)
 
     def test_get_os_version_package(self):
