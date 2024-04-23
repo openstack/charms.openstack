@@ -72,10 +72,74 @@ charmhelpers.contrib.openstack.utils.OPENSTACK_RELEASES = (
     'queens',
     'rocky',
     'stein',
+    'train',
+    'ussuri',
+    'victoria',
+    'wallaby',
+    'xena',
+    'yoga',
+    'zed',
+    'antelope',
+    'bobcat',
+    'caracal',
 )
 
 # charms.reactive uses hookenv.charm_dir which must return a directory
 charmhelpers.core.hookenv.charm_dir.return_value = os.path.curdir
+
+
+class CompareOpenStackReleases(object):
+    # This class is included due to mocking out the charmhelpers libraries
+    # as they behave poorly with apt installs.
+
+    _list = charmhelpers.contrib.openstack.utils.OPENSTACK_RELEASES
+
+    def __init__(self, item):
+        if self._list is None:
+            raise Exception("Must define the _list in the class definition!")
+        try:
+            self.index = self._list.index(item)
+        except Exception:
+            raise KeyError("Item '{}' is not in list '{}'"
+                           .format(item, self._list))
+
+    def __eq__(self, other):
+        assert isinstance(other, str) or isinstance(other, self.__class__)
+        return self.index == self._list.index(other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __lt__(self, other):
+        assert isinstance(other, str) or isinstance(other, self.__class__)
+        return self.index < self._list.index(other)
+
+    def __ge__(self, other):
+        return not self.__lt__(other)
+
+    def __gt__(self, other):
+        assert isinstance(other, str) or isinstance(other, self.__class__)
+        return self.index > self._list.index(other)
+
+    def __le__(self, other):
+        return not self.__gt__(other)
+
+    def __str__(self):
+        """Always give back the item at the index so it can be used in
+        comparisons like:
+
+        s_mitaka = CompareOpenStack('mitaka')
+        s_newton = CompareOpenstack('newton')
+
+        assert s_newton > s_mitaka
+
+        @returns: <string>
+        """
+        return self._list[self.index]
+
+
+charmhelpers.contrib.openstack.utils.CompareOpenStackReleases = \
+    CompareOpenStackReleases
 
 
 def _fake_retry(num_retries, base_delay=0, exc_type=Exception):
