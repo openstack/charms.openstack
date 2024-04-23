@@ -1156,12 +1156,47 @@ class BaseOpenStackCharmActions(object):
 
         # x.y match only for 20XX.X
         # and ignore patch level for other packages
-        match = re.match(r'^(\d+)\.(\d+)', vers)
+        match = re.match(r'^(20\d+)\.(\d+)', vers)
 
         if match:
             vers = match.group(0)
 
         return vers
+
+    def get_closest_release_match(self, package_version, codenames):
+        """
+        Multiple releases can share the same version of the package so this
+        collects contiguous versions, maintaining order then picks the most
+        recent version that is less than or equal to what is installed.
+
+        :param package_version: version of installed package.
+        :type package_version: str
+        :param codenames: OrderedDict of version prefixes and release names.
+        :type codenames: OrderedDict
+        :returns: tuple of release name and version or None if match was not
+                  found.
+        :rtype: tuple(version, release_name)
+        """
+        hookenv.log('getting rel name for pkg ver={} from codenames={}'.
+                    format(package_version, codenames), level=hookenv.DEBUG)
+        reversed_codenames = collections.OrderedDict(
+            reversed(codenames.items()))
+        splitver = package_version.split('.')
+
+        # Starting from the leading dot and going backwards, we see if a
+        # release name matches and pick the first we find. If the same release
+        # name is registered for more than one version, we pick the highest
+        # release to indicate that the version has no release upgrade
+        # available.
+        for dotpos in reversed(range(min(len(splitver), 3))):
+            ver_pfix = '.'.join(splitver[:dotpos + 1])
+            # Find, in descending order, the first closest match.
+            for ver, rname in reversed_codenames.items():
+                if not ver.startswith(ver_pfix):
+                    continue
+
+                if fetch.apt_pkg.version_compare(ver, package_version) <= 0:
+                    return (ver, rname)
 
     def get_os_codename_package(self, package, codenames, fatal=True,
                                 apt_cache_sufficient=False):
@@ -1220,20 +1255,22 @@ class BaseOpenStackCharmActions(object):
             if codename:
                 return codename
 
-            vers = self.get_package_version(
+            package_version = self.get_package_version(
                 package,
                 apt_cache_sufficient=apt_cache_sufficient)
-            # Generate a major version number for newer semantic
-            # versions of openstack projects
-            major_vers = vers.split('.')[0]
         except Exception:
             if fatal:
                 raise
             else:
                 return None
-        if (package in codenames and
-                major_vers in codenames[package]):
-            return codenames[package][major_vers]
+
+        if package not in codenames:
+            return
+
+        vr_match = self.get_closest_release_match(package_version,
+                                                  codenames[package])
+        if vr_match:
+            return vr_match[1]
 
     def get_os_version_snap(self, snap, fatal=True):
         """Derive OpenStack version number from an installed snap.
