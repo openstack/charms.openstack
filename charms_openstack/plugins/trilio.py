@@ -25,7 +25,7 @@ import charmhelpers.core as ch_core
 import charmhelpers.fetch as fetch
 import charmhelpers.core.unitdata as unitdata
 import charmhelpers.contrib.openstack.utils as os_utils
-
+from charms_openstack.charm import core as cho_core
 import charms.reactive as reactive
 
 
@@ -222,7 +222,7 @@ def make_trilio_get_charm_instance_handler():
         :rtype: BaseOpenStackCharm() derived class according to cls.releases
         """
         cls = None
-        known_os_releases = sorted(_trilio_releases.keys())
+        known_os_releases = cho_core._sort_releases(_trilio_releases.keys())
         if release is None:
             # If release is None then select the class(es) which supports the
             # most recent OpenStack release, from within this set select the
