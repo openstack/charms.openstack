@@ -191,7 +191,10 @@ class TestFunctions(BaseOpenStackCharmTest):
         class TestC3(chm_core.BaseOpenStackCharm):
             release = 'mitaka'
 
-        self.C1, self.C2, self.C3 = TestC1, TestC2, TestC3
+        class TestC4(chm_core.BaseOpenStackCharm):
+            release = 'bobcat'
+
+        self.C1, self.C2, self.C3, self.C4 = TestC1, TestC2, TestC3, TestC4
 
     def test_get_exact(self):
         self.assertTrue(
@@ -208,10 +211,14 @@ class TestFunctions(BaseOpenStackCharmTest):
         with self.assertRaises(RuntimeError):
             chm_core.get_charm_instance(release='havana')
 
+    def test_wrapped_release(self):
+        self.assertTrue(
+            isinstance(chm_core.get_charm_instance(release='bobcat'), self.C4))
+
     def test_get_default_release(self):
         # TODO this may be the wrong logic.  Assume latest release if no
         # release is passed?
-        self.assertIsInstance(chm_core.get_charm_instance(), self.C3)
+        self.assertIsInstance(chm_core.get_charm_instance(), self.C4)
 
     def test_optional_interfaces(self):
         self.patch_object(chm_core.relations, 'endpoint_from_flag')
