@@ -103,6 +103,39 @@ class provide_charm_instance(object):
         return False
 
 
+def _sort_releases(releases):
+    """Sorts the list of releases using the known OpenStack releases.
+
+    Sorts the list of releases by their release name. This handles
+    the scenario where the release is newer than the wrapped release of
+    Zed.
+
+    If the releases provided do not contain a known OpenStack release
+    name, this will fall back to sorting by normal string comparison
+    which was the previous behavior.
+
+    :param releases: the iterable of releases to sort
+    :type releases: iterable
+    :return: a list of releases in sorted order according to the OpenStack
+             release date.
+    """
+    try:
+        # Note: the CompareOpenStackReleases class is not compatible
+        # with an old Python 2 cmp parameter nor is it compatible with
+        # the Python 3 alternative to use the functools.cmp_to_key.
+        # Instead, sort the list on the CompareOpenStackReleases objects
+        # and then convert to a list of strings to handle this.
+        openstack_releases = [os_utils.CompareOpenStackReleases(rel)
+                              for rel in releases]
+        openstack_releases = sorted(openstack_releases)
+        return [str(rel) for rel in openstack_releases]
+    except KeyError:
+        # Raised by the CompareOpenStackReleases class when attempting
+        # to compare an unknown openstack release name. Fall back to
+        # standard string comparison logic.
+        return sorted(releases)
+
+
 def default_get_charm_instance(release=None, package_type='deb', *args,
                                **kwargs):
     """Get an instance of the charm based on the release (or use the
@@ -121,8 +154,9 @@ def default_get_charm_instance(release=None, package_type='deb', *args,
     if len(_releases.keys()) == 0:
         raise RuntimeError(
             "No derived BaseOpenStackCharm() classes registered")
-    # Note that this relies on OS releases being in alphabetical order
-    known_releases = sorted(_releases.keys())
+
+    # Ensure the releases are sorted based upon the OpenStack release order
+    known_releases = _sort_releases(_releases.keys())
     cls = None
     if release is None:
         # take the latest version of the charm if no release is passed.
