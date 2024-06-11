@@ -1042,6 +1042,8 @@ class HAOpenStackCharm(OpenStackAPICharm):
         services = super().full_service_list
         if self.haproxy_enabled():
             services.append('haproxy')
+        if self.apache_enabled():
+            services.append('apache2')
         return services
 
 
