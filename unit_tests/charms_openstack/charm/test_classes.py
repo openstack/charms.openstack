@@ -1154,7 +1154,7 @@ class TestHAOpenStackCharm(BaseOpenStackCharmTest):
             self.target.configure_tls()
             self.configure_cert.assert_has_calls(cert_calls)
             self.configure_ca.assert_has_calls(ca_calls)
-            self.configure_apache.called_once_with()
+            self.configure_apache.assert_called_once_with()
             self.set_state.assert_has_calls(set_state_calls)
             self.create_ip_cert_links.assert_called_once_with(
                 '/etc/apache2/ssl/charmname')
