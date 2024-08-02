@@ -5,6 +5,8 @@ charmhelpers = None
 
 
 def mock_charmhelpers():
+    # Preseve CompareOpenStackReleases for later
+    from charmhelpers.contrib.openstack.utils import CompareOpenStackReleases
     # Mock out charmhelpers so that we can test without it.
     # also stops sideeffects from occuring.
     global charmhelpers
@@ -55,6 +57,8 @@ def mock_charmhelpers():
         charmhelpers.core.hookenv.charm_dir)
     charmhelpers.core.hookenv.charm_dir.return_value = "/tmp"
 
+    # restore comparator so sorting releases actually works
+    charmhelpers.contrib.openstack.utils.CompareOpenStackReleases = CompareOpenStackReleases  # noqa
     # mock in the openstack releases so that the tests can run
     charmhelpers.contrib.openstack.utils.OPENSTACK_RELEASES = (
         'diablo',

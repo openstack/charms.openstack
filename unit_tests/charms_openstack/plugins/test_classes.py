@@ -142,7 +142,7 @@ class TestOpenStackCephConsumingCharm(BaseOpenStackCharmTest):
         self.CephBlueStoreCompressionContext.return_value = (
             bluestore_compression)
         bluestore_compression.validate.side_effect = KeyError
-        self.assertEquals(self.target._get_bluestore_compression(), None)
+        self.assertEqual(self.target._get_bluestore_compression(), None)
         bluestore_compression.validate.side_effect = None
         self.assertDictEqual(
             self.target._get_bluestore_compression(),
