@@ -36,6 +36,7 @@ CIDR_KEY = "vip_cidr"
 IFACE_KEY = "vip_iface"
 DNSHA_KEY = "dns-ha"
 APACHE_SSL_VHOST = '/etc/apache2/sites-available/openstack_https_frontend.conf'
+APACHE_PORTS_CONF = '/etc/apache2/ports.conf'
 SYSTEM_CA_CERTS = '/etc/ssl/certs/ca-certificates.crt'
 SNAP_PATH_PREFIX_FORMAT = '/var/snap/{}/common'
 SNAP_CA_CERTS = SNAP_PATH_PREFIX_FORMAT + '/etc/ssl/certs/ca-certificates.crt'
@@ -754,6 +755,14 @@ class HAOpenStackCharm(OpenStackAPICharm):
         """
         return APACHE_SSL_VHOST
 
+    @property
+    def apache_ports_file(self):
+        """Apache ports file for configuring open ports
+
+        :returns: string
+        """
+        return APACHE_PORTS_CONF
+
     def enable_apache_ssl_vhost(self):
         """Enable Apache vhost for SSL termination
 
@@ -817,6 +826,7 @@ class HAOpenStackCharm(OpenStackAPICharm):
         else:
             if self.apache_enabled():
                 _restart_map[self.apache_ssl_vhost_file] = ['apache2']
+                _restart_map[self.apache_ports_file] = ['apache2']
         return _restart_map
 
     def apache_enabled(self):
