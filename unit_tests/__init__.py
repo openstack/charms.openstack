@@ -82,6 +82,8 @@ charmhelpers.contrib.openstack.utils.OPENSTACK_RELEASES = (
     'antelope',
     'bobcat',
     'caracal',
+    'dalmatian',
+    'epoxy',
 )
 
 # charms.reactive uses hookenv.charm_dir which must return a directory
