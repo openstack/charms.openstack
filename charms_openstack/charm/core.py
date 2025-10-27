@@ -334,7 +334,6 @@ class BaseOpenStackCharmMeta(type):
         :param mro: tuple of base classes.
         :param members: dictionary of name to class attribute (f, p, a, etc.)
         """
-        global _releases
         # Do not attempt to calculate the release for an abstract class
         if members.get('abstract_class', False):
             return
