@@ -89,4 +89,6 @@ def mock_charmhelpers():
         'caracal',
         'dalmatian',
         'epoxy',
+        'flamingo',
+        'gazpacho',
     )
